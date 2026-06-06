@@ -1,0 +1,16 @@
+# Add these two lines to your requirements.txt (or pip install them):
+flask-limiter>=3.5
+Werkzeug>=3.0        # already a Flask dependency — just ensure it's not pinned below 2.x
+
+# Then run:
+#   pip install flask-limiter
+#
+# Werkzeug is already installed with Flask, no extra install needed.
+#
+# IMPORTANT — before starting the app, set this environment variable:
+#   export SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
+#   (on Railway/Render: add SECRET_KEY to your env vars in the dashboard)
+#
+# For local development only, you can also set:
+#   export FLASK_ENV=development
+# This disables the Secure cookie flag (needed because localhost is HTTP).
