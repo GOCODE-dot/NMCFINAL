@@ -1,0 +1,388 @@
+<!--
+══════════════════════════════════════════════════════════════════════════════
+  ORDERED BUT NOT PAID — Drop-in panel for manager_dashboard.html
+══════════════════════════════════════════════════════════════════════════════
+
+  HOW TO ADD IN 1 STEP:
+  ─────────────────────
+  Find the Overview tab content area in manager_dashboard.html — the section
+  that already has your stats cards, students_due table, pending payments etc.
+
+  Paste this ENTIRE file somewhere inside that section, for example right
+  after the stats cards (the grid-4 block) and before the pending payments
+  card.  That's it — no Python changes needed; the route
+  /manager/ordered_not_paid already exists in app.py.
+
+  WHAT IT CONNECTS TO:
+  ─────────────────────
+  GET  /manager/ordered_not_paid?since=YYYY-MM-DD&until=YYYY-MM-DD
+       → { ok, since, until, count, students:[
+             { name, roll_number, batch, floor, gender,
+               order_count, total_amount, order_details }
+           ]}
+
+  DEPENDENCIES (already in your project):
+  ─────────────────────────────────────────
+  • Font Awesome 6  (base.html)
+  • toast()         (base.html)
+  • CSS variables   (base.html  --primary, --danger, --radius, --border …)
+══════════════════════════════════════════════════════════════════════════════
+-->
+
+<!-- ══════════════ STYLES ══════════════ -->
+<style>
+  .onp-card {
+    background: #fff;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    margin-bottom: 24px;
+    box-shadow: var(--shadow);
+  }
+
+  /* ── Red header ── */
+  .onp-header {
+    background: linear-gradient(135deg, #e53e3e 0%, #c53030 100%);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .onp-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+  }
+  .onp-icon {
+    width: 44px; height: 44px;
+    background: rgba(255,255,255,.18);
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+  .onp-title   { color:#fff; font-size:16px; font-weight:800; line-height:1.2; }
+  .onp-sub     { color:rgba(255,255,255,.8); font-size:12px; margin-top:2px; }
+
+  /* ── Date controls ── */
+  .onp-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+  .onp-controls label { font-size:12px; color:rgba(255,255,255,.85); font-weight:600; }
+  .onp-date {
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1.5px solid rgba(255,255,255,.35);
+    background: rgba(255,255,255,.15);
+    color: #fff;
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 600;
+    min-width: 132px;
+    cursor: pointer;
+    transition: background .2s, border .2s;
+  }
+  .onp-date:focus { outline:none; background:rgba(255,255,255,.25); border-color:rgba(255,255,255,.7); }
+  .onp-date::-webkit-calendar-picker-indicator { filter:invert(1); cursor:pointer; }
+
+  .onp-btn-refresh {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1.5px solid rgba(255,255,255,.4);
+    background: rgba(255,255,255,.15);
+    color: #fff;
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .2s;
+    white-space: nowrap;
+  }
+  .onp-btn-refresh:hover { background:rgba(255,255,255,.28); }
+
+  /* ── Stats strip ── */
+  .onp-stats {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0;
+    padding: 12px 24px;
+    background: #fff5f5;
+    border-bottom: 1px solid var(--border);
+  }
+  .onp-stat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-right: 18px;
+    margin-right: 18px;
+    border-right: 1px solid #fc818155;
+    font-size: 14px;
+  }
+  .onp-stat:last-child { border-right:none; padding-right:0; margin-right:0; }
+  .onp-stat-n { font-weight:800; font-size:17px; }
+  .onp-stat-n.red  { color:#e53e3e; }
+  .onp-stat-lbl    { color:var(--text-muted); font-size:13px; }
+
+  /* ── Table ── */
+  .onp-table-wrap { overflow-x:auto; }
+  .onp-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+  .onp-tbl thead th {
+    background:#fafafa;
+    color:var(--text-muted);
+    font-size:11px; font-weight:700;
+    text-transform:uppercase; letter-spacing:.5px;
+    padding:10px 16px;
+    border-bottom:1px solid var(--border);
+    white-space:nowrap; text-align:left;
+  }
+  .onp-tbl tbody td {
+    padding:12px 16px;
+    border-bottom:1px solid var(--border);
+    vertical-align:middle;
+    color:var(--text);
+  }
+  .onp-tbl tbody tr:last-child td { border-bottom:none; }
+  .onp-tbl tbody tr:hover td      { background:#fff5f5; }
+
+  .onp-name-cell { display:flex; align-items:center; gap:8px; font-weight:700; font-size:14px; }
+  .onp-roll-pill {
+    display:inline-flex; align-items:center;
+    background:#fee2e2; color:#c53030;
+    font-size:12px; font-weight:700;
+    padding:3px 9px; border-radius:20px; white-space:nowrap;
+  }
+  .onp-circle {
+    width:28px; height:28px; border-radius:50%;
+    background:#e53e3e; color:#fff;
+    font-size:13px; font-weight:800;
+    display:inline-flex; align-items:center; justify-content:center;
+  }
+  .onp-amount { font-size:16px; font-weight:800; color:#e53e3e; }
+  .onp-meals  { font-size:12px; color:var(--text-muted); line-height:1.7; }
+
+  /* ── Empty / loading / error ── */
+  .onp-empty {
+    text-align:center;
+    padding:36px 20px;
+    color:var(--text-muted);
+    font-size:14px;
+  }
+  .onp-empty-icon {
+    font-size:30px;
+    display:block;
+    margin-bottom:10px;
+    opacity:.45;
+  }
+
+  /* ── Footnote ── */
+  .onp-foot {
+    padding:10px 24px;
+    font-size:12px;
+    color:var(--text-muted);
+    background:#fafafa;
+    border-top:1px solid var(--border);
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+
+  @media(max-width:600px){
+    .onp-header { padding:14px 16px; }
+    .onp-stats  { padding:10px 14px; }
+    .onp-tbl thead th, .onp-tbl tbody td { padding:10px 12px; }
+  }
+</style>
+
+
+<!-- ══════════════ HTML ══════════════ -->
+<div class="onp-card" id="onpCard">
+
+  <!-- Header -->
+  <div class="onp-header">
+    <div class="onp-header-left">
+      <div class="onp-icon">⏳</div>
+      <div>
+        <div class="onp-title">Ordered But Not Paid</div>
+        <div class="onp-sub" id="onpSubRange">Loading…</div>
+      </div>
+    </div>
+    <div class="onp-controls">
+      <label for="onpFrom">From</label>
+      <input type="date" class="onp-date" id="onpFrom">
+      <label for="onpTo">To</label>
+      <input type="date" class="onp-date" id="onpTo">
+      <button class="onp-btn-refresh" onclick="onpLoad()">
+        <i class="fas fa-sync-alt"></i> Refresh
+      </button>
+    </div>
+  </div>
+
+  <!-- Stats strip (hidden until data loads) -->
+  <div class="onp-stats" id="onpStats" style="display:none">
+    <div class="onp-stat">
+      <span class="onp-stat-n" id="onpCountEl">0</span>
+      <span class="onp-stat-lbl">students</span>
+    </div>
+    <div class="onp-stat">
+      <span class="onp-stat-n" id="onpOrdersEl">0</span>
+      <span class="onp-stat-lbl">unpaid orders</span>
+    </div>
+    <div class="onp-stat">
+      <span class="onp-stat-lbl">Total owed:</span>
+      <span class="onp-stat-n red" id="onpTotalEl">&#2547;0</span>
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div id="onpBody">
+    <div class="onp-empty">
+      <i class="fas fa-spinner fa-spin onp-empty-icon"></i>
+      Loading…
+    </div>
+  </div>
+
+  <!-- Footnote -->
+  <div class="onp-foot">
+    <i class="fas fa-info-circle"></i>
+    These students selected meal(s) on the meal page but have not submitted a bKash or cash payment.
+    They appear here until their payment is verified by you.
+  </div>
+
+</div><!-- /.onp-card -->
+
+
+<!-- ══════════════ SCRIPT ══════════════ -->
+<script>
+// ── Ordered-But-Not-Paid panel ────────────────────────────────────────────────
+
+(function onpInit() {
+  const today = new Date();
+  const from  = new Date(today);
+  from.setDate(today.getDate() - 7);
+  const fmt = d => d.toISOString().slice(0, 10);
+
+  const fromEl = document.getElementById('onpFrom');
+  const toEl   = document.getElementById('onpTo');
+  if (fromEl && !fromEl.value) fromEl.value = fmt(from);
+  if (toEl   && !toEl.value)   toEl.value   = fmt(today);
+
+  if (fromEl) fromEl.addEventListener('change', onpLoad);
+  if (toEl)   toEl.addEventListener('change',   onpLoad);
+})();
+
+// Auto-load on DOMContentLoaded
+document.addEventListener('DOMContentLoaded', onpLoad);
+
+async function onpLoad() {
+  const fromEl  = document.getElementById('onpFrom');
+  const toEl    = document.getElementById('onpTo');
+  const body    = document.getElementById('onpBody');
+  const statsEl = document.getElementById('onpStats');
+  const subEl   = document.getElementById('onpSubRange');
+
+  const since = fromEl ? fromEl.value : '';
+  const until = toEl   ? toEl.value   : '';
+
+  if (subEl && since && until)
+    subEl.textContent = since + ' \u2192 ' + until;
+
+  body.innerHTML = '<div class="onp-empty"><i class="fas fa-spinner fa-spin onp-empty-icon"></i>Loading\u2026</div>';
+  if (statsEl) statsEl.style.display = 'none';
+
+  let data;
+  try {
+    const qs = new URLSearchParams();
+    if (since) qs.set('since', since);
+    if (until) qs.set('until', until);
+    const res = await fetch('/manager/ordered_not_paid?' + qs.toString());
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    data = await res.json();
+  } catch (err) {
+    body.innerHTML = `
+      <div class="onp-empty">
+        <i class="fas fa-wifi onp-empty-icon"></i>
+        Could not load. Check your connection.<br>
+        <button onclick="onpLoad()"
+          style="margin-top:12px;padding:8px 18px;background:#e53e3e;color:#fff;
+                 border:none;border-radius:8px;font-family:var(--font-body);
+                 font-size:13px;font-weight:700;cursor:pointer">
+          <i class="fas fa-sync-alt"></i> Retry
+        </button>
+      </div>`;
+    return;
+  }
+
+  if (!data.ok) {
+    body.innerHTML = '<div class="onp-empty"><i class="fas fa-times-circle onp-empty-icon"></i>' + (data.msg || 'Server error.') + '</div>';
+    return;
+  }
+
+  const students = data.students || [];
+
+  if (!students.length) {
+    if (statsEl) statsEl.style.display = 'none';
+    body.innerHTML = `
+      <div class="onp-empty">
+        <span class="onp-empty-icon" style="opacity:1;color:var(--primary);font-size:32px">&#10003;</span>
+        <span style="color:var(--primary);font-weight:700">All clear!</span><br>
+        No unpaid orders in this date range.
+      </div>`;
+    return;
+  }
+
+  // Stats
+  const totalOrders = students.reduce((s,r) => s + (r.order_count  || 0), 0);
+  const totalAmount = students.reduce((s,r) => s + (r.total_amount || 0), 0);
+  document.getElementById('onpCountEl').textContent  = students.length;
+  document.getElementById('onpOrdersEl').textContent = totalOrders;
+  document.getElementById('onpTotalEl').textContent  = '\u09F3' + Math.round(totalAmount);
+  if (statsEl) statsEl.style.display = '';
+
+  // Rows
+  const rows = students.map(function(s) {
+    var mealLines = (s.order_details || '').split(', ').filter(Boolean)
+      .map(function(m){ return '<div>' + _onpEsc(m.trim()) + '</div>'; }).join('');
+    var floorCell = (s.gender === 'male' && s.floor) ? 'Floor ' + s.floor : '\u2014';
+    var emoji     = s.gender === 'female' ? '\uD83D\uDC69' : '\uD83D\uDC68';
+    return '<tr>' +
+      '<td><div class="onp-name-cell"><span style="font-size:16px">' + emoji + '</span>' + _onpEsc(s.name) + '</div></td>' +
+      '<td><span class="onp-roll-pill">' + _onpEsc(s.roll_number) + '</span></td>' +
+      '<td>Batch ' + s.batch + '</td>' +
+      '<td style="color:var(--text-muted)">' + floorCell + '</td>' +
+      '<td style="text-align:center"><span class="onp-circle">' + s.order_count + '</span></td>' +
+      '<td><div class="onp-meals">' + (mealLines || '\u2014') + '</div></td>' +
+      '<td style="text-align:right"><span class="onp-amount">\u09F3' + Math.round(s.total_amount) + '</span></td>' +
+      '</tr>';
+  }).join('');
+
+  body.innerHTML =
+    '<div class="onp-table-wrap">' +
+    '<table class="onp-tbl">' +
+    '<thead><tr>' +
+    '<th>NAME</th><th>ROLL</th><th>BATCH</th><th>FLOOR</th>' +
+    '<th style="text-align:center">ORDERS</th><th>MEAL DETAILS</th>' +
+    '<th style="text-align:right">AMOUNT DUE</th>' +
+    '</tr></thead>' +
+    '<tbody>' + rows + '</tbody>' +
+    '</table></div>';
+}
+
+function _onpEsc(str) {
+  return String(str || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>

@@ -1,0 +1,167 @@
+<!--
+  ══════════════════════════════════════════════════════════════════════════════
+  STUDENT DASHBOARD — "Pay Old Bill First" Debt-Block Patch
+  ══════════════════════════════════════════════════════════════════════════════
+
+  HOW TO APPLY
+  ────────────
+  1. In student_dashboard() route in app.py, pass:  debt_blocked=bool(student['debt_blocked'])
+  2. Paste the STYLE block into your <style> section.
+  3. Paste the BANNER block right BEFORE <div class="week-grid"> (inside the meals tab).
+  4. REPLACE your existing <script> toggleMeal function with the patched version below.
+
+  That's all — no other template changes needed.
+  ══════════════════════════════════════════════════════════════════════════════
+-->
+
+
+<!-- ── 1. ADD INSIDE <style> ──────────────────────────────────────────────── -->
+<style>
+/* Debt-block banner */
+.debt-block-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  background: #fff5f5;
+  border: 2px solid #fc8181;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 18px;
+  animation: pulseRed 2.5s ease-in-out infinite;
+}
+@keyframes pulseRed {
+  0%,100% { box-shadow: 0 0 0 0 rgba(229,62,62,0); }
+  50%      { box-shadow: 0 0 0 6px rgba(229,62,62,0.12); }
+}
+.debt-block-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.debt-block-title {
+  font-weight: 800;
+  color: #e53e3e;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+.debt-block-body {
+  font-size: 13px;
+  color: #c53030;
+  line-height: 1.6;
+}
+.debt-block-body strong { font-weight: 700; }
+
+/* Grey out all meal buttons when blocked */
+.debt-blocked-grid .meal-btn:not([disabled]) {
+  background: #f1f5f9 !important;
+  color: #a0aec0 !important;
+  border-color: #e2e8f0 !important;
+  cursor: not-allowed !important;
+  pointer-events: none;
+}
+.debt-blocked-grid .day-card {
+  opacity: 0.6;
+}
+</style>
+
+
+<!-- ── 2. PASTE THIS BANNER before <div class="week-grid"> ──────────────── -->
+
+{% if debt_blocked %}
+<div class="debt-block-banner" id="debtBlockBanner">
+  <div class="debt-block-icon">🚫</div>
+  <div>
+    <div class="debt-block-title">Meal Ordering Blocked — Clear Old Balance First</div>
+    <div class="debt-block-body">
+      You have an <strong>unpaid bill from a previous period</strong> that hasn't been
+      cleared yet. New meal orders are paused until you settle it.<br>
+      <br>
+      <strong>What to do:</strong> Send your overdue payment via bKash to the Meal Manager,
+      then let them know. The manager will unblock your account once payment is confirmed.
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!--
+  Also add  {% if debt_blocked %}class="debt-blocked-grid"{% endif %}
+  to the opening <div class="week-grid"> tag, like this:
+
+  <div class="week-grid {% if debt_blocked %}debt-blocked-grid{% endif %}">
+-->
+
+
+<!-- ── 3. REPLACE your toggleMeal JS function with this patched version ─── -->
+<script>
+async function toggleMeal(date, mealType, btn) {
+  // ── Debt-block client-side guard ──────────────────────────────────────────
+  {% if debt_blocked %}
+  toast('🚫 Meal ordering blocked. Please pay your old balance first.', 'error');
+  return;
+  {% endif %}
+
+  // ── Existing toggle logic (unchanged below this line) ─────────────────────
+  const wasOrdered = btn.classList.contains('ordered');
+  btn.disabled = true;
+  btn.style.opacity = '0.6';
+
+  try {
+    const res  = await fetch('/student/toggle_meal', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ date, meal_type: mealType })
+    });
+    const data = await res.json();
+
+    if (!data.ok) {
+      // Show error — could be server-side debt block too
+      toast(data.msg || 'Could not update order.', 'error');
+
+      // If server returned a debt-block error, add the banner dynamically
+      if (data.msg && data.msg.includes('blocked')) {
+        let existing = document.getElementById('debtBlockBanner');
+        if (!existing) {
+          const banner = document.createElement('div');
+          banner.id        = 'debtBlockBanner';
+          banner.className = 'debt-block-banner';
+          banner.innerHTML = `
+            <div class="debt-block-icon">🚫</div>
+            <div>
+              <div class="debt-block-title">Meal Ordering Blocked — Clear Old Balance First</div>
+              <div class="debt-block-body">${data.msg}</div>
+            </div>`;
+          const weekGrid = document.querySelector('.week-grid');
+          if (weekGrid) weekGrid.parentNode.insertBefore(banner, weekGrid);
+          // Grey out the grid
+          if (weekGrid) weekGrid.classList.add('debt-blocked-grid');
+        }
+        // Disable the button permanently
+        btn.disabled = true;
+        btn.style.opacity = '0.4';
+        btn.style.cursor  = 'not-allowed';
+        return;
+      }
+
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      return;
+    }
+
+    // Success — update button state
+    if (data.ordered) {
+      btn.classList.add('ordered');
+      btn.innerHTML = `<i class="fas fa-check"></i> ${mealType.charAt(0).toUpperCase()+mealType.slice(1)}`;
+    } else {
+      btn.classList.remove('ordered');
+      btn.innerHTML = `<i class="fas fa-plus"></i> ${mealType.charAt(0).toUpperCase()+mealType.slice(1)}`;
+    }
+    btn.disabled      = false;
+    btn.style.opacity = '1';
+
+  } catch(err) {
+    toast('Network error. Please try again.', 'error');
+    btn.disabled      = false;
+    btn.style.opacity = '1';
+  }
+}
+</script>

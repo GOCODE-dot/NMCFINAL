@@ -1,0 +1,849 @@
+<!--
+════════════════════════════════════════════════════════════════════════════════
+  GIRL HOSTEL SYSTEM PATCH
+  Adds 3 hostel locations for female students, mirroring the male floor system:
+    1 = Campus
+    2 = Sentu House
+    3 = Chairman House
+
+  The existing `floor` column is reused (stores 1, 2, or 3 for girls).
+  All logic — registration, student dashboard, manager panel, admin panel,
+  cook sheet, and floor change requests — is updated identically to how
+  male floors work.
+
+  FILES TO PATCH (5 total):
+  ──────────────────────────
+  1. app.py                  ← 4 changes
+  2. student_register.html   ← 2 changes
+  3. student_dashboard.html  ← 3 changes
+  4. manager_dashboard.html  ← 1 change (female section + cook sheet JS)
+  5. admin_students.html     ← 2 changes
+════════════════════════════════════════════════════════════════════════════════
+-->
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     FILE 1 — app.py
+     ══════════════════════════════════════════════════════════════════════════
+
+  CHANGE 1A — student_register route  (around line 502)
+  ──────────────────────────────────────────────────────
+  FIND:
+      gender    = d.get('gender', 'male')
+      floor_val = None if gender == 'female' else int(d.get('floor') or 1)
+
+  REPLACE WITH:
+      gender    = d.get('gender', 'male')
+      if gender == 'female':
+          # Female students choose a hostel: 1=Campus, 2=Sentu House, 3=Chairman House
+          try:
+              floor_val = int(d.get('floor') or 1)
+              if floor_val not in (1, 2, 3):
+                  floor_val = 1
+          except (TypeError, ValueError):
+              floor_val = 1
+      else:
+          floor_val = int(d.get('floor') or 1)
+
+
+  CHANGE 1B — admin_add_student route  (around line 2581)
+  ─────────────────────────────────────────────────────────
+  FIND:
+      if gender == 'male':
+          try:
+              floor_val = int(floor_val)
+              if floor_val < 1 or floor_val > 7:
+                  return jsonify({'ok': False, 'msg': 'Floor must be between 1 and 7.'})
+          except (TypeError, ValueError):
+              return jsonify({'ok': False, 'msg': 'Please select a floor for male students.'})
+      else:
+          floor_val = None
+
+  REPLACE WITH:
+      if gender == 'male':
+          try:
+              floor_val = int(floor_val)
+              if floor_val < 1 or floor_val > 7:
+                  return jsonify({'ok': False, 'msg': 'Floor must be between 1 and 7.'})
+          except (TypeError, ValueError):
+              return jsonify({'ok': False, 'msg': 'Please select a floor for male students.'})
+      else:
+          # Female hostel: 1=Campus, 2=Sentu House, 3=Chairman House
+          try:
+              floor_val = int(floor_val)
+              if floor_val not in (1, 2, 3):
+                  return jsonify({'ok': False, 'msg': 'Please select a hostel for female students.'})
+          except (TypeError, ValueError):
+              return jsonify({'ok': False, 'msg': 'Please select a hostel for female students.'})
+
+
+  CHANGE 1C — student_request_floor_change route  (around line 2196)
+  ────────────────────────────────────────────────────────────────────
+  FIND:
+      try:
+          requested_floor = int(requested_floor)
+          if requested_floor < 1 or requested_floor > 7:
+              return jsonify({'ok': False, 'msg': 'Floor must be between 1 and 7.'})
+      except (TypeError, ValueError):
+          return jsonify({'ok': False, 'msg': 'Invalid floor value.'})
+      conn    = get_db()
+      student = queryOne(conn, "SELECT name, floor, gender FROM students WHERE id=%s", (sid,))
+      if not student or student['gender'] != 'male':
+          conn.close()
+          return jsonify({'ok': False, 'msg': 'Floor changes are only for male students.'})
+
+  REPLACE WITH:
+      conn    = get_db()
+      student = queryOne(conn, "SELECT name, floor, gender FROM students WHERE id=%s", (sid,))
+      if not student:
+          conn.close()
+          return jsonify({'ok': False, 'msg': 'Student not found.'})
+      is_female = student['gender'] == 'female'
+      try:
+          requested_floor = int(requested_floor)
+          if is_female:
+              if requested_floor not in (1, 2, 3):
+                  conn.close()
+                  return jsonify({'ok': False, 'msg': 'Hostel must be 1 (Campus), 2 (Sentu House), or 3 (Chairman House).'})
+          else:
+              if requested_floor < 1 or requested_floor > 7:
+                  conn.close()
+                  return jsonify({'ok': False, 'msg': 'Floor must be between 1 and 7.'})
+      except (TypeError, ValueError):
+          conn.close()
+          return jsonify({'ok': False, 'msg': 'Invalid value.'})
+
+
+  CHANGE 1D — admin_update_student_floor route  (around line 2262)
+  ─────────────────────────────────────────────────────────────────
+  FIND:
+      try:
+          new_floor = int(new_floor)
+          if new_floor < 1 or new_floor > 7:
+              return jsonify({'ok': False, 'msg': 'Floor must be between 1 and 7.'})
+      except (TypeError, ValueError):
+          return jsonify({'ok': False, 'msg': 'Invalid floor value.'})
+      conn    = get_db()
+      student = queryOne(conn, "SELECT id, name, gender FROM students WHERE roll_number=%s", (roll,))
+      if not student or student['gender'] != 'male':
+          conn.close()
+          return jsonify({'ok': False, 'msg': 'Student not found or not male.'})
+
+  REPLACE WITH:
+      conn    = get_db()
+      student = queryOne(conn, "SELECT id, name, gender FROM students WHERE roll_number=%s", (roll,))
+      if not student:
+          conn.close()
+          return jsonify({'ok': False, 'msg': 'Student not found.'})
+      try:
+          new_floor = int(new_floor)
+          if student['gender'] == 'female':
+              if new_floor not in (1, 2, 3):
+                  conn.close()
+                  return jsonify({'ok': False, 'msg': 'Hostel must be 1, 2, or 3 for female students.'})
+          else:
+              if new_floor < 1 or new_floor > 7:
+                  conn.close()
+                  return jsonify({'ok': False, 'msg': 'Floor must be between 1 and 7.'})
+      except (TypeError, ValueError):
+          conn.close()
+          return jsonify({'ok': False, 'msg': 'Invalid value.'})
+
+  CHANGE 1E — manager_cook_sheet route  (around line 3492)
+  ─────────────────────────────────────────────────────────
+  FIND:
+      floor_lunch   = query(conn,
+          "SELECT s.floor, COUNT(*) as count FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
+          "WHERE mo.meal_date=%s AND mo.meal_type='lunch'  AND s.gender='male' GROUP BY s.floor ORDER BY s.floor",
+          (req_date,)
+      )
+      floor_dinner  = query(conn,
+          "SELECT s.floor, COUNT(*) as count FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
+          "WHERE mo.meal_date=%s AND mo.meal_type='dinner' AND s.gender='male' GROUP BY s.floor ORDER BY s.floor",
+          (req_date,)
+      )
+      conn.close()  # safe to close now — all queries done
+      return jsonify({
+          'ok': True, 'date': req_date,
+          'lunch':  {'total': lunch_total,  'female': lunch_female,  'male': lunch_male},
+          'dinner': {'total': dinner_total, 'female': dinner_female, 'male': dinner_male},
+          'floor_lunch':  [{'floor': r['floor'], 'count': r['count']} for r in floor_lunch],
+          'floor_dinner': [{'floor': r['floor'], 'count': r['count']} for r in floor_dinner],
+      })
+
+  REPLACE WITH:
+      floor_lunch   = query(conn,
+          "SELECT s.floor, COUNT(*) as count FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
+          "WHERE mo.meal_date=%s AND mo.meal_type='lunch'  AND s.gender='male' GROUP BY s.floor ORDER BY s.floor",
+          (req_date,)
+      )
+      floor_dinner  = query(conn,
+          "SELECT s.floor, COUNT(*) as count FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
+          "WHERE mo.meal_date=%s AND mo.meal_type='dinner' AND s.gender='male' GROUP BY s.floor ORDER BY s.floor",
+          (req_date,)
+      )
+      hostel_lunch  = query(conn,
+          "SELECT s.floor, COUNT(*) as count FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
+          "WHERE mo.meal_date=%s AND mo.meal_type='lunch'  AND s.gender='female' GROUP BY s.floor ORDER BY s.floor",
+          (req_date,)
+      )
+      hostel_dinner = query(conn,
+          "SELECT s.floor, COUNT(*) as count FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
+          "WHERE mo.meal_date=%s AND mo.meal_type='dinner' AND s.gender='female' GROUP BY s.floor ORDER BY s.floor",
+          (req_date,)
+      )
+      HOSTEL_NAMES = {1: 'Campus', 2: 'Sentu House', 3: 'Chairman House'}
+      conn.close()
+      return jsonify({
+          'ok': True, 'date': req_date,
+          'lunch':  {'total': lunch_total,  'female': lunch_female,  'male': lunch_male},
+          'dinner': {'total': dinner_total, 'female': dinner_female, 'male': dinner_male},
+          'floor_lunch':  [{'floor': r['floor'], 'count': r['count']} for r in floor_lunch],
+          'floor_dinner': [{'floor': r['floor'], 'count': r['count']} for r in floor_dinner],
+          'hostel_lunch':  [{'floor': r['floor'], 'name': HOSTEL_NAMES.get(r['floor'], f"Hostel {r['floor']}"), 'count': r['count']} for r in hostel_lunch],
+          'hostel_dinner': [{'floor': r['floor'], 'name': HOSTEL_NAMES.get(r['floor'], f"Hostel {r['floor']}"), 'count': r['count']} for r in hostel_dinner],
+      })
+-->
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     FILE 2 — student_register.html
+     ══════════════════════════════════════════════════════════════════════════
+
+  CHANGE 2A — Replace the floor section HTML  (around line 125)
+  ─────────────────────────────────────────────────────────────
+  FIND:
+        <div class="form-group" id="floor-group">
+          <label>Floor Number</label>
+          <select name="floor" id="floor-select" required>
+            <option value="">Select floor</option>
+            <option value="1">Floor 1</option>
+            <option value="2">Floor 2</option>
+            <option value="3">Floor 3</option>
+            <option value="4">Floor 4</option>
+            <option value="5">Floor 5</option>
+            <option value="6">Floor 6</option>
+            <option value="7">Floor 7</option>
+          </select>
+        </div>
+
+  REPLACE WITH:
+-->
+<div class="form-group" id="floor-group">
+  <label id="floor-label">Floor Number</label>
+  <select name="floor" id="floor-select" required>
+    <!-- Options swapped dynamically by toggleFloor() -->
+    <option value="">Select floor</option>
+    <option value="1">Floor 1</option>
+    <option value="2">Floor 2</option>
+    <option value="3">Floor 3</option>
+    <option value="4">Floor 4</option>
+    <option value="5">Floor 5</option>
+    <option value="6">Floor 6</option>
+    <option value="7">Floor 7</option>
+  </select>
+</div>
+<!--
+
+  CHANGE 2B — Replace the toggleFloor JS function  (around line 190)
+  ───────────────────────────────────────────────────────────────────
+  FIND:
+  function toggleFloor(gender) {
+    const group  = document.getElementById('floor-group');
+    const select = document.getElementById('floor-select');
+    if (gender === 'female') {
+      group.style.display = 'none';
+      select.removeAttribute('required');
+      select.value = '';
+    } else {
+      group.style.display = '';
+      select.setAttribute('required', 'required');
+    }
+  }
+  document.getElementById('floor-group').style.display = 'none';
+  document.getElementById('floor-select').removeAttribute('required');
+  document.querySelectorAll('input[name="gender"]').forEach(r => {
+    if (r.checked) toggleFloor(r.value);
+  });
+
+  REPLACE WITH:
+-->
+<script>
+const MALE_FLOOR_OPTIONS = `
+  <option value="">Select floor</option>
+  <option value="1">Floor 1</option>
+  <option value="2">Floor 2</option>
+  <option value="3">Floor 3</option>
+  <option value="4">Floor 4</option>
+  <option value="5">Floor 5</option>
+  <option value="6">Floor 6</option>
+  <option value="7">Floor 7</option>`;
+
+const FEMALE_HOSTEL_OPTIONS = `
+  <option value="">Select hostel</option>
+  <option value="1">1 — Campus</option>
+  <option value="2">2 — Sentu House</option>
+  <option value="3">3 — Chairman House</option>`;
+
+function toggleFloor(gender) {
+  const group  = document.getElementById('floor-group');
+  const select = document.getElementById('floor-select');
+  const label  = document.getElementById('floor-label');
+  select.value = '';
+  if (gender === 'female') {
+    group.style.display   = '';
+    select.innerHTML      = FEMALE_HOSTEL_OPTIONS;
+    label.textContent     = 'Hostel';
+    select.setAttribute('required', 'required');
+  } else if (gender === 'male') {
+    group.style.display   = '';
+    select.innerHTML      = MALE_FLOOR_OPTIONS;
+    label.textContent     = 'Floor Number';
+    select.setAttribute('required', 'required');
+  } else {
+    group.style.display   = 'none';
+    select.removeAttribute('required');
+  }
+}
+// Init — hide on load until gender is chosen
+document.getElementById('floor-group').style.display = 'none';
+document.getElementById('floor-select').removeAttribute('required');
+document.querySelectorAll('input[name="gender"]').forEach(r => {
+  if (r.checked) toggleFloor(r.value);
+});
+</script>
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     FILE 3 — student_dashboard.html
+     ══════════════════════════════════════════════════════════════════════════
+
+  CHANGE 3A — "My Floor" card title and female message  (around line 672)
+  ─────────────────────────────────────────────────────────────────────────
+  FIND:
+        <div class="section-title"><i class="fas fa-building" style="color:var(--primary)"></i> My Floor</div>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:4px">Your current floor assignment. Request a change below — the admin will review and update it.</p>
+
+  REPLACE WITH:
+        <div class="section-title"><i class="fas fa-building" style="color:var(--primary)"></i> My Floor / Hostel</div>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:4px">Your current floor / hostel assignment. Request a change below — the admin will review and update it.</p>
+
+
+  FIND (around line 692):
+        <div id="floor-female-msg" style="display:none;padding:18px;background:var(--primary-pale);border-radius:10px;color:var(--text-muted);font-size:14px">
+          <i class="fas fa-info-circle" style="color:var(--primary)"></i> Floor assignments are for male residents only.
+        </div>
+
+  REPLACE WITH:
+-->
+<div id="floor-female-msg" style="display:none;padding:18px;background:var(--primary-pale);border-radius:10px;color:var(--text-muted);font-size:14px">
+  <i class="fas fa-info-circle" style="color:var(--primary)"></i>
+  <span id="floor-female-text">Your hostel assignment is shown above.</span>
+</div>
+<!--
+
+  CHANGE 3B — Floor change modal select options  (around line 895)
+  ────────────────────────────────────────────────────────────────
+  FIND:
+      <select id="floor-select" style="width:100%;...">
+        <option value="">Select floor…</option>
+        <option value="1">Floor 1</option>
+        <option value="2">Floor 2</option>
+        <option value="3">Floor 3</option>
+        <option value="4">Floor 4</option>
+        <option value="5">Floor 5</option>
+        <option value="6">Floor 6</option>
+        <option value="7">Floor 7</option>
+      </select>
+
+  REPLACE WITH (same styling, id preserved):
+-->
+<select id="floor-select" style="width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:15px;background:var(--card);color:var(--text)">
+  <!-- Populated by loadFloorStatus() based on gender -->
+  <option value="">Loading…</option>
+</select>
+<!--
+
+  CHANGE 3C — Replace the entire loadFloorStatus() JS function  (around line 1174)
+  ──────────────────────────────────────────────────────────────────────────────────
+  FIND:
+  // ── FLOOR CHANGE ──────────────────────────────────────────────────────────────
+  async function loadFloorStatus() { ... }
+
+  REPLACE with the block below (from <script> to </script>):
+-->
+<script>
+// ── FLOOR / HOSTEL CHANGE ─────────────────────────────────────────────────────
+const HOSTEL_NAMES = { 1: 'Campus', 2: 'Sentu House', 3: 'Chairman House' };
+
+function floorLabel(gender, val) {
+  if (gender === 'female') return val ? HOSTEL_NAMES[val] || `Hostel ${val}` : '?';
+  return val ? `Floor ${val}` : '?';
+}
+
+async function loadFloorStatus() {
+  try {
+    const r = await fetch('/student/floor_change_status');
+    const d = await r.json();
+    const isFemale = d.gender === 'female';
+
+    // Update the modal label
+    const modalLabel = document.querySelector('#floor-change-modal label[for="floor-select"], #floor-change-modal label');
+    if (modalLabel) modalLabel.textContent = isFemale ? 'Desired Hostel' : 'Desired Floor';
+
+    // Populate the floor/hostel select with correct options
+    const sel = document.getElementById('floor-select');
+    if (sel) {
+      if (isFemale) {
+        sel.innerHTML = `
+          <option value="">Select hostel…</option>
+          <option value="1">1 — Campus</option>
+          <option value="2">2 — Sentu House</option>
+          <option value="3">3 — Chairman House</option>`;
+      } else {
+        sel.innerHTML = `
+          <option value="">Select floor…</option>
+          <option value="1">Floor 1</option>
+          <option value="2">Floor 2</option>
+          <option value="3">Floor 3</option>
+          <option value="4">Floor 4</option>
+          <option value="5">Floor 5</option>
+          <option value="6">Floor 6</option>
+          <option value="7">Floor 7</option>`;
+      }
+    }
+
+    const floorEl  = document.getElementById('current-floor-display');
+    const statusEl = document.getElementById('floor-request-status');
+    const area     = document.getElementById('floor-status-area');
+    const femMsg   = document.getElementById('floor-female-msg');
+    const femText  = document.getElementById('floor-female-text');
+
+    // Both male AND female now see the floor/hostel status area
+    if (area) area.style.display = '';
+    if (femMsg) femMsg.style.display = 'none';
+
+    if (floorEl) {
+      if (isFemale) {
+        // Show hostel name instead of raw number
+        const hostelName = HOSTEL_NAMES[d.current_floor] || (d.current_floor ? `Hostel ${d.current_floor}` : '?');
+        floorEl.style.fontSize = '22px';
+        floorEl.textContent = hostelName;
+      } else {
+        floorEl.style.fontSize = '36px';
+        floorEl.textContent = d.current_floor || '?';
+      }
+    }
+
+    const req = d.request;
+    if (req && req.status === 'pending') {
+      const reqLabel = isFemale
+        ? HOSTEL_NAMES[req.requested_floor] || `Hostel ${req.requested_floor}`
+        : `Floor ${req.requested_floor}`;
+      statusEl.innerHTML = `<div style="background:var(--accent-light);border:1.5px solid var(--accent);border-radius:8px;padding:10px 14px;font-size:13px;color:#7c5f00">
+        <i class="fas fa-clock"></i> <strong>Request Pending</strong> — You've requested ${reqLabel}. Waiting for admin.
+      </div>`;
+      const btn = document.getElementById('floor-change-btn');
+      if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
+      const badge = document.getElementById('floor-badge');
+      if (badge) badge.style.display = '';
+    } else if (req && req.status === 'approved') {
+      statusEl.innerHTML = `<div style="background:var(--primary-pale);border:1.5px solid var(--primary);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--primary)">
+        <i class="fas fa-check-circle"></i> <strong>Last request approved!</strong> Your ${isFemale ? 'hostel' : 'floor'} has been updated.
+      </div>`;
+      const badge = document.getElementById('floor-badge');
+      if (badge) badge.style.display = 'none';
+    } else if (req && req.status === 'rejected') {
+      statusEl.innerHTML = `<div style="background:var(--danger-light);border:1.5px solid var(--danger);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--danger)">
+        <i class="fas fa-times-circle"></i> <strong>Last request rejected.</strong> You can submit a new request.
+      </div>`;
+      const badge = document.getElementById('floor-badge');
+      if (badge) badge.style.display = 'none';
+    } else {
+      if (statusEl) statusEl.innerHTML = '';
+      const badge = document.getElementById('floor-badge');
+      if (badge) badge.style.display = 'none';
+    }
+
+    // Update section title and button text
+    const cardTitle = document.querySelector('#floor-card .section-title');
+    if (cardTitle) cardTitle.innerHTML = `<i class="fas fa-building" style="color:var(--primary)"></i> My ${isFemale ? 'Hostel' : 'Floor'}`;
+    const changeBtn = document.getElementById('floor-change-btn');
+    if (changeBtn) changeBtn.innerHTML = `<i class="fas fa-exchange-alt"></i> Request ${isFemale ? 'Hostel' : 'Floor'} Change`;
+
+  } catch(e) { console.error('loadFloorStatus error:', e); }
+}
+</script>
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     FILE 4 — manager_dashboard.html
+     ══════════════════════════════════════════════════════════════════════════
+
+  CHANGE 4A — Replace the Female Students section  (around line 688)
+  ──────────────────────────────────────────────────────────────────
+  FIND (the entire block):
+    <!-- Female Students Section -->
+    {% set female_total = 0 %}
+    {% for fb in floor_breakdown %}{% if fb.floor is none or fb.floor == '' %}{% set female_total = fb.females %}{% endif %}{% endfor %}
+    <div class="card section-card" style="overflow:hidden;margin-top:16px;border-left:4px solid #c2185b">
+      ...everything up to the closing </div> of this card...
+    </div>
+
+  REPLACE WITH:
+-->
+<!-- Female Students Section — with hostel breakdown -->
+<div class="card section-card" style="overflow:hidden;margin-top:16px;border-left:4px solid #c2185b">
+  <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+    <div class="section-title" style="margin:0"><i class="fas fa-venus" style="color:#c2185b"></i> Female Students</div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span class="badge" style="background:#fce4ec;color:#c2185b;font-size:14px">{{ female_count }} students</span>
+      <!-- Per-hostel view buttons -->
+      <button class="btn btn-sm" style="background:#c2185b;color:#fff;white-space:nowrap"
+        onclick="openFloorModal('female', 1)">
+        <i class="fas fa-home"></i> Campus
+      </button>
+      <button class="btn btn-sm" style="background:#ad1457;color:#fff;white-space:nowrap"
+        onclick="openFloorModal('female', 2)">
+        <i class="fas fa-home"></i> Sentu House
+      </button>
+      <button class="btn btn-sm" style="background:#880e4f;color:#fff;white-space:nowrap"
+        onclick="openFloorModal('female', 3)">
+        <i class="fas fa-home"></i> Chairman House
+      </button>
+    </div>
+  </div>
+  <div style="padding:20px 24px">
+    <!-- Today's meal summary -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+      <div style="background:#fce4ec;border-radius:10px;padding:16px;text-align:center">
+        <div style="font-size:13px;color:#c2185b;font-weight:600;margin-bottom:4px"><i class="fas fa-sun"></i> Today's Lunch</div>
+        <div style="font-size:28px;font-weight:700;color:#c2185b">{{ female_lunch_today }}</div>
+        <div style="font-size:12px;color:#880e4f;margin-bottom:8px">out of {{ female_count }} female students</div>
+        {% if female_count > 0 %}
+        <div class="progress-bar"><div class="progress-fill" style="width:{{ (female_lunch_today/female_count*100)|int }}%;background:#c2185b"></div></div>
+        <div style="font-size:11px;color:#c2185b;margin-top:3px">{{ (female_lunch_today/female_count*100)|int }}%</div>
+        {% endif %}
+      </div>
+      <div style="background:#fce4ec;border-radius:10px;padding:16px;text-align:center">
+        <div style="font-size:13px;color:#c2185b;font-weight:600;margin-bottom:4px"><i class="fas fa-moon"></i> Today's Dinner</div>
+        <div style="font-size:28px;font-weight:700;color:#c2185b">{{ female_dinner_today }}</div>
+        <div style="font-size:12px;color:#880e4f;margin-bottom:8px">out of {{ female_count }} female students</div>
+        {% if female_count > 0 %}
+        <div class="progress-bar"><div class="progress-fill" style="width:{{ (female_dinner_today/female_count*100)|int }}%;background:#c2185b"></div></div>
+        <div style="font-size:11px;color:#c2185b;margin-top:3px">{{ (female_dinner_today/female_count*100)|int }}%</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Hostel breakdown table -->
+    {% set hostels = [
+        (1, 'Campus'),
+        (2, 'Sentu House'),
+        (3, 'Chairman House')
+    ] %}
+    {% if female_count > 0 %}
+    <div style="overflow-x:auto;border-radius:10px;border:1px solid var(--border)">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr>
+            <th style="padding:10px 14px;background:#fce4ec;color:#880e4f;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;text-align:left">Hostel</th>
+            <th style="padding:10px 14px;background:#fce4ec;color:#880e4f;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;text-align:center">Students</th>
+            <th style="padding:10px 14px;background:#fce4ec;color:#880e4f;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;text-align:center">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for hostel_num, hostel_name in hostels %}
+          {% set hostel_count = 0 %}
+          {% for fb in floor_breakdown %}
+            {% if fb.floor == hostel_num and (fb.females or 0) > 0 %}{% set hostel_count = fb.females %}{% endif %}
+          {% endfor %}
+          <tr style="border-top:1px solid var(--border)">
+            <td style="padding:12px 14px">
+              <span style="background:#fce4ec;color:#c2185b;border-radius:8px;padding:4px 10px;font-weight:700;font-size:12px">
+                <i class="fas fa-home"></i> {{ hostel_num }}
+              </span>
+              <strong style="margin-left:8px">{{ hostel_name }}</strong>
+            </td>
+            <td style="padding:12px 14px;text-align:center">
+              <span style="font-size:18px;font-weight:700;color:#c2185b">{{ hostel_count }}</span>
+            </td>
+            <td style="padding:12px 14px;text-align:center">
+              <button class="btn btn-sm" style="background:#fce4ec;color:#c2185b;border:1px solid #f48fb1"
+                onclick="openFloorModal('female', {{ hostel_num }})">
+                <i class="fas fa-users"></i> View
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div style="text-align:center;color:var(--text-muted);padding:24px">No female students registered yet.</div>
+    {% endif %}
+  </div>
+</div>
+<!--
+
+  CHANGE 4B — Update openFloorModal label for female  (around line 1665)
+  ────────────────────────────────────────────────────────────────────────
+  The openFloorModal JS function shows "Female Students" generically.
+  Update it to show the hostel name when called with a specific floor.
+
+  FIND:
+    ? `<i class="fas fa-mars" style="color:#3b5fe2"></i> Floor ${floor} — Male Students`
+    : `<i class="fas fa-venus" style="color:#c2185b"></i> Female Students`
+
+  REPLACE WITH:
+-->
+<script>
+// Patch openFloorModal to show hostel name for females
+// Add this AFTER the existing openFloorModal function definition,
+// or replace the label lines inside it:
+const _HOSTEL_NAMES_MGR = { 1: 'Campus', 2: 'Sentu House', 3: 'Chairman House' };
+const _origOpenFloorModal = window.openFloorModal;  // save original if needed
+
+// Override the label line inside openFloorModal:
+// FIND in openFloorModal:
+//   ? `<i class="fas fa-mars"...> Floor ${floor} — Male Students`
+//   : `<i class="fas fa-venus"...> Female Students`
+// REPLACE WITH:
+//   ? `<i class="fas fa-mars" style="color:#3b5fe2"></i> Floor ${floor} — Male Students`
+//   : floor
+//     ? `<i class="fas fa-venus" style="color:#c2185b"></i> ${_HOSTEL_NAMES_MGR[floor] || 'Hostel ' + floor} — Female Students`
+//     : `<i class="fas fa-venus" style="color:#c2185b"></i> Female Students`
+
+// Also update the floor_students route call label in loadFloorStudents():
+// FIND in loadFloorStudents (inside floor-student-meta):
+//   ${_floorModalGender === 'male' ? ` · Floor ${s.floor || '—'}` : ''}
+// REPLACE WITH:
+//   ${_floorModalGender === 'male'
+//     ? ` · Floor ${s.floor || '—'}`
+//     : ` · ${_HOSTEL_NAMES_MGR[s.floor] || (s.floor ? 'Hostel ' + s.floor : 'No hostel')}`}
+</script>
+
+  CHANGE 4C — Cook Sheet JS: show hostel breakdown for females
+  ─────────────────────────────────────────────────────────────
+  In manager_dashboard.html, find the mealBlock() function inside loadCookSheet()
+  (or in fix_cook_sheet_js.html if that patch was applied).
+
+  FIND the mealBlock function's floorRows section:
+      const floorRows = (floorData || [])
+        .filter(f => f.floor != null)
+        .map(f => `
+          <div ...>
+            <span ...><i class="fas fa-layer-group"...></i> Floor ${f.floor}</span>
+            <span ...>${f.count}</span>
+          </div>`).join('');
+
+  AND find the mealBlock call at the bottom:
+      ${mealBlock('Lunch',  '🌤️', lunch,  floor_lunch)}
+      ${mealBlock('Dinner', '🌙', dinner, floor_dinner)}
+
+  REPLACE the two mealBlock calls with:
+      ${mealBlock('Lunch',  '🌤️', lunch,  floor_lunch,  _cookData.hostel_lunch)}
+      ${mealBlock('Dinner', '🌙', dinner, floor_dinner, _cookData.hostel_dinner)}
+
+  AND update the mealBlock function signature and floorRows to accept hostelData:
+
+  FIND:
+    function mealBlock(label, emoji, mealData, floorData) {
+      const floorRows = (floorData || [])
+        .filter(f => f.floor != null)
+        .map(f => `
+          <div style="...background:#e6f0ff;border:1px solid #b3d1f5">
+            <span style="...color:#3b5fe2">
+              <i class="fas fa-layer-group"...></i> Floor ${f.floor}
+            </span>
+            <span style="...color:#3b5fe2">${f.count}</span>
+          </div>`).join('');
+
+  REPLACE WITH:
+      function mealBlock(label, emoji, mealData, floorData, hostelData) {
+        const HOSTEL_NAMES_CS = { 1: 'Campus', 2: 'Sentu House', 3: 'Chairman House' };
+        const floorRows = (floorData || [])
+          .filter(f => f.floor != null)
+          .map(f => `
+            <div style="display:flex;align-items:center;justify-content:space-between;
+                        padding:9px 14px;border-radius:8px;margin-bottom:5px;
+                        background:#e6f0ff;border:1px solid #b3d1f5">
+              <span style="display:flex;align-items:center;gap:8px;color:#3b5fe2;font-size:13px;font-weight:600">
+                <i class="fas fa-layer-group" style="font-size:11px"></i> Floor ${f.floor}
+              </span>
+              <span style="font-size:18px;font-weight:800;color:#3b5fe2">${f.count}</span>
+            </div>`).join('');
+        const hostelRows = (hostelData || [])
+          .filter(h => h.floor != null)
+          .map(h => `
+            <div style="display:flex;align-items:center;justify-content:space-between;
+                        padding:9px 14px;border-radius:8px;margin-bottom:5px;
+                        background:#fce4ec;border:1px solid #f48fb1">
+              <span style="display:flex;align-items:center;gap:8px;color:#c2185b;font-size:13px;font-weight:600">
+                <i class="fas fa-home" style="font-size:11px"></i>
+                ${HOSTEL_NAMES_CS[h.floor] || 'Hostel ' + h.floor}
+              </span>
+              <span style="font-size:18px;font-weight:800;color:#c2185b">${h.count}</span>
+            </div>`).join('');
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     FILE 5 — admin_students.html
+     ══════════════════════════════════════════════════════════════════════════
+
+  CHANGE 5A — Add female hostel field to "Add Student" form  (around line 224)
+  ─────────────────────────────────────────────────────────────────────────────
+  FIND:
+        <div class="t-field" id="as-floor-field" style="display:none">
+          <label><i class="fas fa-building"></i> Floor (Male)</label>
+          <select id="as-floor" style="width:100%;background:#0d1117;border:1.5px solid #30363d;border-radius:8px;color:#e6edf3;padding:10px 14px;font-family:inherit;font-size:14px;box-sizing:border-box">
+            <option value="">Select floor</option>
+            <option value="1">Floor 1</option>
+            <option value="2">Floor 2</option>
+            <option value="3">Floor 3</option>
+            <option value="4">Floor 4</option>
+            <option value="5">Floor 5</option>
+            <option value="6">Floor 6</option>
+            <option value="7">Floor 7</option>
+          </select>
+        </div>
+
+  REPLACE WITH:
+-->
+<div class="t-field" id="as-floor-field" style="display:none">
+  <label id="as-floor-label"><i class="fas fa-building"></i> Floor (Male)</label>
+  <select id="as-floor" style="width:100%;background:#0d1117;border:1.5px solid #30363d;border-radius:8px;color:#e6edf3;padding:10px 14px;font-family:inherit;font-size:14px;box-sizing:border-box">
+    <option value="">Select floor</option>
+    <option value="1">Floor 1</option>
+    <option value="2">Floor 2</option>
+    <option value="3">Floor 3</option>
+    <option value="4">Floor 4</option>
+    <option value="5">Floor 5</option>
+    <option value="6">Floor 6</option>
+    <option value="7">Floor 7</option>
+  </select>
+</div>
+<!--
+
+  CHANGE 5B — Replace toggleAsFloor JS and addStudent validation  (around line 668)
+  ──────────────────────────────────────────────────────────────────────────────────
+  FIND:
+  function toggleAsFloor(val) {
+    document.getElementById('as-floor-field').style.display = val === 'male' ? '' : 'none';
+    if (val !== 'male') document.getElementById('as-floor').value = '';
+  }
+
+  AND FIND (inside addStudent, around line 695):
+    if (gender === 'male' && !floor) {
+      result.style.display = 'block';
+      result.className = 'transfer-result fail';
+      result.innerHTML = '<i class="fas fa-circle-xmark"></i> Please select a floor for male students.';
+      return;
+    }
+
+  REPLACE BOTH with:
+-->
+<script>
+const AS_MALE_FLOOR_OPTIONS = `
+  <option value="">Select floor</option>
+  <option value="1">Floor 1</option>
+  <option value="2">Floor 2</option>
+  <option value="3">Floor 3</option>
+  <option value="4">Floor 4</option>
+  <option value="5">Floor 5</option>
+  <option value="6">Floor 6</option>
+  <option value="7">Floor 7</option>`;
+
+const AS_FEMALE_HOSTEL_OPTIONS = `
+  <option value="">Select hostel</option>
+  <option value="1">1 — Campus</option>
+  <option value="2">2 — Sentu House</option>
+  <option value="3">3 — Chairman House</option>`;
+
+function toggleAsFloor(val) {
+  const field  = document.getElementById('as-floor-field');
+  const select = document.getElementById('as-floor');
+  const label  = document.getElementById('as-floor-label');
+  select.value = '';
+  if (val === 'male') {
+    field.style.display  = '';
+    select.innerHTML     = AS_MALE_FLOOR_OPTIONS;
+    label.innerHTML      = '<i class="fas fa-building"></i> Floor (Male)';
+  } else if (val === 'female') {
+    field.style.display  = '';
+    select.innerHTML     = AS_FEMALE_HOSTEL_OPTIONS;
+    label.innerHTML      = '<i class="fas fa-home"></i> Hostel (Female)';
+  } else {
+    field.style.display  = 'none';
+  }
+}
+</script>
+<!--
+  Also update addStudent() validation (inside addStudent function, replace the floor check):
+
+  FIND:
+    if (gender === 'male' && !floor) {
+      result.style.display = 'block';
+      result.className = 'transfer-result fail';
+      result.innerHTML = '<i class="fas fa-circle-xmark"></i> Please select a floor for male students.';
+      return;
+    }
+
+  REPLACE WITH:
+    if (!floor) {
+      result.style.display = 'block';
+      result.className = 'transfer-result fail';
+      result.innerHTML = `<i class="fas fa-circle-xmark"></i> Please select a ${gender === 'female' ? 'hostel' : 'floor'}.`;
+      return;
+    }
+
+
+  CHANGE 5C — Show hostel name for female students in the table  (around line 348)
+  ──────────────────────────────────────────────────────────────────────────────────
+  FIND:
+              {% if s.gender == 'female' %}
+                <span style="color:#f778a1"><i class="fas fa-venus"></i> Female</span>
+              {% else %}
+                <span style="color:#58a6ff"><i class="fas fa-mars"></i> Floor {{ s.floor or '?' }}</span>
+              {% endif %}
+
+  REPLACE WITH:
+-->
+{% if s.gender == 'female' %}
+  {% if s.floor == 1 %}
+    <span style="color:#f778a1"><i class="fas fa-venus"></i> Campus</span>
+  {% elif s.floor == 2 %}
+    <span style="color:#f778a1"><i class="fas fa-venus"></i> Sentu House</span>
+  {% elif s.floor == 3 %}
+    <span style="color:#f778a1"><i class="fas fa-venus"></i> Chairman House</span>
+  {% else %}
+    <span style="color:#f778a1"><i class="fas fa-venus"></i> Female</span>
+  {% endif %}
+{% else %}
+  <span style="color:#58a6ff"><i class="fas fa-mars"></i> Floor {{ s.floor or '?' }}</span>
+{% endif %}
+<!--
+
+  ALSO: Update manager_students.html table — female Floor column
+  ──────────────────────────────────────────────────────────────
+  In manager_students.html, find the floor/gender column for female students.
+  FIND (around the floor cell for female):
+              {% if s.gender == 'male' %}
+              <span class="badge badge-yellow"><i class="fas fa-layer-group"></i> Floor {{ s.floor or 1 }}</span>
+              {% else %}
+              <span style="color:var(--text-muted)">—</span>
+              {% endif %}
+
+  REPLACE WITH:
+-->
+{% if s.gender == 'male' %}
+  <span class="badge badge-yellow"><i class="fas fa-layer-group"></i> Floor {{ s.floor or 1 }}</span>
+{% elif s.floor == 1 %}
+  <span class="badge" style="background:#fce4ec;color:#c2185b"><i class="fas fa-home"></i> Campus</span>
+{% elif s.floor == 2 %}
+  <span class="badge" style="background:#fce4ec;color:#c2185b"><i class="fas fa-home"></i> Sentu House</span>
+{% elif s.floor == 3 %}
+  <span class="badge" style="background:#fce4ec;color:#c2185b"><i class="fas fa-home"></i> Chairman House</span>
+{% else %}
+  <span style="color:var(--text-muted)">—</span>
+{% endif %}

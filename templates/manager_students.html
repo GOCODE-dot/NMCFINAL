@@ -1,0 +1,302 @@
+{% extends 'base.html' %}
+{% block title %}All Students{% endblock %}
+{% block extra_head %}
+<style>
+  @media print {
+    @page { size: A4 landscape; margin: 8mm 10mm; }
+
+    /* Hide non-print elements */
+    nav, .nav-links, #search,
+    input[type="text"], .no-print,
+    .page-header { display: none !important; }
+
+    /* Reset body & container */
+    html, body {
+      background: #fff !important;
+      color: #000 !important;
+      font-size: 10px !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      width: 100% !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .container {
+      max-width: 100% !important;
+      width: 100% !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
+    /* Card: remove shadow, let it fill page */
+    .card {
+      box-shadow: none !important;
+      border: none !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      overflow: visible !important;
+    }
+    /* Unwrap the overflow-x:auto div */
+    .card > div[style*="overflow"] {
+      overflow: visible !important;
+      width: 100% !important;
+    }
+    /* Remove the search bar padding div */
+    .card > div[style*="padding"][style*="border-bottom"] { display: none !important; }
+
+    /* Table: full width, fixed layout so columns share space evenly */
+    table {
+      width: 100% !important;
+      border-collapse: collapse !important;
+      table-layout: fixed !important;
+      font-size: 9px !important;
+    }
+    th {
+      background: #efefef !important;
+      color: #222 !important;
+      font-size: 8px !important;
+      font-weight: 700 !important;
+      text-transform: uppercase !important;
+      letter-spacing: 0.3px !important;
+      padding: 4px 4px !important;
+      border: 1px solid #ccc !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    td {
+      padding: 4px 4px !important;
+      border: 1px solid #ddd !important;
+      color: #000 !important;
+      word-break: break-word !important;
+      white-space: normal !important;
+      overflow: visible !important;
+    }
+
+    /* Column widths tuned for 10 columns in landscape A4 */
+    #stbl th:nth-child(1),  #stbl td:nth-child(1)  { width: 3%; }   /* # */
+    #stbl th:nth-child(2),  #stbl td:nth-child(2)  { width: 15%; }  /* Name */
+    #stbl th:nth-child(3),  #stbl td:nth-child(3)  { width: 6%; }   /* Batch */
+    #stbl th:nth-child(4),  #stbl td:nth-child(4)  { width: 14%; }  /* Roll No. */
+    #stbl th:nth-child(5),  #stbl td:nth-child(5)  { width: 8%; }   /* Gender */
+    #stbl th:nth-child(6),  #stbl td:nth-child(6)  { width: 7%; }   /* Floor/Hostel */
+    #stbl th:nth-child(7),  #stbl td:nth-child(7)  { width: 13%; }  /* bKash */
+    #stbl th:nth-child(8),  #stbl td:nth-child(8)  { width: 9%; }   /* Total Meals */
+    #stbl th:nth-child(9),  #stbl td:nth-child(9)  { width: 9%; }   /* Pending */
+    #stbl th:nth-child(10), #stbl td:nth-child(10) { width: 11%; }  /* Due */
+
+    /* Flatten badges — no colored boxes in print */
+    .badge, .badge-green, .badge-yellow,
+    span[style*="background:#fce4ec"],
+    span[style*="background:#e6f0ff"],
+    span[style*="background:#fff8e6"],
+    span[style*="background:#f3e8ff"] {
+      background: none !important;
+      border: none !important;
+      color: #000 !important;
+      padding: 0 !important;
+      font-size: 9px !important;
+    }
+
+    /* Keep danger red for pending amounts */
+    strong[style*="color:var(--danger)"],
+    strong[style*="color: var(--danger)"] {
+      color: #c00 !important;
+      font-weight: 700 !important;
+    }
+
+    /* Hide Font Awesome icons to save space */
+    .fas { display: none !important; }
+
+    /* Print header */
+    .print-header { display: block !important; }
+
+    /* Show all rows */
+    #stbl tbody tr { display: table-row !important; visibility: visible !important; }
+    tr { page-break-inside: avoid; }
+  }
+  .print-header { display: none; text-align: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #333; }
+  .print-header h2 { font-size: 18px; margin-bottom: 4px; }
+  .print-header p { font-size: 12px; color: #555; }
+</style>
+{% endblock %}
+{% block body %}
+<nav>
+  <div class="nav-inner">
+    <div class="nav-brand">
+      <div class="logo">🍽️</div>
+      <span>NMMS — <strong>All Students</strong></span>
+    </div>
+    <div class="nav-links">
+      {% if session.get('role') == 'admin' %}
+      <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Admin Dashboard</a>
+      <a href="{{ url_for('admin_logout') }}" class="btn btn-outline btn-sm"><i class="fas fa-sign-out-alt"></i> Logout</a>
+      {% else %}
+      <a href="{{ url_for('manager_dashboard') }}" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Dashboard</a>
+      <button onclick="window.print()" class="btn btn-outline btn-sm" style="cursor:pointer"><i class="fas fa-print"></i> Print</button>
+      <a href="{{ url_for('manager_logout') }}" class="btn btn-outline btn-sm"><i class="fas fa-sign-out-alt"></i> Logout</a>
+      {% endif %}
+    </div>
+  </div>
+</nav>
+<div class="container">
+  <!-- Print-only header -->
+  <div class="print-header">
+    <h2>Netrokona Medical College — NMMS Student Registry</h2>
+    <p>Printed on <span id="mgr-print-date"></span> &nbsp;·&nbsp; Total: {{ students|length }} students</p>
+  </div>
+  <div class="page-header">
+    <h1>All Students</h1>
+    <p>{{ students|length }} registered students</p>
+  </div>
+  <div class="card" style="overflow:hidden;margin-bottom:32px">
+    <div style="padding:16px 24px;border-bottom:1px solid var(--border)">
+      <input type="text" id="search" placeholder="Search name, roll, batch..." oninput="filterTable()" style="width:100%;padding:10px 16px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px">
+    </div>
+    <div style="overflow-x:auto">
+      <table id="stbl">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th>Batch</th>
+            <th>Roll No.</th>
+            <th>Gender</th>
+            <th>Floor / Hostel</th>
+            <th>bKash</th>
+            <th>Total Meals</th>
+            <th>Pending</th>
+            <th>Due (Pay Later)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set hostel_map = {1: 'Campus', 2: 'Sentu House', 3: 'Chairman House'} %}
+          {% set ns = namespace(last_floor=None, row_num=0) %}
+          {% for s in students %}
+
+          {# ── Floor/Hostel group header row ── #}
+          {% if s.floor != ns.last_floor %}
+            {% set ns.last_floor = s.floor %}
+            <tr class="floor-group-header no-filter-target">
+              <td colspan="10" style="
+                background: linear-gradient(90deg,var(--primary-pale,#f0faf0),transparent);
+                border-top: 2px solid var(--primary,#2e7d32);
+                border-bottom: 1px solid var(--border);
+                padding: 7px 14px;
+                font-size: 12px;
+                font-weight: 800;
+                letter-spacing: .5px;
+                text-transform: uppercase;
+                color: var(--primary,#2e7d32);
+              ">
+                {% if s.gender == 'male' and s.floor %}
+                  <i class="fas fa-layer-group"></i>&nbsp; Floor {{ s.floor }}
+                {% elif s.gender == 'female' and s.floor %}
+                  <i class="fas fa-home"></i>&nbsp; {{ hostel_map.get(s.floor | int, 'Hostel ' ~ s.floor) }} (Female Hostel)
+                {% else %}
+                  <i class="fas fa-question-circle"></i>&nbsp; Unassigned
+                {% endif %}
+                <span style="font-weight:400;color:var(--text-muted);margin-left:8px;text-transform:none;letter-spacing:0">
+                  · Batch {{ s.batch }}{% if loop.revindex > 1 %} onwards{% endif %}
+                </span>
+              </td>
+            </tr>
+          {% endif %}
+
+          {# ── Student data row ── #}
+          {% set ns.row_num = ns.row_num + 1 %}
+          <tr data-floor="{{ s.floor }}" data-batch="{{ s.batch }}" data-roll="{{ s.roll_number }}">
+            <td style="color:var(--text-muted)">{{ ns.row_num }}</td>
+            <td><strong>{{ s.name }}</strong></td>
+            <td><span class="badge badge-green">{{ s.batch }}</span></td>
+            <td style="font-variant-numeric:tabular-nums">{{ s.roll_number }}</td>
+            <td>
+              {% if s.gender == 'female' %}
+              <span class="badge" style="background:#fce4ec;color:#c2185b"><i class="fas fa-venus"></i> Female</span>
+              {% else %}
+              <span class="badge" style="background:#e6f0ff;color:#3b5fe2"><i class="fas fa-mars"></i> Male</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if s.gender == 'male' and s.floor %}
+                <span class="badge badge-yellow"><i class="fas fa-layer-group"></i> Floor {{ s.floor }}</span>
+              {% elif s.gender == 'female' and s.floor %}
+                <span class="badge" style="background:#f3e8ff;color:#7e22ce"><i class="fas fa-home"></i>
+                  {{ hostel_map.get(s.floor | int, 'Hostel ' ~ s.floor) }}
+                </span>
+              {% else %}
+                <span style="color:var(--text-muted)">—</span>
+              {% endif %}
+            </td>
+            <td>{{ s.bkash_number }}</td>
+            <td>{{ s.total_meals or 0 }}</td>
+            <td>
+              {% if s.pending_amount and s.pending_amount > 0 %}
+              <strong style="color:var(--danger)">৳{{ "%.0f"|format(s.pending_amount) }}</strong>
+              {% else %}
+              <span style="color:var(--primary)">✓</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if s.due_amount and s.due_amount > 0 %}
+              <span class="badge badge-yellow"><i class="fas fa-clock"></i> ৳{{ "%.0f"|format(s.due_amount) }}</span>
+              {% else %}
+              <span style="color:var(--text-muted)">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="10" style="text-align:center;padding:32px;color:var(--text-muted)">No students registered yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<script>
+function filterTable() {
+  const q = document.getElementById('search').value.toLowerCase().trim();
+  const rows   = document.querySelectorAll('#stbl tbody tr:not(.floor-group-header)');
+  const groups = document.querySelectorAll('#stbl tbody tr.floor-group-header');
+
+  if (!q) {
+    // Show everything
+    rows.forEach(r   => r.classList.remove('row-hidden'));
+    groups.forEach(g => g.classList.remove('row-hidden'));
+    return;
+  }
+
+  rows.forEach(r => {
+    r.classList.toggle('row-hidden', !r.textContent.toLowerCase().includes(q));
+  });
+
+  // Hide a group header if ALL student rows following it (until the next header) are hidden
+  groups.forEach(header => {
+    let sibling = header.nextElementSibling;
+    let hasVisible = false;
+    while (sibling && !sibling.classList.contains('floor-group-header')) {
+      if (!sibling.classList.contains('row-hidden')) { hasVisible = true; break; }
+      sibling = sibling.nextElementSibling;
+    }
+    header.classList.toggle('row-hidden', !hasVisible);
+  });
+}
+
+// Set print date
+const d = new Date();
+const el = document.getElementById('mgr-print-date');
+if (el) el.textContent = d.toLocaleDateString('en-US', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+</script>
+<style>
+  .row-hidden { display: none; }
+  @media print {
+    .row-hidden { display: table-row !important; }
+    .floor-group-header td {
+      background: #e8f5e9 !important;
+      color: #1b5e20 !important;
+      border-top: 2px solid #2e7d32 !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
+</style>
+{% endblock %}

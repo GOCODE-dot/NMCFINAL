@@ -1,0 +1,262 @@
+<!--
+  ══════════════════════════════════════════════════════════════════════════════
+  INVITE CODE PANEL — paste this into admin_dashboard.html
+  Suggested location: inside the left column, after the "Demo Students" block
+  (after the closing </div> of the demo reset-zone around line 428)
+  ══════════════════════════════════════════════════════════════════════════════
+-->
+
+<!-- ── STYLES (add once, anywhere in the <style> block of admin_dashboard.html) ── -->
+<style>
+.invite-table { width:100%; border-collapse:collapse; font-size:12px; }
+.invite-table th { background:#161b22; color:#8b949e; font-size:11px; font-weight:700;
+                   text-transform:uppercase; letter-spacing:.4px; padding:7px 10px;
+                   border-bottom:1px solid #30363d; text-align:left; }
+.invite-table td { padding:7px 10px; border-bottom:1px solid #21262d; color:#e6edf3;
+                   vertical-align:middle; }
+.invite-table tr:last-child td { border-bottom:none; }
+.invite-table tr:hover td { background:#161b22; }
+.code-pill { font-family:monospace; font-size:13px; font-weight:700; letter-spacing:.1em;
+             background:#0d1117; border:1px solid #30363d; border-radius:6px;
+             padding:3px 9px; color:#79c0ff; cursor:pointer; user-select:all;
+             display:inline-flex; align-items:center; gap:6px; }
+.code-pill:hover { border-color:#58a6ff; }
+.badge-used   { background:#21262d; color:#8b949e; font-size:11px; padding:2px 8px;
+                border-radius:10px; font-weight:600; }
+.badge-active { background:rgba(63,185,80,.15); color:#3fb950; font-size:11px; padding:2px 8px;
+                border-radius:10px; font-weight:600; }
+.badge-batch  { background:#1f3a5f; color:#79c0ff; font-size:11px; padding:2px 8px;
+                border-radius:10px; font-weight:600; }
+.invite-gen-row { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px; }
+.invite-gen-row .pw-input { flex:1; min-width:80px; }
+.invite-output { background:#0d1117; border:1px solid #30363d; border-radius:8px;
+                 padding:14px 16px; margin-top:10px; display:none; }
+.invite-output-codes { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+.copy-all-btn { font-size:12px; color:#58a6ff; background:transparent; border:none;
+                cursor:pointer; padding:0; font-family:inherit; }
+.copy-all-btn:hover { text-decoration:underline; }
+</style>
+
+<!-- ─── INVITE CODE PANEL ─────────────────────────────────────────────────── -->
+<div class="reset-zone" style="border-color:#a371f7;margin-top:8px">
+  <h4><i class="fas fa-ticket-alt" style="color:#a371f7"></i> Invite Codes — Registration Gate</h4>
+  <p style="margin-bottom:12px">
+    Generate single-use invite codes. Students <strong>must have a code</strong> to register.
+    Each code can optionally be locked to a specific batch.
+  </p>
+
+  <!-- Generator row -->
+  <div class="invite-gen-row">
+    <div style="display:flex;flex-direction:column;gap:4px;flex:0 0 70px">
+      <label style="font-size:11px;color:#8b949e;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Count</label>
+      <input type="number" class="pw-input" id="inv-count" value="1" min="1" max="50" style="width:70px;text-align:center">
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;flex:0 0 100px">
+      <label style="font-size:11px;color:#8b949e;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Batch lock</label>
+      <select id="inv-batch" class="pw-input" style="width:100px;padding:9px 10px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#e6edf3;font-family:inherit;font-size:13px">
+        <option value="">Any batch</option>
+        <option value="2">Batch 2</option>
+        <option value="3">Batch 3</option>
+        <option value="4">Batch 4</option>
+        <option value="5">Batch 5</option>
+        <option value="6">Batch 6</option>
+        <option value="7">Batch 7</option>
+        <option value="8">Batch 8</option>
+      </select>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:120px">
+      <label style="font-size:11px;color:#8b949e;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Note (optional)</label>
+      <input type="text" class="pw-input" id="inv-note" placeholder="e.g. For Batch 5 new students" maxlength="100">
+    </div>
+    <button class="btn btn-sm" style="background:#a371f7;color:#fff;border:none;align-self:flex-end;white-space:nowrap"
+            onclick="generateInvites()">
+      <i class="fas fa-plus-circle"></i> Generate
+    </button>
+  </div>
+
+  <!-- Output box -->
+  <div class="invite-output" id="invite-output-box">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <span style="font-size:12px;color:#3fb950;font-weight:700" id="invite-output-label"></span>
+      <button class="copy-all-btn" onclick="copyAllCodes()"><i class="fas fa-copy"></i> Copy all</button>
+    </div>
+    <div class="invite-output-codes" id="invite-output-codes"></div>
+    <div style="font-size:11px;color:#8b949e;margin-top:8px">
+      <i class="fas fa-info-circle"></i> Click any code to copy. Each code is single-use.
+    </div>
+  </div>
+
+  <!-- Code list -->
+  <div style="margin-top:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <span style="font-size:12px;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:.4px">
+        <i class="fas fa-list"></i> All Codes
+      </span>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm" style="background:#21262d;color:#8b949e;border:1px solid #30363d;font-size:12px"
+                onclick="loadInvites()">
+          <i class="fas fa-sync"></i> Refresh
+        </button>
+        <button class="btn btn-sm" style="background:#21262d;color:#e94560;border:1px solid #e94560;font-size:12px"
+                onclick="deleteUsedInvites()">
+          <i class="fas fa-trash"></i> Clear Used
+        </button>
+      </div>
+    </div>
+
+    <div style="overflow-x:auto;border-radius:8px;border:1px solid #21262d">
+      <table class="invite-table" id="invite-table">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Batch</th>
+            <th>Status</th>
+            <th>Used By</th>
+            <th>Note</th>
+            <th>Created</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="invite-tbody">
+          <tr><td colspan="7" style="text-align:center;color:#8b949e;padding:20px">
+            <i class="fas fa-spinner fa-spin"></i> Loading...
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Invite Code Panel Logic ──────────────────────────────────────────────────
+
+let _inviteCodes = [];   // cache for copy-all
+
+async function generateInvites() {
+  const count = parseInt(document.getElementById('inv-count').value) || 1;
+  const batch = document.getElementById('inv-batch').value || null;
+  const note  = document.getElementById('inv-note').value.trim();
+
+  try {
+    const res  = await fetch('/admin/generate_invite', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ count, batch, note })
+    });
+    const data = await res.json();
+    if (!data.ok) { toast('Error: ' + data.msg, 'error'); return; }
+
+    _inviteCodes = data.codes;
+
+    const box    = document.getElementById('invite-output-box');
+    const label  = document.getElementById('invite-output-label');
+    const codesEl = document.getElementById('invite-output-codes');
+
+    label.textContent = `${data.codes.length} code${data.codes.length > 1 ? 's' : ''} generated` +
+                        (batch ? ` · Batch ${batch} only` : ' · Any batch') +
+                        (note  ? ` · "${note}"` : '');
+
+    codesEl.innerHTML = data.codes.map(c =>
+      `<span class="code-pill" onclick="copyCode('${c}',this)" title="Click to copy">${c} <i class="fas fa-copy" style="font-size:10px;opacity:.6"></i></span>`
+    ).join('');
+
+    box.style.display = 'block';
+    toast(`✅ ${data.codes.length} invite code(s) generated`, 'success');
+    loadInvites();   // refresh table
+  } catch(e) {
+    toast('Network error: ' + e.message, 'error');
+  }
+}
+
+function copyCode(code, el) {
+  navigator.clipboard.writeText(code).then(() => {
+    const orig = el.innerHTML;
+    el.innerHTML = `${code} <i class="fas fa-check" style="font-size:10px;color:#3fb950"></i>`;
+    setTimeout(() => { el.innerHTML = orig; }, 1500);
+  });
+}
+
+function copyAllCodes() {
+  if (!_inviteCodes.length) return;
+  navigator.clipboard.writeText(_inviteCodes.join('\n')).then(() => {
+    toast(`Copied ${_inviteCodes.length} codes to clipboard`, 'success');
+  });
+}
+
+async function loadInvites() {
+  const tbody = document.getElementById('invite-tbody');
+  try {
+    const res  = await fetch('/admin/list_invites');
+    const data = await res.json();
+    if (!data.codes || data.codes.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#8b949e;padding:20px">No invite codes yet. Generate some above.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.codes.map(c => {
+      const isUsed    = c.is_used === 1;
+      const isRevoked = isUsed && c.used_by === 'REVOKED';
+      const statusBadge = isRevoked
+        ? '<span class="badge-used">Revoked</span>'
+        : isUsed
+          ? '<span class="badge-used">Used</span>'
+          : '<span class="badge-active">Active</span>';
+      const batchBadge = c.batch
+        ? `<span class="badge-batch">Batch ${c.batch}</span>`
+        : '<span style="color:#8b949e;font-size:11px">Any</span>';
+      const usedBy  = isRevoked ? '—' : (c.used_by || '—');
+      const usedAt  = c.used_at ? `<br><span style="font-size:10px;color:#8b949e">${c.used_at.slice(0,16)}</span>` : '';
+      const created = c.created_at ? c.created_at.slice(0,16) : '—';
+      const revokeBtn = !isUsed
+        ? `<button onclick="revokeCode('${c.code}')" class="btn btn-sm"
+             style="background:transparent;color:#e94560;border:1px solid #e94560;font-size:11px;padding:4px 8px">
+             <i class="fas fa-ban"></i> Revoke
+           </button>`
+        : '';
+      return `<tr>
+        <td><span class="code-pill" onclick="copyCode('${c.code}',this)" title="Click to copy">
+          ${c.code} <i class="fas fa-copy" style="font-size:10px;opacity:.6"></i>
+        </span></td>
+        <td>${batchBadge}</td>
+        <td>${statusBadge}</td>
+        <td style="font-size:12px">${usedBy}${usedAt}</td>
+        <td style="font-size:12px;color:#8b949e;max-width:140px;word-break:break-word">${c.note || '—'}</td>
+        <td style="font-size:11px;color:#8b949e">${created}</td>
+        <td>${revokeBtn}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#e94560;padding:16px">Failed to load codes.</td></tr>`;
+  }
+}
+
+async function revokeCode(code) {
+  if (!confirm(`Revoke code ${code}? It will no longer be usable.`)) return;
+  try {
+    const res  = await fetch('/admin/revoke_invite', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ code })
+    });
+    const data = await res.json();
+    toast(data.ok ? `Code ${code} revoked.` : data.msg, data.ok ? 'success' : 'error');
+    if (data.ok) loadInvites();
+  } catch(e) {
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+async function deleteUsedInvites() {
+  if (!confirm('Delete all used and revoked codes? Active unused codes are NOT affected.')) return;
+  try {
+    const res  = await fetch('/admin/delete_used_invites', { method: 'POST' });
+    const data = await res.json();
+    toast(data.msg, data.ok ? 'success' : 'error');
+    if (data.ok) loadInvites();
+  } catch(e) {
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+// Load on page open
+loadInvites();
+</script>

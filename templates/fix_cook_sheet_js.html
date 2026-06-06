@@ -1,0 +1,181 @@
+<!--
+  ══════════════════════════════════════════════════════════════════════════════
+  FIX: Cook Sheet "Network error" — wrong element IDs in the JS patch
+  ══════════════════════════════════════════════════════════════════════════════
+  The previous patch used getElementById('cook-date-input') and
+  getElementById('cook-header-subtitle') which don't exist in the HTML.
+  The actual IDs are 'cook-date-picker' and 'cook-header-date'.
+
+  HOW TO APPLY:
+    In manager_dashboard.html, find the loadCookSheet() function and replace
+    the ENTIRE function (from  async function loadCookSheet() {  to its
+    closing  }  ) with the version below.
+  ══════════════════════════════════════════════════════════════════════════════
+-->
+
+<script>
+// ── Cook Sheet — fixed loader ─────────────────────────────────────────────────
+
+// Set today's date on page ready if picker is blank
+(function initCookDatePicker() {
+  const el = document.getElementById('cook-date-picker');   // ← correct ID
+  if (!el) return;
+  if (!el.value) {
+    const t  = new Date();
+    const yy = t.getFullYear();
+    const mm = String(t.getMonth() + 1).padStart(2, '0');
+    const dd = String(t.getDate()).padStart(2, '0');
+    el.value = `${yy}-${mm}-${dd}`;
+  }
+})();
+
+let _cookData = null;
+
+async function loadCookSheet() {
+  const dateInput = document.getElementById('cook-date-picker');  // ← correct ID
+  if (!dateInput) {
+    console.error('[CookSheet] #cook-date-picker not found');
+    return;
+  }
+  const dateVal = dateInput.value;
+  if (!dateVal) {
+    toast('Please select a date first.', 'error');
+    return;
+  }
+
+  const body     = document.getElementById('cook-sheet-body');
+  const subtitle = document.getElementById('cook-header-date');   // ← correct ID
+  if (!body) return;
+
+  body.innerHTML = `
+    <div style="text-align:center;color:var(--text-muted);padding:40px 0">
+      <i class="fas fa-spinner fa-spin" style="font-size:24px;margin-bottom:12px;display:block"></i>
+      Loading cook sheet…
+    </div>`;
+
+  // ── Fetch with 10-second timeout ────────────────────────────────────────────
+  let data;
+  try {
+    const controller = new AbortController();
+    const timeoutId  = setTimeout(() => controller.abort(), 10000);
+
+    const res = await fetch(
+      '/manager/cook_sheet?date=' + encodeURIComponent(dateVal),
+      { signal: controller.signal }
+    );
+    clearTimeout(timeoutId);
+
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    data = await res.json();
+
+  } catch (err) {
+    const isTimeout = err.name === 'AbortError';
+    body.innerHTML = `
+      <div style="text-align:center;padding:36px 20px">
+        <div style="font-size:36px;margin-bottom:10px">${isTimeout ? '⏱️' : '⚠️'}</div>
+        <div style="font-size:15px;font-weight:700;color:var(--danger);margin-bottom:6px">
+          ${isTimeout ? 'Request Timed Out' : 'Network Error'}
+        </div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:18px">
+          ${isTimeout
+            ? 'The server took too long. Check your connection and try again.'
+            : 'Could not reach the server. Make sure you are connected.'}
+        </div>
+        <button onclick="loadCookSheet()"
+          style="display:inline-flex;align-items:center;gap:8px;padding:10px 22px;
+                 background:var(--primary);color:#fff;border:none;border-radius:8px;
+                 font-family:var(--font-body);font-size:14px;font-weight:700;cursor:pointer">
+          <i class="fas fa-sync-alt"></i> Retry
+        </button>
+      </div>`;
+    return;
+  }
+
+  // ── API returned ok:false ───────────────────────────────────────────────────
+  if (!data.ok) {
+    body.innerHTML = `
+      <div style="text-align:center;padding:32px 20px">
+        <div style="font-size:14px;color:var(--danger);margin-bottom:14px">
+          <i class="fas fa-exclamation-triangle"></i>
+          ${data.msg || 'Failed to load cook sheet.'}
+        </div>
+        <button onclick="loadCookSheet()"
+          style="display:inline-flex;align-items:center;gap:8px;padding:9px 20px;
+                 background:var(--primary);color:#fff;border:none;border-radius:8px;
+                 font-family:var(--font-body);font-size:13px;font-weight:700;cursor:pointer">
+          <i class="fas fa-sync-alt"></i> Retry
+        </button>
+      </div>`;
+    return;
+  }
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+  _cookData = data;
+  if (subtitle) subtitle.textContent = _cookFmtDate(dateVal);
+
+  const { lunch, dinner, floor_lunch, floor_dinner } = data;
+  const grandTotal = (lunch.total || 0) + (dinner.total || 0);
+
+  function mealBlock(label, emoji, mealData, floorData) {
+    const floorRows = (floorData || [])
+      .filter(f => f.floor != null)
+      .map(f => `
+        <div style="display:flex;align-items:center;justify-content:space-between;
+                    padding:9px 14px;border-radius:8px;margin-bottom:5px;
+                    background:#e6f0ff;border:1px solid #b3d1f5">
+          <span style="display:flex;align-items:center;gap:8px;color:#3b5fe2;font-size:13px;font-weight:600">
+            <i class="fas fa-layer-group" style="font-size:11px"></i> Floor ${f.floor}
+          </span>
+          <span style="font-size:18px;font-weight:800;color:#3b5fe2">${f.count}</span>
+        </div>`).join('');
+
+    return `
+      <div style="margin-bottom:22px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;
+                    padding-bottom:10px;border-bottom:2px solid var(--border)">
+          <span style="font-size:22px">${emoji}</span>
+          <span style="font-size:15px;font-weight:700;color:var(--text)">${label}</span>
+          <span style="margin-left:auto;font-size:24px;font-weight:800;color:var(--primary)">${mealData.total}</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;
+                    border-radius:8px;margin-bottom:5px;background:var(--primary-pale);border:1.5px solid #b7e4c7">
+          <span style="display:flex;align-items:center;gap:8px;color:var(--primary);font-size:14px;font-weight:700">
+            <i class="fas fa-users"></i> Total ${label}
+          </span>
+          <span style="font-size:22px;font-weight:800;color:var(--primary)">${mealData.total}</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;
+                    border-radius:8px;margin-bottom:5px;background:#fce4ec;border:1.5px solid #f48fb1">
+          <span style="display:flex;align-items:center;gap:8px;color:#c2185b;font-size:13px;font-weight:600">
+            <i class="fas fa-venus"></i> Female
+          </span>
+          <span style="font-size:20px;font-weight:800;color:#c2185b">${mealData.female}</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;
+                    border-radius:8px;margin-bottom:5px;background:#e6f0ff;border:1px solid #b3d1f5">
+          <span style="display:flex;align-items:center;gap:8px;color:#3b5fe2;font-size:13px;font-weight:600">
+            <i class="fas fa-mars"></i> Male (all floors)
+          </span>
+          <span style="font-size:20px;font-weight:800;color:#3b5fe2">${mealData.male}</span>
+        </div>
+        ${floorRows}
+      </div>`;
+  }
+
+  body.innerHTML = `
+    ${mealBlock('Lunch',  '🌤️', lunch,  floor_lunch)}
+    ${mealBlock('Dinner', '🌙', dinner, floor_dinner)}
+    <div style="display:flex;align-items:center;justify-content:space-between;
+                background:linear-gradient(135deg,var(--primary),var(--primary-light));
+                color:#fff;border-radius:var(--radius-sm);padding:16px 20px;margin-top:4px">
+      <span style="font-size:15px;font-weight:700;opacity:.95">🍽️ Grand Total Meals</span>
+      <span style="font-size:34px;font-weight:800">${grandTotal}</span>
+    </div>
+    <div style="margin-top:12px;font-size:12px;color:var(--text-muted);
+                display:flex;align-items:center;gap:6px">
+      <i class="fas fa-clock"></i>
+      Refreshed: ${new Date().toLocaleTimeString()}
+      &nbsp;·&nbsp; Click <strong>Print for Cook</strong> to hand to the kitchen.
+    </div>`;
+}
+</script>

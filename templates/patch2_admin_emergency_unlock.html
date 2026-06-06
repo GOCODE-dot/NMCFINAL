@@ -1,0 +1,424 @@
+<!--
+══════════════════════════════════════════════════════════════════════════════
+  PATCH 2 — admin_dashboard.html
+  Adds: Emergency Ordering Unlock widget
+
+  WHAT IT DOES:
+  ─────────────
+  After midnight the midnight-cutoff patch locks every student from ordering.
+  This widget lets the admin force-open ordering for ALL students instantly,
+  or unlock a SINGLE student by roll number.
+
+  It calls:
+    POST /manager/unlock_all_ordering   (already in app.py — unlocks everyone)
+    POST /manager/unlock_ordering       (already in app.py — unlocks one student)
+
+  ⚠️  Both routes are @login_required('manager'), not @admin_required.
+  So the admin must also be logged in as a manager, OR you add new
+  /admin/ variants.  See the app.py note at the bottom of this file.
+
+  HOW TO ADD IN admin_dashboard.html
+  ────────────────────────────────────
+  Find the "Site Maintenance Mode" .maint-panel block (the card added by
+  admin_maintenance_widget.html) and paste THIS entire file DIRECTLY ABOVE it.
+
+  That's the only placement step.
+══════════════════════════════════════════════════════════════════════════════
+-->
+
+<!-- ── STYLES ────────────────────────────────────────────────────────────── -->
+<style>
+.emergency-unlock-panel {
+  background: #0d1117;
+  border: 2px solid #da3633;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 20px;
+  box-shadow: 0 0 0 4px rgba(218,54,51,.07);
+  animation: emergencyGlow 3s ease-in-out infinite;
+}
+@keyframes emergencyGlow {
+  0%,100% { box-shadow: 0 0 0 4px rgba(218,54,51,.07); }
+  50%      { box-shadow: 0 0 0 8px rgba(218,54,51,.15); }
+}
+
+.eu-header {
+  background: linear-gradient(135deg, #5a0e0e 0%, #7a1a1a 100%);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.eu-icon {
+  width: 42px; height: 42px;
+  background: rgba(218,54,51,.35);
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.eu-title { color:#fff; font-size:15px; font-weight:800; line-height:1.2; }
+.eu-sub   { color:rgba(255,180,180,.75); font-size:12px; margin-top:2px; }
+
+.eu-body { padding: 18px 20px; }
+
+/* Status strip */
+.eu-status-strip {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: #8b949e;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.eu-status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.eu-status-dot.green { background: #3fb950; box-shadow: 0 0 6px #3fb950; }
+.eu-status-dot.red   { background: #da3633; box-shadow: 0 0 6px #da3633; animation: dotPulse 1.2s ease-in-out infinite; }
+@keyframes dotPulse {
+  0%,100% { opacity:1; } 50% { opacity:.4; }
+}
+
+/* Action cards */
+.eu-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media(max-width:520px) { .eu-actions { grid-template-columns: 1fr; } }
+
+.eu-action-card {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  padding: 16px;
+}
+.eu-action-card h5 {
+  font-size: 13px; font-weight: 700; color: #e6edf3;
+  margin: 0 0 6px;
+  display: flex; align-items: center; gap: 6px;
+}
+.eu-action-card p {
+  font-size: 12px; color: #8b949e; line-height: 1.5; margin: 0 0 12px;
+}
+
+/* Buttons */
+.eu-btn-unlock-all {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #da3633, #b91c1c);
+  color: #fff;
+  border: none;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all .2s;
+  letter-spacing: .3px;
+}
+.eu-btn-unlock-all:hover { background: linear-gradient(135deg, #ef4444, #da3633); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(218,54,51,.4); }
+.eu-btn-unlock-all:active { transform: scale(0.98); }
+.eu-btn-unlock-all:disabled { opacity: .5; pointer-events: none; }
+
+.eu-roll-row {
+  display: flex; gap: 6px; margin-bottom: 8px;
+}
+.eu-roll-input {
+  flex: 1;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1.5px solid #30363d;
+  background: #0d1117;
+  color: #e6edf3;
+  font-family: inherit;
+  font-size: 13px;
+  transition: border .2s;
+}
+.eu-roll-input:focus { outline: none; border-color: #da3633; box-shadow: 0 0 0 3px rgba(218,54,51,.15); }
+.eu-btn-unlock-one {
+  padding: 9px 14px;
+  border-radius: 8px;
+  background: #da3633;
+  color: #fff;
+  border: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: background .2s;
+}
+.eu-btn-unlock-one:hover { background: #ef4444; }
+.eu-btn-unlock-one:disabled { opacity: .5; pointer-events: none; }
+
+.eu-result {
+  font-size: 12px;
+  margin-top: 6px;
+  min-height: 18px;
+}
+
+/* Countdown */
+.eu-countdown {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #1c2128;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: #8b949e;
+  margin-top: 14px;
+}
+.eu-countdown-time {
+  font-size: 15px;
+  font-weight: 800;
+  font-family: monospace;
+  color: #f0883e;
+  letter-spacing: .5px;
+}
+</style>
+
+
+<!-- ── EMERGENCY UNLOCK WIDGET ─────────────────────────────────────────── -->
+<div class="emergency-unlock-panel" id="euPanel">
+
+  <div class="eu-header">
+    <div class="eu-icon">🔓</div>
+    <div>
+      <div class="eu-title">Emergency Ordering Unlock</div>
+      <div class="eu-sub">Override the midnight deadline — use only when genuinely needed</div>
+    </div>
+  </div>
+
+  <div class="eu-body">
+
+    <!-- Status strip: shows locked count + time until next midnight -->
+    <div class="eu-status-strip" id="eu-status-strip">
+      <span class="eu-status-dot" id="eu-dot"></span>
+      <span id="eu-status-text">Checking ordering status…</span>
+      <span style="margin-left:auto;font-size:11px;color:#6e7681" id="eu-refresh-hint">
+        <i class="fas fa-sync-alt"></i> Auto-refreshes
+      </span>
+    </div>
+
+    <div class="eu-actions">
+
+      <!-- Card 1: Unlock all -->
+      <div class="eu-action-card">
+        <h5><i class="fas fa-users" style="color:#da3633"></i> Unlock All Students</h5>
+        <p>Immediately re-enables ordering for every student in the system. Use when the midnight cutoff fired too early or during an emergency.</p>
+        <button class="eu-btn-unlock-all" id="eu-btn-all" onclick="euUnlockAll()">
+          <i class="fas fa-lock-open"></i> Unlock Everyone Now
+        </button>
+        <div class="eu-result" id="eu-result-all"></div>
+      </div>
+
+      <!-- Card 2: Unlock one student -->
+      <div class="eu-action-card">
+        <h5><i class="fas fa-user" style="color:#f0883e"></i> Unlock Single Student</h5>
+        <p>Unlock ordering for one specific student by their roll number. Useful when only one person needs an exception.</p>
+        <div class="eu-roll-row">
+          <input type="text" class="eu-roll-input" id="eu-roll-input"
+            placeholder="e.g. NMC2023001"
+            onkeydown="if(event.key==='Enter') euUnlockOne()">
+          <button class="eu-btn-unlock-one" id="eu-btn-one" onclick="euUnlockOne()">
+            <i class="fas fa-lock-open"></i> Unlock
+          </button>
+        </div>
+        <div class="eu-result" id="eu-result-one"></div>
+      </div>
+
+    </div>
+
+    <!-- Countdown to next midnight -->
+    <div class="eu-countdown">
+      <i class="fas fa-clock" style="color:#f0883e"></i>
+      <span style="color:#8b949e">Next midnight lock:</span>
+      <span class="eu-countdown-time" id="eu-countdown">—</span>
+      <span style="color:#6e7681;font-size:11px">(orders lock again at 12:00 AM)</span>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ── SCRIPT ─────────────────────────────────────────────────────────── -->
+<script>
+// ── Emergency Unlock Panel ────────────────────────────────────────────────────
+
+// Countdown to midnight
+function euStartCountdown() {
+  function tick() {
+    const now  = new Date();
+    const next = new Date(now);
+    next.setHours(24, 0, 0, 0); // next midnight
+    const diff = next - now;
+    const h    = Math.floor(diff / 3600000);
+    const m    = Math.floor((diff % 3600000) / 60000);
+    const s    = Math.floor((diff % 60000) / 1000);
+    const el   = document.getElementById('eu-countdown');
+    if (el) el.textContent =
+      String(h).padStart(2,'0') + 'h ' +
+      String(m).padStart(2,'0') + 'm ' +
+      String(s).padStart(2,'0') + 's';
+  }
+  tick();
+  setInterval(tick, 1000);
+}
+
+// Fetch how many students are currently ordering-locked (uses existing summary route)
+async function euLoadStatus() {
+  const dot    = document.getElementById('eu-dot');
+  const text   = document.getElementById('eu-status-text');
+  try {
+    const r = await fetch('/api/non_orderers_summary');
+    const d = await r.json();
+    const locked = d.locked_count || 0;
+    if (locked > 0) {
+      dot.className  = 'eu-status-dot red';
+      text.innerHTML = `<strong style="color:#f85149">${locked} student${locked>1?'s':''}</strong> currently have ordering locked.`;
+    } else {
+      dot.className  = 'eu-status-dot green';
+      text.innerHTML = `<span style="color:#3fb950">✓ All students can currently order.</span>`;
+    }
+  } catch(e) {
+    dot.className  = 'eu-status-dot';
+    dot.style.background = '#8b949e';
+    text.textContent = 'Could not check status.';
+  }
+}
+
+async function euUnlockAll() {
+  const btn = document.getElementById('eu-btn-all');
+  const res = document.getElementById('eu-result-all');
+
+  if (!confirm('⚠️ Unlock ordering for ALL students?\n\nThis overrides the midnight deadline and lets every student order meals until the next automatic lock at midnight.')) return;
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Unlocking…';
+  res.textContent = '';
+
+  try {
+    const r = await fetch('/admin/emergency_unlock_ordering', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      res.innerHTML = '<span style="color:#3fb950">✅ ' + (d.msg || 'All students unlocked.') + '</span>';
+      btn.innerHTML = '<i class="fas fa-check"></i> Done — Reload to re-arm';
+      euLoadStatus();
+    } else {
+      res.innerHTML = '<span style="color:#f85149">❌ ' + (d.msg || 'Error') + '</span>';
+      btn.disabled  = false;
+      btn.innerHTML = '<i class="fas fa-lock-open"></i> Unlock Everyone Now';
+    }
+  } catch(e) {
+    res.innerHTML = '<span style="color:#f85149">❌ Network error. Try again.</span>';
+    btn.disabled  = false;
+    btn.innerHTML = '<i class="fas fa-lock-open"></i> Unlock Everyone Now';
+  }
+}
+
+async function euUnlockOne() {
+  const btn  = document.getElementById('eu-btn-one');
+  const roll = document.getElementById('eu-roll-input').value.trim();
+  const res  = document.getElementById('eu-result-one');
+
+  if (!roll) {
+    res.innerHTML = '<span style="color:#f0883e">⚠️ Enter a roll number first.</span>';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  res.textContent = '';
+
+  try {
+    const r = await fetch('/admin/emergency_unlock_ordering', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roll_number: roll })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      res.innerHTML = '<span style="color:#3fb950">✅ ' + (d.msg || 'Student unlocked.') + '</span>';
+      document.getElementById('eu-roll-input').value = '';
+      euLoadStatus();
+    } else {
+      res.innerHTML = '<span style="color:#f85149">❌ ' + (d.msg || 'Error') + '</span>';
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-lock-open"></i> Unlock';
+  } catch(e) {
+    res.innerHTML = '<span style="color:#f85149">❌ Network error. Try again.</span>';
+    btn.disabled  = false;
+    btn.innerHTML = '<i class="fas fa-lock-open"></i> Unlock';
+  }
+}
+
+// Init
+document.addEventListener('DOMContentLoaded', function() {
+  euLoadStatus();
+  euStartCountdown();
+  // Refresh status every 60 seconds
+  setInterval(euLoadStatus, 60000);
+});
+</script>
+
+<!--
+══════════════════════════════════════════════════════════════════════════════
+  REQUIRED: Add these 2 routes to app.py
+  (The existing /manager/ routes require manager login — these are admin-only)
+══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/admin/emergency_unlock_ordering', methods=['POST'])
+@admin_required
+def admin_emergency_unlock_ordering():
+    """Emergency override: unlock ordering for all students, or one by roll."""
+    data = request.json or {}
+    roll = (data.get('roll_number') or '').strip()
+    conn = get_db()
+    if roll:
+        # Unlock single student
+        student = queryOne(conn, "SELECT id, name FROM students WHERE roll_number=%s", (roll,))
+        if not student:
+            conn.close()
+            return jsonify({'ok': False, 'msg': f'Student "{roll}" not found.'})
+        execute(conn, "UPDATE students SET ordering_locked=0 WHERE id=%s", (student['id'],))
+        execute(conn, "INSERT INTO admin_reset_log (admin_id, action) VALUES (%s,%s)",
+                (session['admin_id'], f"emergency_unlock_ordering (single): {student['name']} ({roll})"))
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True, 'msg': f'{student["name"]} ({roll}) can now order meals.'})
+    else:
+        # Unlock ALL students
+        execute(conn, "UPDATE students SET ordering_locked=0")
+        execute(conn, "INSERT INTO admin_reset_log (admin_id, action) VALUES (%s,%s)",
+                (session['admin_id'], "emergency_unlock_ordering (ALL students)"))
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True, 'msg': 'All students can now place orders.'})
+
+══════════════════════════════════════════════════════════════════════════════
+-->

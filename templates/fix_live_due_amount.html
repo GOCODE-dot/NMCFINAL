@@ -1,0 +1,175 @@
+<!--
+  ══════════════════════════════════════════════════════════════════════════════
+  FIX: Due amount updates live after meal cancel/order
+  ══════════════════════════════════════════════════════════════════════════════
+
+  PROBLEM
+  ───────
+  The due amount (৳ figure shown in the green box, the bKash modal, and the
+  cash modal) is rendered at page-load from {{ due }} and never changes while
+  the student is still on the page.
+
+  So if a student:
+    1. Has 200 meals ordered → page shows ৳200
+    2. Cancels 100 meals     → buttons flip, page reloads after 800 ms
+    3. Opens the bKash modal BEFORE the reload, OR opens it after and the
+       bKash modal still held the old value
+  → the modal shows ৳200 instead of the correct ৳100.
+
+  The cash modal already fetches `/student/unpaid_meal_count` live — so it
+  was already correct. Only the bKash modal and the dashboard "due" card
+  were stale.
+
+  ROOT CAUSE
+  ──────────
+  `openPayModal()` calls `updatePayModalAmounts()` which reads from the
+  `#modal-due-amount` span — but that span is set once at page render and
+  never refreshed from the server.
+
+  FIX
+  ───
+  1. `openPayModal()` → now async; fetches `/student/unpaid_meal_count`
+     first, updates `#modal-due-amount` AND `#amount-input` with the live
+     figure, THEN calls `updatePayModalAmounts()` (fee calc) before opening.
+
+  2. `confirmMealAction()` success path → after a cancel or order, call the
+     new `refreshDueDisplay()` helper which fetches the live amount and
+     updates the dashboard green box (.due-amount) immediately — before the
+     800 ms reload, so the user sees a correct number right away.
+
+  HOW TO APPLY
+  ────────────
+  In student_dashboard.html, inside the {% block scripts %} <script> block:
+
+  A) REPLACE the `function openPayModal()` block (currently ~line 1596) with
+     the version below.
+
+  B) ADD the `async function refreshDueDisplay()` helper anywhere in the
+     script block (e.g. right above `openPayModal`).
+
+  C) In `confirmMealAction()`, find the success-path block that reads:
+
+       toast(nowOrdered ? capitalize(type) + ' ordered!' : capitalize(type) + ' cancelled');
+       // Reload to refresh due amount and summary cards
+       setTimeout(() => location.reload(), 800);
+
+     REPLACE those two lines with:
+
+       toast(nowOrdered ? capitalize(type) + ' ordered!' : capitalize(type) + ' cancelled');
+       refreshDueDisplay();                    // ← update green box immediately
+       setTimeout(() => location.reload(), 800);
+
+  That's all — no backend changes needed.
+  ══════════════════════════════════════════════════════════════════════════════
+-->
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// A) Helper — fetch live unpaid amount and update every UI element that shows it
+// ─────────────────────────────────────────────────────────────────────────────
+async function refreshDueDisplay() {
+  let liveAmount = null;
+  try {
+    const r = await fetch('/student/unpaid_meal_count');
+    const d = await r.json();
+    if (d && typeof d.amount === 'number') liveAmount = d.amount;
+  } catch (_) { return; }  // network hiccup — skip silently, reload will fix it
+
+  if (liveAmount === null) return;
+
+  const fmt = n => Math.round(n);   // whole taka, no decimals
+
+  // ── Dashboard green "Total Due" card ────────────────────────────────────
+  const dueCardEl = document.querySelector('.due-amount');
+  if (dueCardEl) dueCardEl.textContent = '৳' + fmt(liveAmount);
+
+  // ── bKash modal due row ──────────────────────────────────────────────────
+  const modalDueEl = document.getElementById('modal-due-amount');
+  if (modalDueEl) modalDueEl.textContent = fmt(liveAmount);
+
+  // ── bKash modal hidden amount input (sent to server) ────────────────────
+  const amtInput = document.getElementById('amount-input');
+  if (amtInput) amtInput.value = fmt(liveAmount);
+
+  // ── Cash modal amount display ────────────────────────────────────────────
+  const cashAmtEl = document.getElementById('cash-amount-display');
+  if (cashAmtEl) cashAmtEl.textContent = '৳' + fmt(liveAmount);
+
+  const cashAmtInput = document.getElementById('cash-amount-input');
+  if (cashAmtInput) cashAmtInput.value = fmt(liveAmount);
+
+  // ── Recalculate bKash send fee with the new amount ──────────────────────
+  updatePayModalAmounts();
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// B) REPLACEMENT openPayModal — async, fetches live amount before opening
+// ─────────────────────────────────────────────────────────────────────────────
+async function openPayModal() {
+  // Sync the bKash number in the modal with the live displayed number
+  const num = document.getElementById('mgr-bkash-num').textContent.trim();
+  const modalNum = document.getElementById('modal-bkash-num');
+  if (modalNum && num) modalNum.textContent = num;
+
+  // ── Fetch live unpaid amount before showing the modal ───────────────────
+  try {
+    const r = await fetch('/student/unpaid_meal_count');
+    const d = await r.json();
+    if (d && typeof d.amount === 'number') {
+      const fmt = n => Math.round(n);
+
+      const modalDueEl = document.getElementById('modal-due-amount');
+      if (modalDueEl) modalDueEl.textContent = fmt(d.amount);
+
+      const amtInput = document.getElementById('amount-input');
+      if (amtInput) amtInput.value = fmt(d.amount);
+
+      // Also keep the dashboard card in sync
+      const dueCardEl = document.querySelector('.due-amount');
+      if (dueCardEl) dueCardEl.textContent = '৳' + fmt(d.amount);
+    }
+  } catch (_) {
+    // Network hiccup — fall back to whatever is already in the span
+  }
+
+  // Recalculate fee display with the (now-updated) amount
+  updatePayModalAmounts();
+
+  document.getElementById('pay-modal').classList.add('open');
+}
+</script>
+
+<!--
+  ─────────────────────────────────────────────────────────────────────────────
+  C) Diff — what to change in confirmMealAction() success path
+  ─────────────────────────────────────────────────────────────────────────────
+
+  FIND (two consecutive lines, around the end of confirmMealAction):
+
+      toast(nowOrdered ? capitalize(type) + ' ordered!' : capitalize(type) + ' cancelled');
+
+      // Reload to refresh due amount and summary cards
+      setTimeout(() => location.reload(), 800);
+
+  REPLACE WITH:
+
+      toast(nowOrdered ? capitalize(type) + ' ordered!' : capitalize(type) + ' cancelled');
+      refreshDueDisplay();                         // ← live update before reload
+      setTimeout(() => location.reload(), 800);
+
+  ─────────────────────────────────────────────────────────────────────────────
+  WHY THIS IS ENOUGH
+  ─────────────────────────────────────────────────────────────────────────────
+  • After cancel/order the page reloads in 800 ms anyway, so the full
+    dashboard (due banner, meal grid, payment history) is always consistent
+    after reload.
+
+  • `refreshDueDisplay()` fires immediately so the green ৳ card and the
+    modals show the correct number during that brief 800 ms window AND if
+    the user manages to tap "bKash" before the reload.
+
+  • The cash modal already called `/student/unpaid_meal_count` in
+    `_loadCashStatus()` — this change makes the bKash modal do the same.
+  ─────────────────────────────────────────────────────────────────────────────
+-->

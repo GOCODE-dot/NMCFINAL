@@ -1,0 +1,862 @@
+{% extends 'base.html' %}
+{% block title %}All Students — Admin{% endblock %}
+{% block extra_head %}
+<style>
+  body { background: #0d1117; }
+  nav { background: #161b22; border-bottom: 1px solid #30363d; }
+  .nav-brand { color: #e94560 !important; }
+  .nav-brand .logo { background: linear-gradient(135deg, #e94560, #c2185b) !important; }
+  .page-header h1 { color: #e6edf3; }
+  .page-header p { color: #8b949e; }
+  .dark-card { background: #161b22; border: 1px solid #30363d; border-radius: var(--radius); color: #e6edf3; }
+  .stu-table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #0d1117; color: #8b949e; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; padding: 10px 14px; border-bottom: 1px solid #21262d; font-weight: 700; }
+  td { padding: 11px 14px; border-bottom: 1px solid #21262d; font-size: 13px; color: #e6edf3; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.03); }
+  .badge-blue { background: rgba(88,166,255,.15); color: #58a6ff; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .badge-pink { background: rgba(247,120,161,.15); color: #f778a1; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .badge-lock { background: rgba(218,54,51,.2); color: #ff7b72; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .badge-ok { background: rgba(35,134,54,.2); color: #3fb950; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .stat-pill { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px 18px; }
+  .stat-pill .val { font-size: 26px; font-weight: 700; color: #e6edf3; }
+  .stat-pill .lbl { font-size: 12px; color: #8b949e; margin-top: 2px; }
+  .search-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .search-row input { flex: 1; min-width: 200px; background: #0d1117; border: 1.5px solid #30363d; border-radius: 8px; color: #e6edf3; padding: 10px 14px; font-family: inherit; font-size: 14px; }
+  .search-row input:focus { outline: none; border-color: #58a6ff; }
+  .search-row input::placeholder { color: #8b949e; }
+  .due-amt { color: #e94560; font-weight: 700; }
+  .btn-print { background: #21262d; border: 1px solid #30363d; color: #8b949e; }
+  .btn-print:hover { border-color: #6e40c9; color: #a371f7; background: rgba(110,64,201,.1); }
+  .btn-export { background: #21262d; border: 1px solid #30363d; color: #8b949e; }
+  .btn-export:hover { border-color: #238636; color: #3fb950; background: rgba(35,134,54,.1); }
+  .filter-btn { background: #21262d; border: 1px solid #30363d; color: #8b949e; padding: 8px 14px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all .15s; }
+  .filter-btn.active { background: #1f6feb; border-color: #58a6ff; color: #fff; }
+  .filter-btn:hover:not(.active) { border-color: #58a6ff; color: #58a6ff; }
+  #row-count { color: #8b949e; font-size: 13px; }
+
+  /* ── UNLOCK / ACTION BUTTON ──────────────────────────────────── */
+  .btn-unlock { background: rgba(35,134,54,.18); border: 1px solid rgba(63,185,80,.4); color: #3fb950; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; transition: all .15s; white-space: nowrap; }
+  .btn-unlock:hover { background: rgba(35,134,54,.35); border-color: #3fb950; }
+  .btn-unlock:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-delete { background: rgba(218,54,51,.15); border: 1px solid rgba(218,54,51,.4); color: #ff7b72; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; transition: all .15s; white-space: nowrap; }
+  .btn-delete:hover { background: rgba(218,54,51,.35); border-color: #ff7b72; }
+  .btn-delete:disabled { opacity: .45; cursor: not-allowed; }
+  /* Delete confirmation modal */
+  .del-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:1000; display:none; align-items:center; justify-content:center; backdrop-filter:blur(4px); }
+  .del-modal-overlay.open { display:flex; }
+  .del-modal { background:#161b22; border:1px solid #30363d; border-radius:16px; padding:32px 28px; max-width:420px; width:calc(100%-32px); box-shadow:0 24px 64px rgba(0,0,0,.6); animation:delPop .2s cubic-bezier(.34,1.4,.64,1) both; }
+  @keyframes delPop { from{transform:scale(.92);opacity:0} to{transform:scale(1);opacity:1} }
+  .del-modal-icon { width:56px;height:56px;background:rgba(218,54,51,.18);border-radius:14px;display:grid;place-items:center;font-size:24px;margin:0 auto 18px; }
+  .del-modal h3 { text-align:center;color:#e6edf3;font-size:18px;margin-bottom:8px; }
+  .del-modal p { text-align:center;color:#8b949e;font-size:13px;line-height:1.6;margin-bottom:6px; }
+  .del-modal .del-name { color:#ff7b72;font-weight:700;font-size:14px;text-align:center;margin-bottom:20px;background:rgba(218,54,51,.1);border:1px solid rgba(218,54,51,.3);border-radius:8px;padding:8px 14px; }
+  .del-modal-actions { display:flex;gap:10px; }
+  .btn-del-confirm { flex:1;padding:12px;border-radius:8px;background:linear-gradient(135deg,#b91c1c,#e94560);color:#fff;border:none;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;transition:all .2s; }
+  .btn-del-confirm:hover { background:linear-gradient(135deg,#991b1b,#c2185b);transform:translateY(-1px); }
+  .btn-del-confirm:disabled { opacity:.5;cursor:not-allowed;transform:none; }
+  .btn-del-cancel { flex:1;padding:12px;border-radius:8px;background:#21262d;color:#8b949e;border:1px solid #30363d;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s; }
+  .btn-del-cancel:hover { border-color:#8b949e;color:#e6edf3; }
+
+  /* ── TRANSFER MANAGER SECTION ─────────────────────────────────── */
+  .transfer-card { background: #161b22; border: 1px solid #30363d; border-radius: var(--radius); padding: 24px 28px; margin-bottom: 28px; }
+  .transfer-card h3 { color: #e6edf3; font-size: 16px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  .transfer-card p  { color: #8b949e; font-size: 13px; margin-bottom: 20px; }
+  .transfer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .t-field label { display: block; color: rgba(255,255,255,.6); font-size: 12px; font-weight: 600; margin-bottom: 5px; }
+  .t-field input { width: 100%; background: #0d1117; border: 1.5px solid #30363d; border-radius: 8px; color: #e6edf3; padding: 10px 14px; font-family: inherit; font-size: 14px; box-sizing: border-box; }
+  .t-field input:focus { outline: none; border-color: #a371f7; }
+  .t-field input::placeholder { color: #8b949e; }
+  .t-preview { background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 12px 16px; font-size: 13px; color: #8b949e; display: none; margin-bottom: 14px; }
+  .t-preview.show { display: block; }
+  .t-preview strong { color: #e6edf3; }
+  .t-preview .t-name { color: #a371f7; font-weight: 700; font-size: 15px; }
+  .t-warn { background: rgba(210,153,34,.12); border: 1px solid rgba(210,153,34,.3); border-radius: 8px; padding: 10px 14px; font-size: 12px; color: rgba(255,220,130,.85); margin-bottom: 14px; display: flex; gap: 8px; align-items: flex-start; }
+  .btn-transfer { background: linear-gradient(135deg, #6e40c9, #a371f7); color: #fff; border: none; padding: 10px 24px; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; transition: all .2s; }
+  .btn-transfer:hover { background: linear-gradient(135deg, #5c35a8, #8c5fdb); transform: translateY(-1px); box-shadow: 0 4px 15px rgba(110,64,201,.4); }
+  .btn-transfer:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+  .transfer-result { margin-top: 14px; padding: 12px 16px; border-radius: 8px; font-size: 13px; display: none; }
+  .transfer-result.ok   { background: rgba(35,134,54,.18); border: 1px solid rgba(63,185,80,.4); color: #3fb950; }
+  .transfer-result.fail { background: rgba(218,54,51,.18); border: 1px solid rgba(218,54,51,.4); color: #ff7b72; }
+
+  /* ── MANAGER LIST TABLE ───────────────────────────────────────── */
+  .mgr-table-wrap { overflow-x: auto; margin-top: 18px; }
+  .mgr-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .mgr-table th { background: #0d1117; color: #8b949e; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; padding: 8px 12px; border-bottom: 1px solid #21262d; font-weight: 700; text-align: left; }
+  .mgr-table td { padding: 10px 12px; border-bottom: 1px solid #21262d; color: #e6edf3; }
+  .mgr-table tr:last-child td { border-bottom: none; }
+  .badge-active   { background: rgba(35,134,54,.2); color: #3fb950; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .badge-inactive { background: rgba(110,118,129,.2); color: #8b949e; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+
+  /* ── PRINT STYLES ─────────────────────────────────────────────── */
+  @media print {
+    body { background: #fff !important; color: #000 !important; }
+    nav, .no-print { display: none !important; }
+    .page-header h1, .page-header p { color: #000 !important; }
+    .dark-card { background: #fff !important; border: 1px solid #ddd !important; color: #000 !important; box-shadow: none !important; }
+    th { background: #f0f0f0 !important; color: #333 !important; border-bottom: 1px solid #ccc !important; }
+    td { color: #000 !important; border-bottom: 1px solid #eee !important; }
+    tr:hover td { background: transparent !important; }
+    .badge-blue { background: #e6f0ff !important; color: #1a4fa0 !important; }
+    .badge-pink { background: #fce4ec !important; color: #880e4f !important; }
+    .badge-lock { background: #ffebee !important; color: #b71c1c !important; }
+    .badge-ok   { background: #e8f5e9 !important; color: #1b5e20 !important; }
+    .due-amt { color: #c62828 !important; }
+    .stat-pill { background: #f8f8f8 !important; border: 1px solid #ddd !important; }
+    .stat-pill .val { color: #000 !important; }
+    .stat-pill .lbl { color: #555 !important; }
+    .page-header p { color: #555 !important; }
+    .search-row, .filter-row { display: none !important; }
+    /* Show all hidden rows when printing */
+    tr { display: table-row !important; }
+    .print-header { display: block !important; }
+  }
+  .print-header {
+    display: none;
+    text-align: center;
+    margin-bottom: 18px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #333;
+  }
+  .print-header h2 { font-size: 20px; margin-bottom: 4px; }
+  .print-header p { font-size: 13px; color: #555; }
+</style>
+{% endblock %}
+{% block body %}
+<nav>
+  <div class="nav-inner">
+    <div class="nav-brand">
+      <div class="logo"><i class="fas fa-shield-halved"></i></div>
+      <span>NMMS — <strong>Admin Panel</strong></span>
+    </div>
+    <div class="nav-links no-print">
+      <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline btn-sm" style="border-color:#30363d;color:#8b949e"><i class="fas fa-arrow-left"></i> Dashboard</a>
+      <button onclick="window.print()" class="btn btn-sm btn-print"><i class="fas fa-print"></i> Print</button>
+      <button onclick="exportCSV()" class="btn btn-sm btn-export"><i class="fas fa-download"></i> Export CSV</button>
+      <a href="{{ url_for('admin_logout') }}" class="btn btn-sm" style="background:#da3633;color:#fff"><i class="fas fa-right-from-bracket"></i> Logout</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container" style="padding-bottom:60px">
+  <div class="page-header">
+    <h1><i class="fas fa-users" style="color:#a371f7"></i> All Students</h1>
+    <p>Netrokona Medical College — Complete Student Registry &nbsp;·&nbsp; <span id="print-date"></span></p>
+  </div>
+
+  <!-- Print-only header -->
+  <div class="print-header">
+    <h2>Netrokona Medical College — NMMS Student Registry</h2>
+    <p>Printed on <span id="print-date-2"></span> &nbsp;·&nbsp; Total: {{ students|length }} students</p>
+  </div>
+
+  <!-- Stats row -->
+  <div class="stat-row">
+    <div class="stat-pill">
+      <div class="val">{{ students|length }}</div>
+      <div class="lbl"><i class="fas fa-users"></i> Total Students</div>
+    </div>
+    <div class="stat-pill">
+      <div class="val" style="color:#58a6ff">{{ students|selectattr('gender','equalto','male')|list|length }}</div>
+      <div class="lbl"><i class="fas fa-mars"></i> Male</div>
+    </div>
+    <div class="stat-pill">
+      <div class="val" style="color:#f778a1">{{ students|selectattr('gender','equalto','female')|list|length }}</div>
+      <div class="lbl"><i class="fas fa-venus"></i> Female</div>
+    </div>
+    <div class="stat-pill">
+      <div class="val" style="color:#ff7b72">{{ students|selectattr('is_locked')|list|length }}</div>
+      <div class="lbl"><i class="fas fa-lock"></i> Locked</div>
+    </div>
+    <div class="stat-pill">
+      <div class="val" style="color:#e94560">৳{{ "%.0f"|format(students|map(attribute='pending_amount')|select|sum + students|map(attribute='due_amount')|select|sum) }}</div>
+      <div class="lbl"><i class="fas fa-taka-sign"></i> Total Receivable</div>
+    </div>
+  </div>
+
+  <!-- Search + Filter row -->
+  <div class="search-row no-print">
+    <input type="text" id="search-input" placeholder="🔍  Search by name, roll, batch, bKash..." oninput="filterStudents()">
+    <button class="filter-btn active" id="flt-all"    onclick="setFilter('all')">All</button>
+    <button class="filter-btn"        id="flt-male"   onclick="setFilter('male')"><i class="fas fa-mars"></i> Male</button>
+    <button class="filter-btn"        id="flt-female" onclick="setFilter('female')"><i class="fas fa-venus"></i> Female</button>
+    <button class="filter-btn"        id="flt-locked" onclick="setFilter('locked')" style="border-color:rgba(218,54,51,.4);color:#ff7b72"><i class="fas fa-lock"></i> Locked</button>
+    <button class="filter-btn"        id="flt-due"    onclick="setFilter('due')" style="border-color:rgba(233,69,96,.4);color:#e94560"><i class="fas fa-taka-sign"></i> Has Due</button>
+  </div>
+  <div style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between" class="no-print">
+    <span id="row-count"></span>
+  </div>
+
+  <!-- ══ ADD NEW STUDENT ════════════════════════════════════════════════════ -->
+  <div class="transfer-card no-print" id="add-student-card" style="margin-bottom:28px;border-color:#238636">
+    <h3><i class="fas fa-user-plus" style="color:#3fb950"></i> Add New Student
+      <button onclick="toggleAddStudent()" id="add-student-toggle" style="background:#21262d;border:1px solid #30363d;color:#8b949e;padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit;margin-left:auto">
+        <i class="fas fa-chevron-up"></i> Collapse
+      </button>
+    </h3>
+    <p>Manually register a new student directly from the admin panel.</p>
+    <div id="add-student-form">
+      <div class="transfer-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+        <div class="t-field">
+          <label><i class="fas fa-user"></i> Full Name</label>
+          <input type="text" id="as-name" placeholder="Student's full name">
+        </div>
+        <div class="t-field">
+          <label><i class="fas fa-layer-group"></i> Batch <span style="font-weight:400;color:#8b949e">← first part</span></label>
+          <select id="as-batch" style="width:100%;background:#0d1117;border:1.5px solid #30363d;border-radius:8px;color:#e6edf3;padding:10px 14px;font-family:inherit;font-size:14px;box-sizing:border-box">
+            <option value="">Select batch</option>
+          </select>
+        </div>
+        <div class="t-field">
+          <label><i class="fas fa-id-card"></i> Roll Number <span style="font-weight:400;color:#8b949e">← second part (1–75)</span></label>
+          <input type="number" id="as-roll" placeholder="e.g. 12" min="1" max="75">
+        </div>
+        <div class="t-field">
+          <label><i class="fas fa-venus-mars"></i> Gender</label>
+          <select id="as-gender" onchange="toggleAsFloor(this.value)" style="width:100%;background:#0d1117;border:1.5px solid #30363d;border-radius:8px;color:#e6edf3;padding:10px 14px;font-family:inherit;font-size:14px;box-sizing:border-box">
+            <option value="">Select gender</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+          </select>
+        </div>
+        <div class="t-field" id="as-floor-field" style="display:none">
+          <label id="as-floor-label"><i class="fas fa-building"></i> Floor (Male)</label>
+          <select id="as-floor" style="width:100%;background:#0d1117;border:1.5px solid #30363d;border-radius:8px;color:#e6edf3;padding:10px 14px;font-family:inherit;font-size:14px;box-sizing:border-box">
+            <option value="">Select floor</option>
+            <option value="1">Floor 1</option>
+            <option value="2">Floor 2</option>
+            <option value="3">Floor 3</option>
+            <option value="4">Floor 4</option>
+            <option value="5">Floor 5</option>
+            <option value="6">Floor 6</option>
+            <option value="7">Floor 7</option>
+          </select>
+        </div>
+        <div class="t-field">
+          <label><i class="fas fa-mobile-screen"></i> bKash Number</label>
+          <input type="tel" id="as-bkash" placeholder="01XXXXXXXXX">
+        </div>
+        <div class="t-field">
+          <label><i class="fas fa-key"></i> Password</label>
+          <input type="text" id="as-password" placeholder="Min 6 characters">
+        </div>
+      </div>
+      <div class="t-warn" style="margin-top:4px">
+        <i class="fas fa-circle-info" style="color:#58a6ff;flex-shrink:0;margin-top:1px"></i>
+        <span>Roll number is stored as <strong>Batch — Roll</strong>. Select batch first, then enter the roll. Example: Batch <strong>5</strong>, Roll <strong>12</strong> → login ID becomes <code style="background:#0d1117;padding:2px 7px;border-radius:4px;font-size:12px;color:#58a6ff;border:1px solid #30363d">5-12</code></span>
+      </div>
+      <button class="btn-transfer" style="background:linear-gradient(135deg,#238636,#2ea043)" onclick="addStudent()">
+        <i class="fas fa-user-plus"></i> Add Student
+      </button>
+      <div class="transfer-result" id="as-result"></div>
+    </div>
+  </div>
+
+  <!-- ══ TRANSFER MANAGER ROLE ══════════════════════════════════════════════ -->
+  <div class="transfer-card no-print">
+    <h3><i class="fas fa-user-gear" style="color:#a371f7"></i> Transfer Manager Role</h3>
+    <p>Immediately assign the Meal Manager role to any registered student. All currently active managers will be deactivated and their history recorded. The student receives a temporary password and must change it on first login.</p>
+
+    <div class="transfer-grid">
+      <div class="t-field">
+        <label><i class="fas fa-id-card"></i> Student Roll Number</label>
+        <input type="text" id="t-roll" placeholder="e.g. 3-12  (Batch-Roll)" oninput="tLookup()">
+      </div>
+      <div class="t-field">
+        <label><i class="fas fa-fingerprint"></i> New Manager ID</label>
+        <input type="text" id="t-mgr-id" placeholder="e.g. MGR002" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+      </div>
+      <div class="t-field">
+        <label><i class="fas fa-key"></i> Temporary Password</label>
+        <input type="text" id="t-temp-pass" placeholder="Min. 6 characters">
+      </div>
+    </div>
+
+    <!-- Student preview after lookup -->
+    <div class="t-preview" id="t-preview"></div>
+
+    <div class="t-warn">
+      <i class="fas fa-triangle-exclamation" style="color:#d97706;flex-shrink:0;margin-top:1px"></i>
+      <span><strong>Warning:</strong> This is an admin-forced transfer — no student confirmation required. All currently active managers will be deactivated immediately. This action is logged.</span>
+    </div>
+
+    <button class="btn-transfer" id="t-submit-btn" onclick="doTransfer()" disabled>
+      <i class="fas fa-right-left"></i> Transfer Role Now
+    </button>
+    <div class="transfer-result" id="t-result"></div>
+  </div>
+
+  <!-- ══ CURRENT MANAGERS ════════════════════════════════════════════════════ -->
+  <div class="transfer-card no-print" style="margin-bottom:32px">
+    <h3><i class="fas fa-users-gear" style="color:#58a6ff"></i> Manager Accounts
+      <button onclick="loadManagers()" style="background:#21262d;border:1px solid #30363d;color:#8b949e;padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit;margin-left:auto">
+        <i class="fas fa-rotate"></i> Refresh
+      </button>
+    </h3>
+    <p>All meal manager accounts in the system. Active managers can log in and manage meals.</p>
+    <div class="mgr-table-wrap">
+      <table class="mgr-table" id="mgr-table">
+        <thead><tr>
+          <th>#</th><th>Manager ID</th><th>Name</th><th>bKash</th><th>Status</th><th>Created</th>
+        </tr></thead>
+        <tbody id="mgr-tbody"><tr><td colspan="6" style="text-align:center;color:#8b949e;padding:24px">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="dark-card">
+    <div class="stu-table-wrap">
+      <table id="students-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th>Roll No.</th>
+            <th>Batch</th>
+            <th>Gender / Floor</th>
+            <th>bKash</th>
+            <th>Meals</th>
+            <th>Pending</th>
+            <th>Due</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="students-tbody">
+          {% for s in students %}
+          <tr data-name="{{ s.name|lower }}"
+              data-roll="{{ s.roll_number|lower }}"
+              data-batch="{{ s.batch|lower }}"
+              data-bkash="{{ s.bkash_number }}"
+              data-gender="{{ s.gender }}"
+              data-locked="{{ '1' if s.is_locked else '0' }}"
+              data-due="{{ s.due_amount or 0 }}"
+              data-pending="{{ s.pending_amount or 0 }}">
+            <td style="color:#8b949e;font-size:12px">{{ loop.index }}</td>
+            <td><strong>{{ s.name }}</strong></td>
+            <td>
+              {% if s.gender == 'female' %}
+                <span class="badge-pink">{{ s.roll_number }}</span>
+              {% else %}
+                <span class="badge-blue">{{ s.roll_number }}</span>
+              {% endif %}
+            </td>
+            <td>{{ s.batch }}</td>
+            <td>
+              {% if s.gender == 'female' %}
+                {% if s.floor == 1 %}
+                  <span style="color:#f778a1"><i class="fas fa-venus"></i> Campus</span>
+                {% elif s.floor == 2 %}
+                  <span style="color:#f778a1"><i class="fas fa-venus"></i> Sentu House</span>
+                {% elif s.floor == 3 %}
+                  <span style="color:#f778a1"><i class="fas fa-venus"></i> Chairman House</span>
+                {% else %}
+                  <span style="color:#f778a1"><i class="fas fa-venus"></i> Female</span>
+                {% endif %}
+              {% else %}
+                <span style="color:#58a6ff"><i class="fas fa-mars"></i> Floor {{ s.floor or '?' }}</span>
+              {% endif %}
+            </td>
+            <td style="font-family:monospace;font-size:12px">{{ s.bkash_number }}</td>
+            <td>{{ s.total_meals or 0 }}</td>
+            <td>
+              {% if (s.pending_amount or 0) > 0 %}
+                <span class="due-amt">৳{{ "%.0f"|format(s.pending_amount) }}</span>
+              {% else %}
+                <span style="color:#8b949e">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if (s.due_amount or 0) > 0 %}
+                <span class="due-amt">৳{{ "%.0f"|format(s.due_amount) }}</span>
+              {% else %}
+                <span style="color:#8b949e">—</span>
+              {% endif %}
+            </td>
+            <td>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                {% if s.is_locked %}
+                  <span class="badge-lock"><i class="fas fa-lock"></i> Locked</span>
+                  <button class="btn-unlock no-print"
+                          onclick="adminUnlock('{{ s.roll_number }}', this)"
+                          title="Unlock this student's account">
+                    <i class="fas fa-lock-open"></i> Unlock
+                  </button>
+                {% else %}
+                  <span class="badge-ok"><i class="fas fa-check"></i> Active</span>
+                {% endif %}
+                <button class="btn-delete no-print"
+                        onclick="openDeleteModal({{ s.id }}, '{{ s.name|replace("'", "\\'") }}', '{{ s.roll_number }}'{% if (s.pending_amount or 0) > 0 or (s.due_amount or 0) > 0 %}, true{% else %}, false{% endif %})"
+                        title="Permanently delete this student">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="10" style="text-align:center;color:#8b949e;padding:40px">No students registered yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ── DELETE STUDENT MODAL ─────────────────────────────────────────────── -->
+<div class="del-modal-overlay" id="delModalOverlay" onclick="if(event.target===this)closeDeleteModal()">
+  <div class="del-modal">
+    <div class="del-modal-icon">🗑️</div>
+    <h3>Delete Student Profile</h3>
+    <p>This will <strong style="color:#ff7b72">permanently delete</strong> the student and all their meal orders, payments, and history. This cannot be undone.</p>
+    <div class="del-name" id="del-student-name">—</div>
+    <div id="del-has-dues" style="display:none;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:9px 14px;font-size:12px;color:#fbbf24;margin-bottom:16px;text-align:center">
+      ⚠️ This student has unpaid dues. Deleting will erase all debt records.
+    </div>
+    <div class="del-modal-actions">
+      <button class="btn-del-cancel" onclick="closeDeleteModal()"><i class="fas fa-times"></i> Cancel</button>
+      <button class="btn-del-confirm" id="delConfirmBtn" onclick="confirmDeleteStudent()"><i class="fas fa-trash"></i> Delete Permanently</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Set dates
+const now = new Date();
+const dateStr = now.toLocaleDateString('en-US', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+document.getElementById('print-date').textContent = dateStr;
+document.getElementById('print-date-2').textContent = dateStr;
+
+// Filter state
+let _activeFilter = 'all';
+
+function setFilter(f) {
+  _activeFilter = f;
+  ['all','male','female','locked','due'].forEach(k => {
+    document.getElementById('flt-'+k).classList.toggle('active', k === f);
+  });
+  filterStudents();
+}
+
+function filterStudents() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  const rows = document.querySelectorAll('#students-tbody tr');
+  let visible = 0;
+  rows.forEach(r => {
+    if (!r.dataset.name) { r.style.display = ''; return; }
+    const textMatch = !q || ['name','roll','batch','bkash'].some(k => r.dataset[k].includes(q));
+    let filterMatch = true;
+    if (_activeFilter === 'male')   filterMatch = r.dataset.gender === 'male';
+    if (_activeFilter === 'female') filterMatch = r.dataset.gender === 'female';
+    if (_activeFilter === 'locked') filterMatch = r.dataset.locked === '1';
+    if (_activeFilter === 'due')    filterMatch = parseFloat(r.dataset.due) > 0 || parseFloat(r.dataset.pending) > 0;
+    r.style.display = (textMatch && filterMatch) ? '' : 'none';
+    if (textMatch && filterMatch) visible++;
+  });
+  // Re-number visible rows
+  let idx = 1;
+  rows.forEach(r => {
+    if (r.style.display !== 'none' && r.cells[0] && r.dataset.name) {
+      r.cells[0].textContent = idx++;
+    }
+  });
+  document.getElementById('row-count').textContent = `Showing ${visible} of ${rows.length} student(s)`;
+}
+
+// Run on load
+filterStudents();
+
+// ── ADMIN UNLOCK STUDENT ─────────────────────────────────────────────────────
+
+async function adminUnlock(roll, btn) {
+  if (!confirm(`Unlock account for ${roll}? The student will be able to log in again.`)) return;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  try {
+    const res = await fetch('/admin/unlock_student', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({roll_number: roll})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      // Replace the locked badge + button with Active badge
+      const td = btn.closest('td');
+      td.innerHTML = '<span class="badge-ok"><i class="fas fa-check"></i> Active</span>';
+      // Also update the row's data attribute
+      btn.closest('tr').dataset.locked = '0';
+      filterStudents(); // re-run count
+    } else {
+      alert('Error: ' + data.msg);
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-lock-open"></i> Unlock';
+    }
+  } catch(e) {
+    alert('Network error. Please try again.');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-lock-open"></i> Unlock';
+  }
+}
+
+// ── TRANSFER MANAGER ─────────────────────────────────────────────────────────
+
+let _tLookupTimer = null;
+let _tStudentFound = false;
+
+function tLookup() {
+  clearTimeout(_tLookupTimer);
+  _tStudentFound = false;
+  document.getElementById('t-submit-btn').disabled = true;
+  const roll = document.getElementById('t-roll').value.trim();
+  const prev = document.getElementById('t-preview');
+  if (!roll) { prev.className = 't-preview'; prev.innerHTML = ''; return; }
+  _tLookupTimer = setTimeout(async () => {
+    try {
+      const res  = await fetch('/admin/lookup_student?roll=' + encodeURIComponent(roll));
+      const data = await res.json();
+      if (data.ok) {
+        const s = data.student;
+        prev.className = 't-preview show';
+        prev.innerHTML = `
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <div class="t-name"><i class="fas fa-user-circle"></i> ${s.name}</div>
+            <span style="color:#8b949e;font-size:12px">Roll: <strong style="color:#e6edf3">${s.roll_number}</strong></span>
+            <span style="color:#8b949e;font-size:12px">Batch: <strong style="color:#e6edf3">${s.batch}</strong></span>
+            <span style="color:#8b949e;font-size:12px">bKash: <strong style="color:#e6edf3;font-family:monospace">${s.bkash_number}</strong></span>
+            ${s.is_locked ? '<span class="badge-lock"><i class="fas fa-lock"></i> Locked</span>' : '<span class="badge-ok"><i class="fas fa-check"></i> Active</span>'}
+          </div>`;
+        _tStudentFound = true;
+        tCheckReady();
+      } else {
+        prev.className = 't-preview show';
+        prev.innerHTML = `<span style="color:#ff7b72"><i class="fas fa-circle-xmark"></i> ${data.msg}</span>`;
+      }
+    } catch(e) {
+      prev.className = 't-preview show';
+      prev.innerHTML = '<span style="color:#ff7b72"><i class="fas fa-circle-xmark"></i> Lookup failed — network error.</span>';
+    }
+  }, 450);
+}
+
+function tCheckReady() {
+  const mgrId    = document.getElementById('t-mgr-id').value.trim();
+  const tempPass = document.getElementById('t-temp-pass').value.trim();
+  document.getElementById('t-submit-btn').disabled =
+    !(_tStudentFound && mgrId.length >= 3 && tempPass.length >= 6);
+}
+
+// Wire up the other two fields to also recheck readiness
+document.getElementById('t-mgr-id').addEventListener('input', tCheckReady);
+document.getElementById('t-temp-pass').addEventListener('input', tCheckReady);
+
+async function doTransfer() {
+  const roll     = document.getElementById('t-roll').value.trim();
+  const mgrId    = document.getElementById('t-mgr-id').value.trim().toUpperCase();
+  const tempPass = document.getElementById('t-temp-pass').value.trim();
+  const result   = document.getElementById('t-result');
+  const btn      = document.getElementById('t-submit-btn');
+
+  if (!confirm(`Transfer manager role to student "${roll}" with ID "${mgrId}"?\n\nAll current active managers will be DEACTIVATED immediately. This cannot be undone.`)) return;
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Transferring…';
+  result.style.display = 'none';
+
+  try {
+    const res  = await fetch('/admin/transfer_manager', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({roll_number: roll, new_manager_id: mgrId, temp_password: tempPass})
+    });
+    const data = await res.json();
+    result.style.display = 'block';
+    if (data.ok) {
+      result.className = 'transfer-result ok';
+      result.innerHTML = `<i class="fas fa-circle-check"></i> ${data.msg}`;
+      // Clear form
+      document.getElementById('t-roll').value = '';
+      document.getElementById('t-mgr-id').value = '';
+      document.getElementById('t-temp-pass').value = '';
+      document.getElementById('t-preview').className = 't-preview';
+      document.getElementById('t-preview').innerHTML = '';
+      _tStudentFound = false;
+      loadManagers(); // refresh manager list
+    } else {
+      result.className = 'transfer-result fail';
+      result.innerHTML = `<i class="fas fa-circle-xmark"></i> ${data.msg}`;
+    }
+  } catch(e) {
+    result.style.display = 'block';
+    result.className = 'transfer-result fail';
+    result.innerHTML = '<i class="fas fa-circle-xmark"></i> Network error. Please try again.';
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-right-left"></i> Transfer Role Now';
+  tCheckReady();
+}
+
+// ── LOAD MANAGER LIST ─────────────────────────────────────────────────────────
+
+async function loadManagers() {
+  const tbody = document.getElementById('mgr-tbody');
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#8b949e;padding:20px"><i class="fas fa-spinner fa-spin"></i> Loading…</td></tr>';
+  try {
+    const res  = await fetch('/admin/list_managers');
+    const data = await res.json();
+    if (!data.managers || data.managers.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#8b949e;padding:20px">No managers found.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.managers.map((m, i) => `
+      <tr>
+        <td style="color:#8b949e;font-size:12px">${i+1}</td>
+        <td><strong style="font-family:monospace">${m.manager_id}</strong></td>
+        <td>${m.name}</td>
+        <td style="font-family:monospace;font-size:12px">${m.bkash_number}</td>
+        <td>${m.is_active
+          ? '<span class="badge-active"><i class="fas fa-circle" style="font-size:8px"></i> Active</span>'
+          : '<span class="badge-inactive"><i class="fas fa-circle" style="font-size:8px"></i> Inactive</span>'}</td>
+        <td style="color:#8b949e;font-size:12px">${m.created_at ? m.created_at.slice(0,10) : '—'}</td>
+      </tr>`).join('');
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#ff7b72;padding:20px">Failed to load managers.</td></tr>';
+  }
+}
+
+// Auto-load managers on page load
+loadManagers();
+
+// ── ADD NEW STUDENT ───────────────────────────────────────────────────────────
+
+// Build batch dropdown with locked/unlocked options (mirrors student_register.html logic)
+(function buildAdminBatchDropdown() {
+  const BASE_YEAR = 2026, BASE_MAX = 8, BATCH_MIN = 2, BATCH_MAX = 20;
+  const currentYear = new Date().getFullYear();
+  const unlockedMax = Math.min(BASE_MAX + Math.max(0, currentYear - BASE_YEAR), BATCH_MAX);
+  const sel = document.getElementById('as-batch');
+  if (!sel) return;
+  for (let b = BATCH_MIN; b <= BATCH_MAX; b++) {
+    const opt = document.createElement('option');
+    opt.value = b;
+    if (b <= unlockedMax) {
+      opt.textContent = `Batch ${b}`;
+    } else {
+      const unlockYear = BASE_YEAR + (b - BASE_MAX);
+      opt.textContent = `Batch ${b} 🔒 (opens ${unlockYear})`;
+      opt.disabled = true;
+      opt.style.color = '#555';
+    }
+    sel.appendChild(opt);
+  }
+})();
+
+function toggleAddStudent() {
+  const form = document.getElementById('add-student-form');
+  const btn  = document.getElementById('add-student-toggle');
+  const open = form.style.display === 'none';
+  form.style.display = open ? '' : 'none';
+  btn.innerHTML = open
+    ? '<i class="fas fa-chevron-up"></i> Collapse'
+    : '<i class="fas fa-chevron-down"></i> Expand';
+}
+
+// Auto-expand and scroll if navigated via #add-student-card
+window.addEventListener('DOMContentLoaded', () => {
+  const form = document.getElementById('add-student-form');
+  const btn  = document.getElementById('add-student-toggle');
+  // Always open by default
+  form.style.display = '';
+  btn.innerHTML = '<i class="fas fa-chevron-up"></i> Collapse';
+  if (window.location.hash === '#add-student-card') {
+    setTimeout(() => document.getElementById('add-student-card').scrollIntoView({behavior:'smooth'}), 200);
+  }
+});
+
+function toggleAsFloor(val) {
+  const field  = document.getElementById('as-floor-field');
+  const select = document.getElementById('as-floor');
+  const label  = document.getElementById('as-floor-label');
+  select.value = '';
+  if (val === 'male') {
+    field.style.display = '';
+    select.innerHTML = `<option value="">Select floor</option>
+      <option value="1">Floor 1</option><option value="2">Floor 2</option>
+      <option value="3">Floor 3</option><option value="4">Floor 4</option>
+      <option value="5">Floor 5</option><option value="6">Floor 6</option>
+      <option value="7">Floor 7</option>`;
+    label.innerHTML = '<i class="fas fa-building"></i> Floor (Male)';
+  } else if (val === 'female') {
+    field.style.display = '';
+    select.innerHTML = `<option value="">Select hostel</option>
+      <option value="1">1 — Campus</option>
+      <option value="2">2 — Sentu House</option>
+      <option value="3">3 — Chairman House</option>`;
+    label.innerHTML = '<i class="fas fa-home"></i> Hostel (Female)';
+  } else {
+    field.style.display = 'none';
+  }
+}
+
+async function addStudent() {
+  const name     = document.getElementById('as-name').value.trim();
+  const roll     = document.getElementById('as-roll').value.trim();
+  const batch    = document.getElementById('as-batch').value.trim();
+  const gender   = document.getElementById('as-gender').value;
+  const floor    = document.getElementById('as-floor').value;
+  const bkash    = document.getElementById('as-bkash').value.trim();
+  const password = document.getElementById('as-password').value.trim();
+  const result   = document.getElementById('as-result');
+
+  if (!name || !roll || !batch || !gender || !bkash || !password) {
+    result.style.display = 'block';
+    result.className = 'transfer-result fail';
+    result.innerHTML = '<i class="fas fa-circle-xmark"></i> All fields are required.';
+    return;
+  }
+  if (password.length < 6) {
+    result.style.display = 'block';
+    result.className = 'transfer-result fail';
+    result.innerHTML = '<i class="fas fa-circle-xmark"></i> Password must be at least 6 characters.';
+    return;
+  }
+  if (gender === 'male' && !floor) {
+    result.style.display = 'block';
+    result.className = 'transfer-result fail';
+    result.innerHTML = '<i class="fas fa-circle-xmark"></i> Please select a floor for male students.';
+    return;
+  }
+  if (gender === 'female' && !floor) {
+    result.style.display = 'block';
+    result.className = 'transfer-result fail';
+    result.innerHTML = '<i class="fas fa-circle-xmark"></i> Please select a hostel for female students.';
+    return;
+  }
+
+  result.style.display = 'block';
+  result.className = 'transfer-result';
+  result.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding student...';
+
+  try {
+    const res  = await fetch('/admin/add_student', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name, roll_number: roll, batch, gender, floor: floor || null, bkash_number: bkash, password})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      result.className = 'transfer-result ok';
+      result.innerHTML = `<i class="fas fa-circle-check"></i> ${data.msg}`;
+      // Clear form
+      ['as-name','as-roll','as-batch','as-bkash','as-password'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('as-gender').value = '';
+      document.getElementById('as-floor').value = '';
+      document.getElementById('as-floor-field').style.display = 'none';
+      setTimeout(() => location.reload(), 2000);
+    } else {
+      result.className = 'transfer-result fail';
+      result.innerHTML = `<i class="fas fa-circle-xmark"></i> ${data.msg}`;
+    }
+  } catch(e) {
+    result.className = 'transfer-result fail';
+    result.innerHTML = '<i class="fas fa-circle-xmark"></i> Network error. Please try again.';
+  }
+}
+
+function exportCSV() {
+  const rows = document.querySelectorAll('#students-tbody tr');
+  const header = ['#','Name','Roll Number','Batch','Gender','Floor','bKash','Total Meals','Pending (৳)','Due (৳)','Status'];
+  const lines = [header.join(',')];
+  let idx = 1;
+  rows.forEach(r => {
+    if (r.style.display === 'none' || !r.dataset.name) return;
+    const cells = r.querySelectorAll('td');
+    const row = [
+      idx++,
+      '"' + (cells[1]?.textContent.trim() || '') + '"',
+      '"' + (cells[2]?.textContent.trim() || '') + '"',
+      '"' + (cells[3]?.textContent.trim() || '') + '"',
+      r.dataset.gender,
+      r.dataset.gender === 'male' ? (r.querySelectorAll('td')[4]?.textContent.replace(/[^\d]/g,'') || '') : '',
+      r.dataset.bkash,
+      cells[6]?.textContent.trim() || '0',
+      '"' + (cells[7]?.textContent.trim() || '—') + '"',
+      '"' + (cells[8]?.textContent.trim() || '—') + '"',
+      r.dataset.locked === '1' ? 'Locked' : 'Active',
+    ];
+    lines.push(row.join(','));
+  });
+  const blob = new Blob([lines.join('\n')], {type: 'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'nmms_students_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── DELETE STUDENT ────────────────────────────────────────────────────────────
+let _delStudentId   = null;
+let _delStudentRow  = null;
+
+function openDeleteModal(studentId, name, roll, hasDues) {
+  _delStudentId  = studentId;
+  // find the row to remove on success
+  _delStudentRow = document.querySelector(`tr[data-roll="${roll.toLowerCase()}"]`) ||
+                   document.querySelector(`button[onclick*="${studentId}"]`)?.closest('tr');
+
+  document.getElementById('del-student-name').textContent = name + ' (' + roll + ')';
+  document.getElementById('del-has-dues').style.display   = hasDues ? 'block' : 'none';
+  document.getElementById('delConfirmBtn').disabled        = false;
+  document.getElementById('delConfirmBtn').innerHTML       = '<i class="fas fa-trash"></i> Delete Permanently';
+  document.getElementById('delModalOverlay').classList.add('open');
+}
+
+function closeDeleteModal() {
+  document.getElementById('delModalOverlay').classList.remove('open');
+  _delStudentId  = null;
+  _delStudentRow = null;
+}
+
+async function confirmDeleteStudent() {
+  if (!_delStudentId) return;
+
+  const btn = document.getElementById('delConfirmBtn');
+  btn.disabled    = true;
+  btn.innerHTML   = '<i class="fas fa-spinner fa-spin"></i> Deleting…';
+
+  try {
+    const res  = await fetch('/admin/delete_student', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ student_id: _delStudentId })
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      // Remove the row from the table instantly
+      if (_delStudentRow) {
+        _delStudentRow.style.transition = 'opacity .3s';
+        _delStudentRow.style.opacity    = '0';
+        setTimeout(() => _delStudentRow.remove(), 300);
+      }
+      closeDeleteModal();
+      // Show success toast
+      const t = document.createElement('div');
+      t.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#238636;color:#fff;padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.4);animation:delPop .2s ease both';
+      t.innerHTML = '<i class="fas fa-check-circle"></i> ' + data.msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 4000);
+    } else {
+      btn.disabled  = false;
+      btn.innerHTML = '<i class="fas fa-trash"></i> Delete Permanently';
+      alert('Error: ' + data.msg);
+    }
+  } catch (err) {
+    btn.disabled  = false;
+    btn.innerHTML = '<i class="fas fa-trash"></i> Delete Permanently';
+    alert('Network error. Please try again.');
+  }
+}
+</script>
+{% endblock %}

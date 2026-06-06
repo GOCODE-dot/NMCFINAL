@@ -1,0 +1,279 @@
+{% extends 'base.html' %}
+{% block title %}Student Register{% endblock %}
+{% block body %}
+<style>
+  .auth-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(145deg, #f0f7f2, #fff); padding: 20px 16px; }
+  .auth-card { background: #fff; border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 36px 28px; width: 100%; max-width: 460px; border: 1px solid var(--border); }
+  @media(max-width:480px) { .auth-card { padding: 28px 20px; } }
+  .auth-header { text-align: center; margin-bottom: 24px; }
+  .auth-icon { width: 58px; height: 58px; background: var(--primary-pale); border-radius: 16px; display: grid; place-items: center; font-size: 24px; margin: 0 auto 14px; color: var(--primary); }
+  .auth-header h2 { font-size: 22px; font-weight: 700; }
+  .auth-header p { color: var(--text-muted); font-size: 14px; margin-top: 4px; }
+  .grid-2f { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media(max-width:420px) { .grid-2f{grid-template-columns:1fr;} }
+  .auth-footer { text-align: center; margin-top: 18px; font-size: 14px; color: var(--text-muted); }
+  .auth-footer a { color: var(--primary); font-weight: 600; text-decoration: none; }
+  .back-link { display: flex; align-items: center; gap: 6px; color: var(--text-muted); text-decoration: none; font-size: 14px; margin-bottom: 18px; }
+  .back-link:hover { color: var(--primary); }
+  .bkash-note { background: var(--accent-light); border: 1px solid #fcd97d; border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; color: #7a5c00; margin-bottom: 16px; display: flex; gap: 8px; align-items: flex-start; }
+  .invite-box { background: var(--primary-pale); border: 1.5px solid #b7e4c7; border-radius: var(--radius-sm); padding: 14px 16px; margin-bottom: 20px; display: flex; gap: 10px; align-items: flex-start; }
+  .invite-box i { color: var(--primary); margin-top: 1px; flex-shrink: 0; }
+  .invite-box span { font-size: 13px; color: #1a4731; line-height: 1.55; }
+  .form-group select { width: 100%; padding: 13px 16px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-family: var(--font-body); font-size: 16px; color: var(--text); background: #fff; transition: border .2s; -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23718096' stroke-width='1.5' fill='none'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 16px center; }
+  .form-group select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,107,58,.1); }
+  .gender-group { display: flex; gap: 10px; margin-top: 6px; }
+  .gender-opt { flex: 1; position: relative; }
+  .gender-opt input[type=radio] { position: absolute !important; opacity: 0 !important; width: 0 !important; height: 0 !important; pointer-events: none !important; }
+  .gender-card { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 16px; border: 2px solid var(--border); border-radius: var(--radius-sm); font-size: 15px; font-weight: 600; color: var(--text-muted); cursor: pointer; transition: all .18s; background: #fff; user-select: none; }
+  .gender-card i { font-size: 15px; }
+  .gender-opt input[type=radio]:checked + .gender-card { border-color: var(--primary); background: var(--primary-pale, #f0f7f2); color: var(--primary); }
+  .gender-card:hover { border-color: var(--primary); color: var(--primary); }
+  .btn-submit { width: 100%; padding: 15px; border-radius: var(--radius-sm); background: var(--primary); color: #fff; border: none; font-family: var(--font-body); font-size: 16px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all .2s; min-height: 52px; -webkit-tap-highlight-color: transparent; }
+  .btn-submit:hover { background: var(--primary-light); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(26,107,58,.3); }
+  .btn-submit:active { transform: scale(0.98); }
+  .invite-input-wrap { position: relative; }
+  .invite-input-wrap input { text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; font-size: 15px !important; }
+  .invite-input-wrap .invite-check { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 16px; display: none; }
+  .invite-input-wrap.valid .invite-check   { display: block; color: var(--primary); }
+  .invite-input-wrap.invalid .invite-check { display: block; color: var(--danger); }
+  .code-divider { display: flex; align-items: center; gap: 10px; margin: 18px 0 14px; }
+  .code-divider hr { flex: 1; border: none; border-top: 1px solid var(--border); }
+  .code-divider span { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
+</style>
+
+<div class="auth-page">
+  <div style="width:100%;max-width:460px">
+    <a href="{{ url_for('index') }}" class="back-link"><i class="fas fa-arrow-left"></i> Back to Home</a>
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="auth-icon"><i class="fas fa-user-plus"></i></div>
+        <h2>Student Registration</h2>
+        <p>Netrokona Medical College — Meal System</p>
+      </div>
+
+      {% with msgs = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in msgs %}
+          <div class="alert alert-{{ cat }}"><i class="fas fa-{{ 'check-circle' if cat=='success' else 'exclamation-circle' }}"></i> {{ msg }}</div>
+        {% endfor %}
+      {% endwith %}
+
+      <!-- Invite code notice -->
+      <div class="invite-box">
+        <i class="fas fa-ticket-alt"></i>
+        <span>Registration requires an <strong>invite code</strong> from the system admin. Each code can only be used once.</span>
+      </div>
+
+      <form method="POST">
+
+        <!-- ── INVITE CODE ── -->
+        <div class="form-group">
+          <label>Invite Code</label>
+          <div class="invite-input-wrap" id="inviteWrap">
+            <input type="text" name="invite_code" id="invite_code"
+                   placeholder="e.g. A3BX9KQ2WP"
+                   required autocomplete="off" maxlength="12"
+                   oninput="onInviteInput(this)">
+            <span class="invite-check" id="inviteCheck"></span>
+          </div>
+          <div id="invite-hint" style="font-size:12px;color:var(--text-muted);margin-top:5px">
+            <i class="fas fa-info-circle"></i> Enter the code exactly as given to you by the admin.
+          </div>
+        </div>
+
+        <div class="code-divider">
+          <hr><span>Your Details</span><hr>
+        </div>
+
+        <div class="form-group">
+          <label>Full Name</label>
+          <input type="text" name="name" placeholder="Your full name" required autocomplete="name">
+        </div>
+
+        <div class="grid-2f">
+          <div class="form-group">
+            <label>Batch</label>
+            <select name="batch" id="batch-select" required>
+              <option value="">Select batch</option>
+            </select>
+            <div id="batch-locked-note" style="display:none;margin-top:6px;font-size:12px;color:#b45309;background:#fff8e6;border:1px solid #fcd97d;border-radius:6px;padding:7px 10px;align-items:center;gap:6px">
+              <i class="fas fa-lock" style="font-size:11px"></i>
+              <span id="batch-locked-msg"></span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Roll Number <span style="color:var(--text-muted);font-weight:400;font-size:12px">(1–75)</span></label>
+            <input type="number" name="roll_number" id="roll-input" placeholder="e.g. 12" required min="1" max="75">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Gender</label>
+          <div class="gender-group">
+            <label class="gender-opt">
+              <input type="radio" name="gender" value="male" required onchange="toggleFloor(this.value)">
+              <span class="gender-card"><i class="fas fa-mars"></i> Male</span>
+            </label>
+            <label class="gender-opt">
+              <input type="radio" name="gender" value="female" onchange="toggleFloor(this.value)">
+              <span class="gender-card"><i class="fas fa-venus"></i> Female</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Floor/Hostel — shown after gender is chosen, options differ per gender -->
+        <div class="form-group" id="floor-group" style="display:none">
+          <label id="floor-label">Floor Number</label>
+          <select name="floor" id="floor-select">
+            <option value="">Select</option>
+          </select>
+        </div>
+
+        <div class="bkash-note">
+          <i class="fas fa-info-circle" style="margin-top:1px"></i>
+          <span>Your bKash number will be used to send meal payments to the manager. Make sure it's correct.</span>
+        </div>
+
+        <div class="form-group">
+          <label>bKash Number</label>
+          <input type="tel" name="bkash_number" placeholder="01XXXXXXXXX" required pattern="01[3-9]\d{8}" autocomplete="tel">
+        </div>
+
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" name="password" placeholder="Create a password (min 6 characters)" required minlength="6" autocomplete="new-password">
+        </div>
+
+        <button type="submit" class="btn-submit"><i class="fas fa-user-plus"></i> Create Account</button>
+      </form>
+
+      <div class="auth-footer">
+        Already registered? <a href="{{ url_for('student_login') }}">Login here</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Invite code input feedback ─────────────────────────────────────────────
+function onInviteInput(el) {
+  el.value = el.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const wrap  = document.getElementById('inviteWrap');
+  const check = document.getElementById('inviteCheck');
+  const hint  = document.getElementById('invite-hint');
+  const len   = el.value.length;
+  if (len === 0) {
+    wrap.className = 'invite-input-wrap';
+    check.textContent = '';
+    hint.innerHTML = '<i class="fas fa-info-circle"></i> Enter the code exactly as given to you by the admin.';
+  } else if (len < 8) {
+    wrap.className = 'invite-input-wrap invalid';
+    check.textContent = '✗';
+    hint.innerHTML = '<span style="color:var(--danger)">Code too short — it should be 10 characters.</span>';
+  } else {
+    wrap.className = 'invite-input-wrap valid';
+    check.textContent = '✓';
+    hint.innerHTML = '<span style="color:var(--primary)">Looks good — this will be verified on submit.</span>';
+  }
+}
+
+// ── Floor / Hostel toggle ─────────────────────────────────────────────────
+// Male  → numbered floors 1–7
+// Female → named hostels (Campus, Sentu House, Chairman House)
+
+const MALE_FLOOR_OPTIONS = `
+  <option value="">Select floor</option>
+  <option value="1">Floor 1</option>
+  <option value="2">Floor 2</option>
+  <option value="3">Floor 3</option>
+  <option value="4">Floor 4</option>
+  <option value="5">Floor 5</option>
+  <option value="6">Floor 6</option>
+  <option value="7">Floor 7</option>`;
+
+const FEMALE_HOSTEL_OPTIONS = `
+  <option value="">Select hostel</option>
+  <option value="1">Campus</option>
+  <option value="2">Sentu House</option>
+  <option value="3">Chairman House</option>`;
+
+function toggleFloor(gender) {
+  const group  = document.getElementById('floor-group');
+  const select = document.getElementById('floor-select');
+  const label  = document.getElementById('floor-label');
+  select.value = '';
+
+  if (gender === 'male') {
+    group.style.display = '';
+    select.innerHTML    = MALE_FLOOR_OPTIONS;
+    label.textContent   = 'Floor Number';
+    select.setAttribute('required', 'required');
+  } else if (gender === 'female') {
+    group.style.display = '';
+    select.innerHTML    = FEMALE_HOSTEL_OPTIONS;
+    label.textContent   = 'Hostel';
+    select.setAttribute('required', 'required');
+  } else {
+    group.style.display = 'none';
+    select.removeAttribute('required');
+  }
+}
+
+// Init — restore state if browser auto-selects gender (back button)
+document.querySelectorAll('input[name="gender"]').forEach(r => {
+  if (r.checked) toggleFloor(r.value);
+});
+
+// ── Batch dropdown — time-locked logic ────────────────────────────────────
+(function buildBatchDropdown() {
+  const BATCH_MIN  = 2;
+  const BATCH_MAX  = 20;
+  const BASE_YEAR  = 2026;
+  const BASE_MAX   = 8;
+
+  const currentYear  = new Date().getFullYear();
+  const unlockedMax  = Math.min(BASE_MAX + Math.max(0, currentYear - BASE_YEAR), BATCH_MAX);
+  const sel  = document.getElementById('batch-select');
+  const note = document.getElementById('batch-locked-note');
+  const msg  = document.getElementById('batch-locked-msg');
+
+  for (let b = BATCH_MIN; b <= BATCH_MAX; b++) {
+    const opt = document.createElement('option');
+    opt.value = b;
+    if (b <= unlockedMax) {
+      opt.textContent = `Batch ${b}`;
+    } else {
+      const unlockYear = BASE_YEAR + (b - BASE_MAX);
+      opt.textContent  = `Batch ${b} 🔒 (opens ${unlockYear})`;
+      opt.disabled     = true;
+      opt.style.color  = '#aaa';
+    }
+    sel.appendChild(opt);
+  }
+
+  sel.addEventListener('change', function () {
+    const val = parseInt(this.value);
+    if (val > unlockedMax) {
+      const unlockYear = BASE_YEAR + (val - BASE_MAX);
+      msg.textContent    = `Batch ${val} is not yet open. It unlocks in ${unlockYear}.`;
+      note.style.display = 'flex';
+    } else {
+      note.style.display = 'none';
+    }
+  });
+})();
+
+// ── Roll number: enforce 1–75 ─────────────────────────────────────────────
+document.getElementById('roll-input').addEventListener('input', function () {
+  const v = parseInt(this.value);
+  if (this.value !== '' && (v < 1 || v > 75 || isNaN(v))) {
+    this.setCustomValidity('Roll number must be between 1 and 75.');
+    this.style.borderColor = 'var(--danger, #e53e3e)';
+  } else {
+    this.setCustomValidity('');
+    this.style.borderColor = '';
+  }
+});
+</script>
+{% endblock %}

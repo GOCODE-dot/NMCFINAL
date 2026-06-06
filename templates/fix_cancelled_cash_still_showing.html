@@ -1,0 +1,178 @@
+<!--
+  ══════════════════════════════════════════════════════════════════════════════
+  FIX: Cancelled cash requests still appear in manager panel
+  ══════════════════════════════════════════════════════════════════════════════
+
+  ROOT CAUSE
+  ──────────
+  When a student cancels a meal order, the cancel_order route sets
+  cash_payment_requests.status = 'cancelled'.
+  But the /manager/cash_requests route fetches ALL non-accepted rows —
+  it does not exclude status='cancelled'. So the cancelled cash request
+  keeps showing with "Awaiting Decision" buttons.
+
+  TWO FIXES — one backend, one frontend fallback
+  ═══════════════════════════════════════════════
+
+  ══════════════════════════════════════════════════════════════════════════════
+  FIX 1 — app.py  ·  /manager/cash_requests  route  (PRIMARY FIX)
+  ══════════════════════════════════════════════════════════════════════════════
+
+  Find the SQL query in the /manager/cash_requests route.
+  It currently looks something like:
+
+      rows = db.execute(
+          """SELECT cpr.*, s.name AS student_name, ...
+             FROM cash_payment_requests cpr
+             JOIN students s ON cpr.student_id = s.id
+             WHERE cpr.manager_id = ?
+               AND cpr.status = 'pending'
+             ORDER BY cpr.created_at DESC""",
+          (manager_id,)
+      ).fetchall()
+
+  If it uses  status != 'accepted'  or  status NOT IN (...)  instead,
+  ADD 'cancelled' to the exclusion list.
+
+  CHANGE TO (add  AND cpr.status != 'cancelled'  or change the IN list):
+
+      rows = db.execute(
+          """SELECT cpr.*, s.name AS student_name, ...
+             FROM cash_payment_requests cpr
+             JOIN students s ON cpr.student_id = s.id
+             WHERE cpr.manager_id = ?
+               AND cpr.status = 'pending'          -- or: NOT IN ('accepted','cancelled','declined')
+             ORDER BY cpr.created_at DESC""",
+          (manager_id,)
+      ).fetchall()
+
+  That's all — 'cancelled' rows will no longer reach the frontend.
+
+
+  ══════════════════════════════════════════════════════════════════════════════
+  FIX 2 — manager_dashboard.html  ·  loadCashRequests()  (FRONTEND FALLBACK)
+  ══════════════════════════════════════════════════════════════════════════════
+
+  Even before the backend is updated, the frontend can skip cancelled rows.
+  Also adds a grey "Cancelled — meal cancel request pending" label for any
+  cancelled request that slips through, so the manager is never confused.
+
+  FIND in manager_dashboard.html:
+      async function loadCashRequests() {
+
+  REPLACE the ENTIRE function with the version below.
+-->
+
+<script>
+async function loadCashRequests() {
+  const container = document.getElementById('cash-requests-container');
+  try {
+    const r = await fetch('/manager/cash_requests');
+    const d = await r.json();
+
+    // Filter out cancelled rows on the frontend as a safety net
+    // (the backend should already exclude them — this is a fallback)
+    const requests = (d.requests || []).filter(req => req.status !== 'cancelled');
+
+    const dot = document.getElementById('cash-dot');
+    if (requests.length > 0) {
+      dot.style.display = '';
+      dot.textContent   = requests.length;
+    } else {
+      dot.style.display = 'none';
+    }
+
+    if (requests.length === 0) {
+      container.innerHTML = `
+        <div style="text-align:center;color:var(--text-muted);padding:40px 0">
+          <div style="font-size:40px;margin-bottom:10px">✅</div>
+          <div>No pending cash payment requests.</div>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = requests.map(req => `
+      <div class="proof-card unverified" id="cashreq-${req.id}" style="border-left-color:var(--primary)">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+              <strong style="font-size:15px">${req.student_name}</strong>
+              <span class="badge badge-green">${req.roll_number}</span>
+              <span style="font-size:13px;color:var(--text-muted)">${req.batch}</span>
+            </div>
+            <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px">
+              <i class="fas fa-money-bill-wave" style="color:var(--primary)"></i> ৳${req.amount}
+              <span style="font-size:12px;font-weight:500;color:var(--text-muted);margin-left:8px">Cash Payment</span>
+            </div>
+            <div style="font-size:13px;color:var(--text-muted)">
+              <i class="fas fa-calendar"></i> ${req.requested_at.slice(0,10)}
+              &nbsp;·&nbsp;<i class="fas fa-mobile-alt"></i> bKash: ${req.bkash_number}
+            </div>
+            ${req.note ? `<div style="font-size:13px;background:#f8fafc;border-radius:6px;padding:8px 12px;margin-top:8px;color:var(--text-muted)"><i class="fas fa-comment"></i> ${req.note}</div>` : ''}
+          </div>
+          <span class="badge badge-yellow"><i class="fas fa-clock"></i> Awaiting Decision</span>
+        </div>
+        <div class="proof-actions">
+          <button class="btn btn-primary btn-sm" onclick="acceptCash(${req.id}, this)">
+            <i class="fas fa-check"></i> Accept &amp; Mark Paid
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="declineCash(${req.id}, this)">
+            <i class="fas fa-times"></i> Decline
+          </button>
+        </div>
+      </div>`).join('');
+
+  } catch(e) {
+    container.innerHTML = `<div style="color:var(--danger);padding:20px">Failed to load requests.</div>`;
+  }
+}
+</script>
+
+<!--
+  ══════════════════════════════════════════════════════════════════════════════
+  FIX 3 — manager_dashboard.html · loadEditRequests()
+  Show amber warning on a cancel card when payment was auto-cancelled
+  ══════════════════════════════════════════════════════════════════════════════
+
+  The edit request card for "Cancel Dinner" should show a badge like:
+    ⚠️ Cash payment was auto-cancelled alongside this request
+
+  This requires the backend to return  payment_cancelled: true  on those rows
+  (see fix_cancel_payment_on_edit_request.html for the backend part).
+
+  The loadEditRequests() replacement in fix_cancel_payment_on_edit_request.html
+  already handles this — just make sure that patch is also applied.
+
+  ══════════════════════════════════════════════════════════════════════════════
+  ALSO: for the currently stuck request in your screenshot
+  ══════════════════════════════════════════════════════════════════════════════
+
+  The cash request from Zuhayer Tausif Khan is already in the DB with
+  status='cancelled' (or it should be after Part 1A runs). If the backend fix
+  hasn't been applied yet and it's still 'pending' in the DB, run this SQL
+  directly to clean it up:
+
+      UPDATE cash_payment_requests
+      SET status = 'cancelled'
+      WHERE student_id = (SELECT id FROM students WHERE name = 'Zuhayer Tausif Khan')
+        AND status = 'pending';
+
+  After that, the manager panel will no longer show it (once the frontend fix
+  or backend fix is applied).
+
+  ══════════════════════════════════════════════════════════════════════════════
+  SUMMARY
+  ══════════════════════════════════════════════════════════════════════════════
+
+  | Layer    | Change                                                         |
+  |----------|----------------------------------------------------------------|
+  | app.py   | /manager/cash_requests → add AND status != 'cancelled' to SQL  |
+  | app.py   | /cancel_order → UPDATE cash_payment_requests status=cancelled  |
+  |          | when meal_edit_request is created (from previous patch)        |
+  | JS       | loadCashRequests() → filter out status==='cancelled' rows      |
+  |          | as a frontend safety net                                       |
+
+  The student already sees the right UI (payment banner hidden, combined toast)
+  because confirmMealAction() handles cash_cancelled/bkash_cancelled flags.
+  The only gap was the manager still seeing the orphaned cash request.
+-->

@@ -1,0 +1,3331 @@
+{% extends 'base.html' %}
+{% block title %}Manager Dashboard{% endblock %}
+{% block body %}
+
+<script>
+(function() {
+  var saved = localStorage.getItem('nmms-theme') || 'light';
+  document.documentElement.setAttribute('data-theme', saved);
+})();
+</script>
+
+
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ── DARK / LIGHT THEME SYSTEM ─────────────────────────────────────────── */
+:root {
+  --primary: #1a6b3a; --primary-light: #2d9e5a; --primary-pale: #e8f5ee;
+  --accent: #f0a500; --accent-light: #fff8e6;
+  --danger: #e53e3e; --danger-light: #fff5f5;
+  --bg: #f7f9fc; --card: #ffffff; --border: #e2e8f0;
+  --text: #1a202c; --text-muted: #718096;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+  --nav-bg: #ffffff; --nav-border: #e2e8f0;
+  --input-bg: #ffffff; --table-hover: #f8fafc;
+  --stat-card-bg: #ffffff; --modal-bg: #ffffff;
+  --proof-card-bg: #ffffff; --proof-unverified-bg: #ffffff;
+  --tabs-bg: #e2e8f0; --tab-active-bg: #ffffff;
+  --floor-card-bg: #f8f9fb; --floor-card-border: #e5e7eb;
+  --floor-modal-bg: #ffffff;
+  --due-banner-bg: linear-gradient(135deg,#fff8e6,#fef3c7);
+  --search-bg: #ffffff;
+  --txn-badge-bg: #1a1a2e; --txn-badge-color: #4ade80;
+}
+
+[data-theme="dark"] {
+  --primary: #2d9e5a; --primary-light: #3dbc70; --primary-pale: rgba(45,158,90,0.15);
+  --accent: #f0a500; --accent-light: rgba(240,165,0,0.12);
+  --danger: #fc4f4f; --danger-light: rgba(229,62,62,0.12);
+  --bg: #0f1117; --card: #1a1f2e; --border: #2d3548;
+  --text: #e8eaf0; --text-muted: #8895b3;
+  --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 16px rgba(0,0,0,0.2);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.4);
+  --nav-bg: #12161f; --nav-border: #2d3548;
+  --input-bg: #1e2436; --table-hover: #1e2436;
+  --stat-card-bg: #1a1f2e; --modal-bg: #1a1f2e;
+  --proof-card-bg: #1a1f2e; --proof-unverified-bg: #1a1f2e;
+  --tabs-bg: #12161f; --tab-active-bg: #252d42;
+  --floor-card-bg: #1e2436; --floor-card-border: #2d3548;
+  --floor-modal-bg: #1a1f2e;
+  --due-banner-bg: linear-gradient(135deg,rgba(240,165,0,0.1),rgba(240,165,0,0.06));
+  --search-bg: #1e2436;
+  --txn-badge-bg: #0a0f1a; --txn-badge-color: #4ade80;
+}
+
+/* Apply dark theme everywhere */
+[data-theme="dark"] body { background: var(--bg); color: var(--text); }
+[data-theme="dark"] nav { background: var(--nav-bg) !important; border-bottom-color: var(--nav-border) !important; }
+[data-theme="dark"] .card { background: var(--card) !important; border-color: var(--border) !important; }
+[data-theme="dark"] .stat-card { background: var(--stat-card-bg) !important; border-color: var(--border) !important; }
+[data-theme="dark"] .modal { background: var(--modal-bg) !important; }
+[data-theme="dark"] .proof-card { background: var(--proof-card-bg) !important; border-color: var(--border) !important; }
+[data-theme="dark"] .proof-card.unverified { border-color: var(--border); background: var(--proof-unverified-bg) !important; }
+[data-theme="dark"] td, [data-theme="dark"] th { border-color: var(--border) !important; color: var(--text) !important; }
+[data-theme="dark"] th { background: #12161f !important; color: var(--text-muted) !important; }
+[data-theme="dark"] tr:hover td { background: var(--table-hover) !important; }
+[data-theme="dark"] .tabs { background: var(--tabs-bg) !important; }
+[data-theme="dark"] .tab { color: var(--text-muted) !important; }
+[data-theme="dark"] .tab.active { background: var(--tab-active-bg) !important; color: var(--primary) !important; }
+[data-theme="dark"] .day-card { background: var(--card) !important; border-color: var(--border) !important; }
+[data-theme="dark"] .day-card .day-name { color: var(--text-muted) !important; }
+[data-theme="dark"] .day-card .day-num { color: var(--text) !important; }
+[data-theme="dark"] .meal-btn { background: var(--card) !important; border-color: var(--border) !important; color: var(--text-muted) !important; }
+[data-theme="dark"] .meal-btn:hover { border-color: var(--primary) !important; color: var(--primary) !important; background: var(--primary-pale) !important; }
+[data-theme="dark"] .meal-btn.ordered { background: var(--primary) !important; color: #fff !important; border-color: var(--primary) !important; }
+[data-theme="dark"] .meal-btn.paid { background: var(--primary-pale) !important; color: var(--primary) !important; border-color: var(--primary) !important; }
+[data-theme="dark"] .meal-btn.due-status { background: var(--accent-light) !important; color: var(--accent) !important; border-color: var(--accent) !important; }
+[data-theme="dark"] input, [data-theme="dark"] select {
+  background: var(--input-bg) !important; border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+[data-theme="dark"] input::placeholder { color: var(--text-muted) !important; opacity: 0.7; }
+[data-theme="dark"] input:focus, [data-theme="dark"] select:focus { border-color: var(--primary) !important; }
+[data-theme="dark"] .btn-outline { color: var(--text-muted) !important; border-color: var(--border) !important; }
+[data-theme="dark"] .btn-outline:hover { border-color: var(--primary) !important; color: var(--primary) !important; background: var(--primary-pale) !important; }
+[data-theme="dark"] .badge-green { background: var(--primary-pale) !important; color: var(--primary) !important; }
+[data-theme="dark"] .badge-yellow { background: var(--accent-light) !important; color: var(--accent) !important; }
+[data-theme="dark"] .badge-red { background: var(--danger-light) !important; color: var(--danger) !important; }
+[data-theme="dark"] .progress-bar { background: #2d3548 !important; }
+[data-theme="dark"] .txn-badge { background: var(--txn-badge-bg) !important; color: var(--txn-badge-color) !important; }
+[data-theme="dark"] .nav-brand { color: var(--primary) !important; }
+[data-theme="dark"] .nav-brand .logo { background: var(--primary) !important; }
+[data-theme="dark"] .modal-overlay { background: rgba(0,0,0,0.65) !important; }
+[data-theme="dark"] .bill-date-bar input[type=date] { background: var(--input-bg) !important; color: var(--text) !important; border-color: var(--border) !important; }
+[data-theme="dark"] .proof-card.verified-card { background: rgba(45,158,90,0.06) !important; }
+[data-theme="dark"] .proof-card.rejected-card { background: rgba(229,62,62,0.06) !important; }
+[data-theme="dark"] .search-box input { background: var(--input-bg) !important; color: var(--text) !important; }
+[data-theme="dark"] #floor-students-modal { background: var(--floor-modal-bg) !important; }
+[data-theme="dark"] .floor-modal-header { background: var(--floor-modal-bg) !important; border-color: var(--border) !important; }
+[data-theme="dark"] .floor-student-card { background: var(--floor-card-bg) !important; border-color: var(--floor-card-border) !important; }
+[data-theme="dark"] .floor-student-name { color: var(--text) !important; }
+[data-theme="dark"] .floor-modal-tabs { background: #12161f !important; }
+[data-theme="dark"] .floor-modal-tabs .tab.active { background: var(--card) !important; }
+[data-theme="dark"] .floor-modal-back-btn { background: #2d3548 !important; color: var(--text-muted) !important; }
+[data-theme="dark"] .due-banner { background: var(--due-banner-bg) !important; border-color: rgba(240,165,0,0.3) !important; }
+[data-theme="dark"] .due-banner .due-info h4 { color: var(--accent) !important; }
+[data-theme="dark"] .due-banner .due-info p { color: rgba(240,165,0,0.7) !important; }
+[data-theme="dark"] #bulk-action-bar { background: linear-gradient(135deg, rgba(45,158,90,0.1), rgba(240,165,0,0.05)) !important; border-color: var(--border) !important; }
+[data-theme="dark"] .mgr-bkash { background: linear-gradient(135deg, #6d0a35, #8b0f42) !important; }
+[data-theme="dark"] .bkash-box { background: linear-gradient(135deg, #6d0a35, #8b0f42) !important; }
+[data-theme="dark"] [style*="background:#f8fafc"], [data-theme="dark"] [style*="background: #f8fafc"] { background: var(--input-bg) !important; }
+[data-theme="dark"] [style*="background:#fff"], [data-theme="dark"] [style*="background: #fff"] { background: var(--card) !important; }
+[data-theme="dark"] [style*="color:var(--text)"], [data-theme="dark"] [style*="color: var(--text)"] { color: var(--text) !important; }
+[data-theme="dark"] .section-title { color: var(--text) !important; }
+[data-theme="dark"] h1, [data-theme="dark"] h2, [data-theme="dark"] h3, [data-theme="dark"] h4 { color: var(--text) !important; }
+[data-theme="dark"] strong { color: var(--text) !important; }
+[data-theme="dark"] .stat-value { color: var(--text) !important; }
+[data-theme="dark"] .bill-grand { background: linear-gradient(135deg, var(--primary), var(--primary-light)) !important; }
+[data-theme="dark"] .bill-row[style*="#f0f7f2"] { background: rgba(45,158,90,0.08) !important; }
+[data-theme="dark"] .bill-row[style*="#fff8e6"] { background: rgba(240,165,0,0.08) !important; }
+[data-theme="dark"] .bill-row[style*="#e6f0ff"] { background: rgba(59,95,226,0.1) !important; }
+[data-theme="dark"] .bill-row[style*="#fce4ec"] { background: rgba(194,24,91,0.08) !important; }
+[data-theme="dark"] .bill-floor-table th { background: #12161f !important; }
+[data-theme="dark"] .warn-alt, [data-theme="dark"] [style*="background:var(--danger-light)"] { background: var(--danger-light) !important; }
+[data-theme="dark"] [style*="background:var(--primary-pale)"] { background: var(--primary-pale) !important; }
+[data-theme="dark"] [style*="background:var(--accent-light)"] { background: var(--accent-light) !important; }
+[data-theme="dark"] [style*="background:#e6f0ff"] { background: rgba(59,95,226,0.12) !important; }
+[data-theme="dark"] [style*="background:#fce4ec"] { background: rgba(194,24,91,0.1) !important; }
+[data-theme="dark"] [style*="background:#fff3e0"] { background: rgba(230,81,0,0.1) !important; }
+[data-theme="dark"] [style*="background:#f0f7f2"] { background: rgba(45,158,90,0.08) !important; }
+[data-theme="dark"] [style*="background:#fff8e6"] { background: rgba(240,165,0,0.08) !important; }
+[data-theme="dark"] [style*="background:#1a1a2e"] { background: #0a0f1a !important; }
+[data-theme="dark"] .demo-box, [data-theme="dark"] .info-box, [data-theme="dark"] .warn-box { background: var(--input-bg) !important; border-color: var(--border) !important; }
+[data-theme="dark"] [style*="border-left:4px solid"] { border-color: inherit; }
+
+/* ── THEME TOGGLE BUTTON ───────────────────────────────────────────────── */
+#nmms-theme-btn {
+  position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--card); border: 2px solid var(--border);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  display: grid; place-items: center;
+  cursor: pointer; font-size: 22px;
+  transition: all 0.3s cubic-bezier(0.34,1.3,0.64,1);
+}
+#nmms-theme-btn:hover { transform: scale(1.15) rotate(15deg); box-shadow: 0 8px 28px rgba(0,0,0,0.2); }
+@media(max-width:480px) {
+  #nmms-theme-btn { width: 44px; height: 44px; font-size: 18px; bottom: 16px; right: 16px; }
+  @supports(bottom: env(safe-area-inset-bottom)) {
+    #nmms-theme-btn { bottom: calc(16px + env(safe-area-inset-bottom)); }
+  }
+}
+
+  /* ── bKash Panel (embedded in bKash tab) ────────────────────────────────── */
+  .bkash-panel { background:#fff; border-radius:var(--radius); border:1px solid var(--border); margin-bottom:24px; overflow:hidden; }
+  .bkash-panel-header { display:flex; align-items:center; justify-content:space-between; padding:18px 24px; background:#f8fafc; border-bottom:1px solid var(--border); flex-wrap:wrap; gap:12px; }
+  .bkash-panel-title { display:flex; align-items:center; gap:12px; }
+  .bkash-icon { width:44px; height:44px; background:linear-gradient(135deg,#e2136e,#c0105c); border-radius:12px; display:grid; place-items:center; color:#fff; font-size:18px; flex-shrink:0; }
+  .bkash-panel-title h3 { font-size:15px; font-weight:700; color:var(--text); }
+  .bkash-panel-title p  { font-size:13px; color:var(--text-muted); margin-top:2px; }
+  .bkash-current-badge { display:inline-flex; align-items:center; gap:8px; background:#fdf0f6; border:1.5px solid #f5a8d0; border-radius:40px; padding:8px 16px; font-size:13px; font-weight:700; color:#c0105c; letter-spacing:.5px; }
+  .bkash-body { padding:20px 24px; }
+  .bkash-propose-form { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; margin-bottom:20px; }
+  .bkash-propose-form .field { flex:1; min-width:180px; }
+  .bkash-propose-form label { display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text-muted); margin-bottom:6px; }
+  .bkash-propose-form input { width:100%; padding:11px 14px; border:1.5px solid var(--border); border-radius:var(--radius-sm); font-family:var(--font-body); font-size:15px; color:var(--text); transition:border .2s; }
+  .bkash-propose-form input:focus { outline:none; border-color:#e2136e; box-shadow:0 0 0 3px rgba(226,19,110,.1); }
+  #bkashProposeBtn { padding:11px 22px; border-radius:var(--radius-sm); background:linear-gradient(135deg,#e2136e,#c0105c); color:#fff; border:none; font-family:var(--font-body); font-size:14px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:8px; transition:all .2s; white-space:nowrap; flex-shrink:0; }
+  #bkashProposeBtn:hover { box-shadow:0 4px 14px rgba(226,19,110,.35); transform:translateY(-1px); }
+  #bkashProposeBtn.busy { opacity:.6; pointer-events:none; }
+  .bkash-divider { height:1px; background:var(--border); margin:18px 0; }
+  .proposals-title { font-size:13px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:12px; }
+  #bkashProposalsList { display:flex; flex-direction:column; gap:10px; }
+  .proposal-card { border:1.5px solid var(--border); border-radius:var(--radius-sm); padding:14px 16px; background:#fafbfc; transition:border .2s; }
+  .proposal-card.mine { border-color:#f5a8d0; background:#fdf0f6; }
+  .proposal-card.voted { opacity:.75; }
+  .proposal-top { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+  .proposal-who { font-size:13px; color:var(--text-muted); }
+  .proposal-who strong { color:var(--text); }
+  .proposal-bkash { font-size:16px; font-weight:800; color:#e2136e; letter-spacing:.5px; }
+  .vote-bar-wrap { margin-bottom:10px; }
+  .vote-bar-label { display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted); margin-bottom:5px; }
+  .vote-bar-track { height:8px; background:#f1f5f9; border-radius:8px; overflow:hidden; }
+  .vote-bar-fill { height:100%; background:linear-gradient(90deg,#10b981,#059669); border-radius:8px; transition:width .4s ease; }
+  .vote-btns { display:flex; gap:8px; flex-wrap:wrap; }
+  .btn-approve { padding:8px 18px; border-radius:var(--radius-sm); background:var(--primary); color:#fff; border:none; font-family:var(--font-body); font-size:13px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:all .2s; }
+  .btn-approve:hover { background:var(--primary-light); }
+  .btn-reject { padding:8px 18px; border-radius:var(--radius-sm); background:transparent; color:var(--danger); border:1.5px solid var(--danger); font-family:var(--font-body); font-size:13px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:all .2s; }
+  .btn-reject:hover { background:var(--danger-light); }
+  .voted-chip { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:var(--radius-sm); font-size:13px; font-weight:700; }
+  .voted-chip.approve { background:var(--primary-pale); color:var(--primary); }
+  .voted-chip.reject  { background:var(--danger-light); color:var(--danger); }
+  .own-proposal-chip { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:#c0105c; font-weight:600; }
+  .bkash-empty { text-align:center; padding:20px; color:var(--text-muted); font-size:14px; }
+  .bkash-empty i { font-size:28px; display:block; margin-bottom:8px; opacity:.4; }
+  .resolved-list { margin-top:16px; }
+  .resolved-item { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px; }
+  .resolved-item:last-child { border-bottom:none; }
+  .resolved-badge { padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; flex-shrink:0; }
+  .resolved-badge.approved { background:var(--primary-pale); color:var(--primary); }
+  .resolved-badge.rejected  { background:var(--danger-light); color:var(--danger); }
+  .resolved-badge.cancelled { background:#f1f5f9; color:var(--text-muted); }
+  /* My bKash change card */
+  .my-bkash-card { background:#fff; border-radius:var(--radius); border:1px solid var(--border); overflow:hidden; }
+  .my-bkash-card-header { padding:18px 24px; background:#f8fafc; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+  .my-bkash-card-header .icon { width:44px; height:44px; background:linear-gradient(135deg,#e2136e,#c0105c); border-radius:12px; display:grid; place-items:center; color:#fff; font-size:18px; flex-shrink:0; }
+  .my-bkash-card-body { padding:20px 24px; }
+</style>
+
+<style>
+  .stat-icon.green { background: var(--primary-pale); color: var(--primary); }
+  .stat-icon.yellow { background: var(--accent-light); color: var(--accent); }
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:200; display:none; align-items:center; justify-content:center; padding:20px; }
+  .modal-overlay.open { display:flex; }
+  .modal { background:#fff; border-radius:var(--radius); padding:32px 28px; max-width:440px; width:100%; box-shadow:var(--shadow-lg); max-height:90vh; overflow-y:auto; }
+  .stat-icon.red { background: var(--danger-light); color: var(--danger); }
+  .stat-icon.blue { background: #e6f0ff; color: #3b5fe2; }
+  .stat-icon.orange { background: #fff3e0; color: #e65100; }
+  .week-table-wrap { overflow-x: auto; }
+  .progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+  .progress-fill { height: 100%; border-radius: 3px; background: var(--primary); }
+  .search-box { display: flex; gap: 10px; margin-bottom: 16px; }
+  .search-box input { flex: 1; padding: 10px 16px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-family: inherit; font-size: 14px; }
+  .search-box input:focus { outline:none; border-color: var(--primary); }
+  .mgr-bkash { background: linear-gradient(135deg, #e51c6d, #c2185b); border-radius: var(--radius); padding: 20px 24px; color: #fff; display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap:wrap; gap:12px; }
+  .mgr-bkash .num { font-size: 22px; font-weight: 700; letter-spacing: 2px; }
+  .section-card { margin-bottom: 24px; }
+  /* Proof cards */
+  .proof-card { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 10px; background: #fff; }
+  .proof-card.unverified { border-left: 4px solid var(--accent); }
+  .proof-card.verified-card { border-left: 4px solid var(--primary); opacity:.85; }
+  .proof-card.rejected-card { border-left: 4px solid var(--danger); opacity:.75; }
+  .txn-badge { font-family: monospace; font-size:13px; background: #1a1a2e; color: #4ade80; padding: 3px 12px; border-radius: 20px; font-weight: 700; letter-spacing:.5px; }
+  .proof-actions { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .tabs { display: flex; gap: 4px; background: var(--border); border-radius: 10px; padding: 4px; margin-bottom: 20px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: 1; padding: 9px; border-radius: 7px; border: none; background: transparent; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer; color: var(--text-muted); transition: all .2s; }
+  .tab.active { background: #fff; color: var(--primary); box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .notification-dot { display:inline-block; background:var(--danger); color:#fff; font-size:11px; font-weight:700; min-width:18px; height:18px; border-radius:9px; text-align:center; line-height:18px; padding:0 4px; margin-left:4px; }
+  @media(max-width:768px) {
+    .nav-links { flex-wrap:wrap; gap:4px; }
+    .nav-links .btn { padding:6px 10px; font-size:12px; }
+    .tabs { overflow-x:auto; flex-wrap:nowrap; padding-bottom:6px; -webkit-overflow-scrolling:touch; }
+    .tab { flex-shrink:0; padding:8px 10px; font-size:12px; white-space:nowrap; }
+    .stat-card { padding:16px; }
+    .stat-value { font-size:22px !important; }
+    .modal { padding:20px 16px; }
+    .proof-actions { flex-direction:column; }
+    .proof-actions .btn { width:100%; justify-content:center; min-height:46px; font-size:14px; }
+    .grid-2 { grid-template-columns:1fr !important; }
+
+    /* Stats grid: 2 cols on tablet */
+    .grid-4 { grid-template-columns:repeat(2,1fr) !important; gap:10px; }
+
+    /* Proof cards */
+    .proof-card { padding:14px 12px; }
+  }
+
+  @media(max-width:500px) {
+    .mgr-bkash .num { font-size:18px; letter-spacing:1px; }
+
+    /* Container padding */
+    .container { padding:0 10px; }
+
+    /* Page header */
+    .page-header h1 { font-size:20px; }
+    .page-header p  { font-size:12px; }
+
+    /* Stats: 2 cols */
+    .grid-4 { grid-template-columns:repeat(2,1fr) !important; gap:8px; }
+    .stat-card { padding:12px; border-radius:10px; }
+    .stat-card .stat-icon { width:36px; height:36px; font-size:16px; margin-bottom:8px; }
+    .stat-card .stat-value { font-size:20px !important; }
+    .stat-card .stat-label { font-size:11px; }
+
+    /* Tabs: horizontal scroll, bigger tap targets */
+    .tabs { gap:4px; padding:4px; border-radius:10px; }
+    .tab  { padding:10px 12px; font-size:12px; border-radius:7px; min-height:40px; }
+
+    /* Modals: bottom sheet */
+    .modal-overlay { align-items:flex-end; padding:0; }
+    .modal {
+      border-radius:18px 18px 0 0 !important;
+      padding:22px 16px 32px !important;
+      max-width:100% !important;
+      width:100% !important;
+      max-height:85vh;
+      overflow-y:auto;
+    }
+
+    /* Proof cards full-width action buttons */
+    .proof-actions { flex-direction:column; gap:8px; }
+    .proof-actions .btn { width:100%; justify-content:center; min-height:48px; font-size:14px; }
+
+    /* Verify all button */
+    #verify-all-btn { width:100%; justify-content:center; min-height:44px; margin-top:8px; }
+
+    /* Due table: hide less important columns */
+    .due-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+
+    /* Section card padding */
+    .section-card > div { padding:14px 12px !important; }
+
+    /* Bulk action bar */
+    #bulk-action-bar { flex-direction:column; align-items:stretch; gap:8px; }
+    #bulk-action-bar .btn { width:100%; justify-content:center; min-height:44px; }
+
+    /* bKash box number */
+    .mgr-bkash .num { font-size:20px; }
+
+    /* Edit request cards */
+    .edit-req-card { padding:14px 12px; }
+    .edit-req-actions { flex-direction:column; gap:6px; }
+    .edit-req-actions .btn { width:100%; justify-content:center; min-height:44px; }
+
+    /* bKash panel responsive */
+    .bkash-propose-form { flex-direction:column; }
+    .bkash-propose-form .field { min-width:100%; }
+    #bkashProposeBtn { width:100%; justify-content:center; }
+
+    /* Cook sheet body */
+    #cook-sheet-body > div { flex-direction:column; }
+
+    /* Stats strip in ONP panel */
+    .onp-stats { flex-direction:column; gap:8px; }
+    .onp-stat { border-right:none; padding-right:0; margin-right:0; border-bottom:1px solid rgba(229,62,62,0.2); padding-bottom:8px; }
+    .onp-stat:last-child { border-bottom:none; }
+  }
+
+  /* ── Extra small: 380px and below ── */
+  @media(max-width:380px) {
+    .tab { padding:8px 8px; font-size:11px; }
+    .stat-card .stat-value { font-size:18px !important; }
+    .section-title { font-size:14px; }
+    td, th { font-size:12px; padding:8px 8px; }
+  }
+
+  /* Mobile hamburger menu */
+  #nav-hamburger { display:none; background:none; border:1.5px solid var(--border); border-radius:8px; padding:7px 10px; cursor:pointer; color:var(--text-muted); font-size:18px; }
+  @media(max-width:600px) {
+    #nav-hamburger { display:flex; align-items:center; justify-content:center; }
+    .nav-links { display:none; flex-direction:column; position:absolute; top:60px; left:0; right:0; background:var(--nav-bg,#fff); border-bottom:1px solid var(--nav-border,#e2e8f0); padding:10px 16px 14px; gap:8px; z-index:200; box-shadow:0 8px 24px rgba(0,0,0,0.1); }
+    .nav-links.open { display:flex; }
+    .nav-links .btn { width:100%; justify-content:flex-start; font-size:14px; padding:11px 16px; }
+  }
+  nav { position:relative; }
+</style>
+<nav>
+  <div class="nav-inner">
+    <div class="nav-brand">
+      <div class="logo">🍽️</div>
+      <div style="min-width:0">
+        <div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ session.name }}</div>
+        <div style="font-size:11px;color:var(--text-muted);font-weight:500;margin-top:1px;display:flex;align-items:center;gap:6px">
+          <span style="background:var(--primary);color:#fff;padding:1px 7px;border-radius:20px;font-size:10px;font-weight:700">{{ mgr_id }}</span>
+          {% if mgr_roll %}<span style="color:var(--text-muted)">Roll: <strong style="color:var(--primary)">{{ mgr_roll }}</strong></span>{% endif %}
+        </div>
+      </div>
+    </div>
+    <button id="nav-hamburger" onclick="document.getElementById('nav-menu').classList.toggle('open')" aria-label="Menu">
+      <i class="fas fa-bars"></i>
+    </button>
+    <div class="nav-links" id="nav-menu">
+      <button class="btn btn-outline btn-sm" onclick="showTransferLockedMsg()" style="opacity:.55;cursor:not-allowed" title="Manager transfer is handled by the Admin panel"><i class="fas fa-lock"></i> Transfer Role</button>
+      <button class="btn btn-outline btn-sm" onclick="closeNav();openHistoryModal()"><i class="fas fa-history"></i> History</button>
+      <a href="{{ url_for('manager_students') }}" class="btn btn-outline btn-sm"><i class="fas fa-users"></i> All Students</a>
+      <button class="btn btn-sm" style="background:linear-gradient(135deg,#1a6b3a,#2d9e5a);color:#fff;font-weight:700" onclick="closeNav();openBillModal()"><i class="fas fa-calculator"></i> Total Bill</button>
+      <a href="{{ url_for('manager_logout') }}" class="btn btn-outline btn-sm"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </div>
+  </div>
+</nav>
+<script>
+function closeNav() { document.getElementById('nav-menu').classList.remove('open'); }
+// Close menu when clicking outside
+document.addEventListener('click', function(e) {
+  const menu = document.getElementById('nav-menu');
+  const hamburger = document.getElementById('nav-hamburger');
+  if (menu.classList.contains('open') && !menu.contains(e.target) && !hamburger.contains(e.target)) {
+    menu.classList.remove('open');
+  }
+});
+</script>
+<button id="nmms-theme-btn" onclick="(function(){var h=document.documentElement,isDark=h.getAttribute('data-theme')==='dark';h.setAttribute('data-theme',isDark?'light':'dark');document.getElementById('nmms-theme-btn').textContent=isDark?'🌙':'☀️';localStorage.setItem('nmms-theme',isDark?'light':'dark');})()" title="Toggle dark/light mode">🌙</button>
+<script>
+(function(){
+  var saved=localStorage.getItem('nmms-theme')||'light';
+  document.documentElement.setAttribute('data-theme',saved);
+  var btn=document.getElementById('nmms-theme-btn');
+  if(btn)btn.textContent=saved==='dark'?'☀️':'🌙';
+  // observe for late init
+  var obs=new MutationObserver(function(){
+    var b=document.getElementById('nmms-theme-btn');
+    if(b){b.textContent=document.documentElement.getAttribute('data-theme')==='dark'?'☀️':'🌙';obs.disconnect();}
+  });
+  obs.observe(document.body,{childList:true,subtree:true});
+})();
+</script>
+
+<div class="container">
+  <div class="page-header">
+    <h1>Meal Manager Dashboard</h1>
+    <p>Netrokona Medical College — Meal Management System &nbsp;·&nbsp; <span id="live-date" style="color:var(--primary);font-weight:600"></span></p>
+  </div>
+
+
+
+
+  <!-- bKash info -->
+  <div class="mgr-bkash">
+    <div>
+      <div style="font-size:13px;opacity:.85;margin-bottom:4px"><i class="fas fa-mobile-alt"></i> Your bKash Number (students send here)</div>
+      <div class="num">{{ mgr_bkash }}</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:13px;opacity:.85">Per meal: ৳50</div>
+      {% if pending_payments %}
+      <div style="margin-top:6px;background:rgba(255,255,255,.25);padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700">
+        <i class="fas fa-bell"></i> {{ pending_payments|length }} payment(s) need verification
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="grid-4" style="margin-bottom:28px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+    <div class="stat-card">
+      <div class="stat-icon green"><i class="fas fa-users"></i></div>
+      <div class="stat-value">{{ total_students }}</div>
+      <div class="stat-label">Total Students</div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <span class="badge" style="background:#e6f0ff;color:#3b5fe2;font-size:11px"><i class="fas fa-mars"></i> {{ male_count }} Male</span>
+        <span class="badge" style="background:#fce4ec;color:#c2185b;font-size:11px"><i class="fas fa-venus"></i> {{ female_count }} Female</span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue"><i class="fas fa-sun"></i></div>
+      <div class="stat-value">{{ today_lunch }}</div>
+      <div class="stat-label">Today's Lunch</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon yellow"><i class="fas fa-moon"></i></div>
+      <div class="stat-value">{{ today_dinner }}</div>
+      <div class="stat-label">Today's Dinner</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon red"><i class="fas fa-taka-sign"></i></div>
+      <div class="stat-value" id="stat-pending-amount">৳{{ "%.0f"|format(pending_amount) }}</div>
+      <div class="stat-label">Total Receivable</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange"><i class="fas fa-check-circle"></i></div>
+      <div class="stat-value" style="color:#e65100" id="stat-total-received">৳{{ "%.0f"|format(total_received) }}</div>
+      <div class="stat-label">Total Received</div>
+    </div>
+  </div>
+  <!-- Due payments are no longer available: banner removed -->
+
+  <!-- DUTY ROSTER SUMMARY CARD -->
+  <div class="card" id="duty-roster-card" style="overflow:hidden;margin-bottom:20px;border-left:4px solid var(--primary)">
+    <div style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:20px">🗓️</span>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:var(--text)">This Week's Duty Roster</div>
+          <div style="font-size:12px;color:var(--text-muted)" id="roster-week-label">Loading…</div>
+        </div>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="showTab('rotation');loadRotation()"><i class="fas fa-pencil"></i> Edit Schedule</button>
+    </div>
+    <div id="duty-roster-slots" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0;border-top:1px solid var(--border)">
+      <!-- filled by JS -->
+    </div>
+    <div id="duty-on-today" style="display:none;background:var(--primary-pale);border-top:1px solid #b7e4c7;padding:11px 20px;font-size:13px;color:var(--primary);font-weight:600">
+      <i class="fas fa-user-check"></i> <span id="duty-on-today-text"></span>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" id="cook-tab-btn" onclick="showTab('cook')"><i class="fas fa-utensils"></i> Cook Sheet</button>
+    <button class="tab" onclick="showTab('payments')">
+      <i class="fas fa-mobile-alt"></i> bKash Payment Proofs
+      {% if pending_payments %}<span class="notification-dot">{{ pending_payments|length }}</span>{% endif %}
+    </button>
+    <button class="tab" onclick="showTab('cash')" id="cash-tab-btn"><i class="fas fa-money-bill-wave"></i> Cash Requests <span class="notification-dot" id="cash-dot" style="display:none">0</span></button>
+    <button class="tab" onclick="showTab('floors')"><i class="fas fa-building"></i> Floor Breakdown</button>
+    <button class="tab" onclick="showTab('weekly')"><i class="fas fa-chart-bar"></i> Weekly Summary</button>
+    <button class="tab" onclick="showTab('verified')"><i class="fas fa-check-circle"></i> Verified</button>
+    <button class="tab" onclick="showTab('locked')" id="locked-tab-btn"><i class="fas fa-lock"></i> Locked Accounts {% if locked_students %}<span style="background:#e53e3e;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px">{{ locked_students|length }}</span>{% endif %}</button>
+    <button class="tab" onclick="showTab('rotation');loadBkashProposals()"><i class="fas fa-rotate"></i> Duty Rotation</button>
+    <button class="tab" onclick="showTab('weekly_orders');loadNonOrderers()"><i class="fas fa-calendar-xmark"></i> Weekly Orders</button>
+    <button class="tab" id="edit-req-tab-btn" onclick="showTab('edit_requests');loadEditRequests()"><i class="fas fa-pen-to-square"></i> Meal Edits <span class="notification-dot" id="edit-req-dot" style="display:none">0</span></button>
+    <button class="tab" id="unpaid-tab-btn" onclick="showTab('unpaid_orders');loadUnpaidOrders()"><i class="fas fa-clock"></i> Ordered, Not Paid <span class="notification-dot" id="unpaid-dot" style="display:none">0</span></button>
+  </div>
+
+  <!-- PAYMENT PROOFS TAB -->
+  <div id="tab-payments" class="tab-panel">
+
+
+    <div class="card section-card" style="overflow:hidden">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border)">
+        <div class="section-title" style="margin:0"><i class="fas fa-mobile-alt" style="color:var(--accent)"></i> bKash Payment Proofs</div>
+      </div>
+      <div style="padding:20px 24px">
+        {% if pending_payments %}
+          {% for p in pending_payments %}
+          <div class="proof-card unverified" id="proof-{{ p.id }}">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+              <div style="flex:1">
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+                  <strong style="font-size:15px">{{ p.student_name }}</strong>
+                  <span class="badge badge-green">{{ p.roll_number }}</span>
+                  <span style="font-size:13px;color:var(--text-muted)">{{ p.batch }}</span>
+                </div>
+                <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span style="font-size:13px;color:var(--text-muted)">Transaction ID:</span>
+                  <span class="txn-badge">{{ p.bkash_txn }}</span>
+                </div>
+                <div style="font-size:13px;color:var(--text-muted);margin-bottom:4px">
+                  <i class="fas fa-taka-sign"></i> <strong style="color:var(--text);font-size:16px">৳{{ "%.0f"|format(p.amount) }}</strong>
+                  &nbsp;·&nbsp;<i class="fas fa-calendar"></i> {{ p.payment_date }}
+                  &nbsp;·&nbsp;<i class="fas fa-mobile-alt"></i> Student bKash: <strong>{{ p.student_bkash }}</strong>
+                </div>
+                {% if p.screenshot_note %}
+                <div style="font-size:13px;background:#f8fafc;border-radius:6px;padding:8px 12px;margin-top:8px;color:var(--text-muted)">
+                  <i class="fas fa-comment"></i> {{ p.screenshot_note }}
+                </div>
+                {% endif %}
+              </div>
+            </div>
+            <div class="proof-actions">
+              <button class="btn btn-primary btn-sm" onclick="verifyPayment({{ p.id }},'{{ p.roll_number }}',this)">
+                <i class="fas fa-check"></i> Verify & Mark Paid
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="rejectPayment({{ p.id }},this)">
+                <i class="fas fa-times"></i> Reject
+              </button>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div style="text-align:center;color:var(--text-muted);padding:40px 0">
+            <div style="font-size:40px;margin-bottom:10px">✅</div>
+            <div>No pending payment proofs. All clear!</div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- CASH REQUESTS TAB -->
+  <div id="tab-cash" class="tab-panel">
+    <div class="card section-card" style="overflow:hidden">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border)">
+        <div class="section-title" style="margin:0"><i class="fas fa-money-bill-wave" style="color:var(--primary)"></i> Cash Payment Requests from Students</div>
+      </div>
+      <div style="padding:20px 24px" id="cash-requests-container">
+        <div style="text-align:center;color:var(--text-muted);padding:40px 0">
+          <div style="font-size:36px;margin-bottom:10px">⏳</div>
+          <div>Loading cash requests...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Due Students tab hidden: due payment option removed from the system -->
+  <div id="tab-dues" class="tab-panel" style="display:none!important">
+    <div class="card section-card" style="overflow:hidden">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px">
+          <div class="section-title" style="margin:0"><i class="fas fa-clock" style="color:var(--danger)"></i> Students with Pending / Due Payments</div>
+          {% if students_due %}
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:13px;color:var(--text-muted)"><span id="bulk-visible-count">{{ students_due|length }}</span> students</span>
+          </div>
+          {% endif %}
+        </div>
+
+        {% if students_due %}
+        <!-- Bulk Action Bar -->
+        <div id="bulk-action-bar" style="background:linear-gradient(135deg,var(--primary-pale),#fff8e6);border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+            <div style="font-size:13px;font-weight:600;color:var(--text)">
+              <i class="fas fa-layer-group" style="color:var(--primary)"></i>&nbsp;
+              Total Due:&nbsp;<strong style="color:var(--danger);font-size:15px">৳{{ "%.0f"|format(students_due|sum(attribute='due')) }}</strong>
+              &nbsp;·&nbsp;
+              <span style="color:var(--text-muted)">{{ students_due|length }} students</span>
+              &nbsp;·&nbsp;
+              <span style="color:var(--text-muted)">{{ students_due|sum(attribute='meals') }} meals</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-accent btn-sm" id="bulk-collect-btn" onclick="collectAllDue(this)" title="Mark all 'Has Due' students as collected in person">
+              <i class="fas fa-hand-holding-dollar"></i> Collect All Dues
+            </button>
+            <button class="btn btn-primary btn-sm" id="bulk-paid-btn" onclick="markAllPaid(this)" title="Mark all visible students as fully paid">
+              <i class="fas fa-check-double"></i> Mark All Paid
+            </button>
+          </div>
+        </div>
+        {% endif %}
+
+        <div class="search-box">
+          <input type="text" id="search" placeholder="Search by name or roll number..." oninput="filterTable()">
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table id="due-table">
+          <thead><tr><th>Name</th><th>Roll No.</th><th>Batch</th><th>bKash</th><th>Meals</th><th>Due Amount</th><th>Type</th><th>Action</th></tr></thead>
+          <tbody>
+            {% for s in students_due %}
+            <tr>
+              <td><strong>{{ s.name }}</strong></td>
+              <td><span class="badge badge-green">{{ s.roll_number }}</span></td>
+              <td>{{ s.batch }}</td>
+              <td>{{ s.bkash_number }}</td>
+              <td>{{ s.meals }}</td>
+              <td><strong style="color:var(--danger)">৳{{ "%.0f"|format(s.due or 0) }}</strong></td>
+              <td>
+                {% if s.due_meals > 0 %}
+                <span class="badge badge-yellow"><i class="fas fa-clock"></i> Has Due</span>
+                {% else %}
+                <span class="badge badge-red">Pending</span>
+                {% endif %}
+              </td>
+              <td style="display:flex;gap:6px;flex-wrap:wrap">
+                {% if s.due_meals > 0 %}
+                <button class="btn btn-accent btn-sm" onclick="collectDue('{{ s.roll_number }}',this)" title="Mark due meals collected in person">
+                  <i class="fas fa-hand-holding-dollar"></i> Collected
+                </button>
+                {% endif %}
+                <button class="btn btn-primary btn-sm" onclick="markPaid('{{ s.roll_number }}',this)">
+                  <i class="fas fa-check"></i> Mark Paid
+                </button>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:32px">🎉 All students are paid up!</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- FLOOR BREAKDOWN TAB -->
+  <div id="tab-floors" class="tab-panel">
+    <!-- Gender Summary Cards -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+      <div class="stat-card" style="border-left:4px solid #3b5fe2">
+        <div style="display:flex;align-items:center;gap:14px">
+          <div class="stat-icon" style="background:#e6f0ff;color:#3b5fe2;margin-bottom:0"><i class="fas fa-mars" style="font-size:22px"></i></div>
+          <div>
+            <div class="stat-value" style="font-size:32px">{{ male_count }}</div>
+            <div class="stat-label">Male Students</div>
+          </div>
+        </div>
+        {% if total_students > 0 %}
+        <div class="progress-bar" style="margin-top:12px">
+          <div class="progress-fill" style="width:{{ (male_count/total_students*100)|int }}%;background:#3b5fe2"></div>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px">{{ (male_count/total_students*100)|int }}% of total</div>
+        {% endif %}
+      </div>
+      <div class="stat-card" style="border-left:4px solid #c2185b">
+        <div style="display:flex;align-items:center;gap:14px">
+          <div class="stat-icon" style="background:#fce4ec;color:#c2185b;margin-bottom:0"><i class="fas fa-venus" style="font-size:22px"></i></div>
+          <div>
+            <div class="stat-value" style="font-size:32px">{{ female_count }}</div>
+            <div class="stat-label">Female Students</div>
+          </div>
+        </div>
+        {% if total_students > 0 %}
+        <div class="progress-bar" style="margin-top:12px">
+          <div class="progress-fill" style="width:{{ (female_count/total_students*100)|int }}%;background:#c2185b"></div>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px">{{ (female_count/total_students*100)|int }}% of total</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Floor-wise Student & Meal Table -->
+    <div class="card section-card" style="overflow:hidden">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border)">
+        <div class="section-title" style="margin:0"><i class="fas fa-building" style="color:var(--primary)"></i> Male Hostel — Floor-wise Breakdown</div>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Floor</th>
+              <th>Total Students</th>
+              <th><i class="fas fa-mars" style="color:#3b5fe2"></i> Male</th>
+              <th>Today's Lunch</th>
+              <th>Today's Dinner</th>
+              <th>View</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% set male_floors = floor_breakdown | rejectattr('floor', 'equalto', none) | list %}
+            {% for fb in male_floors %}
+            {% set fm_list = floor_meals_today | selectattr('floor', 'equalto', fb.floor) | list %}
+            {% set fm = fm_list[0] if fm_list else none %}
+            <tr>
+              <td><span class="badge badge-green" style="font-size:13px"><i class="fas fa-layer-group"></i> Floor {{ fb.floor }}</span></td>
+              <td><strong>{{ fb.males }}</strong></td>
+              <td><span style="color:#3b5fe2;font-weight:600">{{ fb.males }}</span></td>
+              <td>
+                {% if fm %}{{ fm.lunch }}{% else %}0{% endif %}
+                <div class="progress-bar"><div class="progress-fill" style="width:{{ ([fm.lunch if fm else 0,1]|max / [fb.males,1]|max * 100)|int }}%"></div></div>
+              </td>
+              <td>
+                {% if fm %}{{ fm.dinner }}{% else %}0{% endif %}
+                <div class="progress-bar"><div class="progress-fill" style="width:{{ ([fm.dinner if fm else 0,1]|max / [fb.males,1]|max * 100)|int }}%;background:var(--accent)"></div></div>
+              </td>
+              <td>
+                <button class="btn btn-sm" style="background:#3b5fe2;color:#fff;white-space:nowrap"
+                  onclick="openFloorModal('male', {{ fb.floor }})">
+                  <i class="fas fa-users"></i> Students
+                </button>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">No male students registered yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Female Students Section — Hostel Breakdown -->
+    <div class="card section-card" style="overflow:hidden;margin-top:16px;border-left:4px solid #c2185b">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div class="section-title" style="margin:0"><i class="fas fa-venus" style="color:#c2185b"></i> Female Students</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="badge" style="background:#fce4ec;color:#c2185b;font-size:14px">{{ female_count }} students</span>
+          <button class="btn btn-sm" style="background:#c2185b;color:#fff;white-space:nowrap"
+            onclick="openFloorModal('female', 1)">
+            <i class="fas fa-home"></i> Campus
+          </button>
+          <button class="btn btn-sm" style="background:#ad1457;color:#fff;white-space:nowrap"
+            onclick="openFloorModal('female', 2)">
+            <i class="fas fa-home"></i> Sentu House
+          </button>
+          <button class="btn btn-sm" style="background:#880e4f;color:#fff;white-space:nowrap"
+            onclick="openFloorModal('female', 3)">
+            <i class="fas fa-home"></i> Chairman House
+          </button>
+          <button class="btn btn-sm" style="background:#fce4ec;color:#c2185b;border:1px solid #f48fb1;white-space:nowrap"
+            onclick="openFloorModal('female', null)">
+            <i class="fas fa-users"></i> All Female
+          </button>
+        </div>
+      </div>
+      <div style="padding:20px 24px">
+        <!-- Today's meal summary -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+          <div style="background:#fce4ec;border-radius:10px;padding:16px;text-align:center">
+            <div style="font-size:13px;color:#c2185b;font-weight:600;margin-bottom:4px"><i class="fas fa-sun"></i> Today's Lunch</div>
+            <div style="font-size:28px;font-weight:700;color:#c2185b">{{ female_lunch_today }}</div>
+            <div style="font-size:12px;color:#880e4f;margin-bottom:8px">out of {{ female_count }} female students</div>
+            {% if female_count > 0 %}
+            <div class="progress-bar"><div class="progress-fill" style="width:{{ (female_lunch_today/female_count*100)|int }}%;background:#c2185b"></div></div>
+            <div style="font-size:11px;color:#c2185b;margin-top:3px">{{ (female_lunch_today/female_count*100)|int }}%</div>
+            {% endif %}
+          </div>
+          <div style="background:#fce4ec;border-radius:10px;padding:16px;text-align:center">
+            <div style="font-size:13px;color:#c2185b;font-weight:600;margin-bottom:4px"><i class="fas fa-moon"></i> Today's Dinner</div>
+            <div style="font-size:28px;font-weight:700;color:#c2185b">{{ female_dinner_today }}</div>
+            <div style="font-size:12px;color:#880e4f;margin-bottom:8px">out of {{ female_count }} female students</div>
+            {% if female_count > 0 %}
+            <div class="progress-bar"><div class="progress-fill" style="width:{{ (female_dinner_today/female_count*100)|int }}%;background:#c2185b"></div></div>
+            <div style="font-size:11px;color:#c2185b;margin-top:3px">{{ (female_dinner_today/female_count*100)|int }}%</div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Hostel breakdown table -->
+        {% if female_count > 0 %}
+        {% set hostels = [(1,'Campus'),(2,'Sentu House'),(3,'Chairman House')] %}
+        <div style="overflow-x:auto;border-radius:10px;border:1px solid var(--border)">
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr>
+                <th style="padding:10px 14px;background:#fce4ec;color:#880e4f;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;text-align:left">Hostel</th>
+                <th style="padding:10px 14px;background:#fce4ec;color:#880e4f;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;text-align:center">Students</th>
+                <th style="padding:10px 14px;background:#fce4ec;color:#880e4f;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;text-align:center">Lunch Today</th>
+                <th style="padding:10px 14px;background:#fce4ec;color:#880e4f;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;text-align:center">Dinner Today</th>
+                <th style="padding:10px 14px;background:#fce4ec;color:#880e4f;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;text-align:center">View</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for hostel_num, hostel_name in hostels %}
+              {# Direct dict lookup — no loop, no type mismatch #}
+              {% set hdata = female_hostels_by_num.get(hostel_num, {'student_count':0,'lunch_today':0,'dinner_today':0}) %}
+              <tr style="border-top:1px solid var(--border)">
+                <td style="padding:12px 14px">
+                  <span style="background:#fce4ec;color:#c2185b;border-radius:8px;padding:3px 10px;font-weight:700;font-size:12px">
+                    <i class="fas fa-home"></i> {{ hostel_num }}
+                  </span>
+                  <strong style="margin-left:8px">{{ hostel_name }}</strong>
+                </td>
+                <td style="padding:12px 14px;text-align:center">
+                  <span style="font-size:18px;font-weight:700;color:#c2185b">{{ hdata.student_count }}</span>
+                </td>
+                <td style="padding:12px 14px;text-align:center">
+                  <span style="font-size:15px;font-weight:600;color:#c2185b">{{ hdata.lunch_today }}</span>
+                </td>
+                <td style="padding:12px 14px;text-align:center">
+                  <span style="font-size:15px;font-weight:600;color:#c2185b">{{ hdata.dinner_today }}</span>
+                </td>
+                <td style="padding:12px 14px;text-align:center">
+                  <button class="btn btn-sm" style="background:#fce4ec;color:#c2185b;border:1px solid #f48fb1"
+                    onclick="openFloorModal('female', {{ hostel_num }})">
+                    <i class="fas fa-users"></i> View
+                  </button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div style="text-align:center;color:var(--text-muted);padding:24px">No female students registered yet.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- WEEKLY SUMMARY TAB -->
+  <div id="tab-weekly" class="tab-panel">
+    <div class="card section-card" style="overflow:hidden">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div class="section-title" style="margin:0"><i class="fas fa-chart-bar" style="color:var(--primary)"></i> 7-Day Meal Summary</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-danger btn-sm" onclick="clearWeekly()"><i class="fas fa-trash"></i> Clear Old Data (7d)</button>
+          <button class="btn btn-sm" style="background:#7c3aed;color:#fff" onclick="resetAllMeals()"><i class="fas fa-rotate-left"></i> Reset All Meal Data</button>
+        </div>
+      </div>
+      <div class="week-table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Lunch</th><th>Dinner</th><th>Total Meals</th><th>Revenue</th></tr></thead>
+          <tbody>
+            {% for w in weekly %}
+            <tr>
+              <td><strong>{{ w.date }}</strong></td>
+              <td>
+                {{ w.lunch }}
+                <div class="progress-bar"><div class="progress-fill" style="width:{{ [w.lunch/20*100,100]|min }}%;background:var(--primary)"></div></div>
+              </td>
+              <td>
+                {{ w.dinner }}
+                <div class="progress-bar"><div class="progress-fill" style="width:{{ [w.dinner/20*100,100]|min }}%;background:var(--accent)"></div></div>
+              </td>
+              <td><span class="badge badge-green">{{ w.lunch + w.dinner }}</span></td>
+              <td><strong>৳{{ "%.0f"|format(w.total_amount) }}</strong></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- VERIFIED PAYMENTS TAB -->
+  <div id="tab-verified" class="tab-panel">
+    <div class="card section-card" style="overflow:hidden">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div class="section-title" style="margin:0"><i class="fas fa-check-circle" style="color:var(--primary)"></i> Verified Payments</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="text" id="verified-search" placeholder="Search name or roll..." oninput="filterVerified()"
+            style="padding:8px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;width:200px">
+          <button class="btn btn-outline btn-sm" onclick="printVerified()"><i class="fas fa-print"></i> Print All</button>
+        </div>
+      </div>
+      <div style="padding:20px 24px" id="verified-list">
+        {% if verified_payments %}
+          {% for p in verified_payments %}
+          <div class="proof-card verified-card" data-search="{{ p.student_name|lower }} {{ p.roll_number|lower }}">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+              <div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+                  <strong>{{ p.student_name }}</strong>
+                  <span class="badge badge-green">{{ p.roll_number }}</span>
+                  <span style="color:var(--text-muted);font-size:13px">{{ p.batch }}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span class="txn-badge">{{ p.bkash_txn }}</span>
+                  <strong style="color:var(--primary)">৳{{ "%.0f"|format(p.amount) }}</strong>
+                  <span style="font-size:12px;color:var(--text-muted)"><i class="fas fa-calendar"></i> {{ p.payment_date }}</span>
+                </div>
+                {% if p.screenshot_note %}
+                <div style="font-size:12px;color:var(--text-muted);margin-top:4px"><i class="fas fa-comment"></i> {{ p.screenshot_note }}</div>
+                {% endif %}
+              </div>
+              <div style="text-align:right">
+                <span class="badge badge-green"><i class="fas fa-check-circle"></i> Verified</span>
+                {% if p.verified_by %}
+                <div style="font-size:12px;color:var(--text-muted);margin-top:4px">by {{ p.verified_by }}</div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+          <div id="verified-empty-msg" style="display:none;text-align:center;color:var(--text-muted);padding:24px">No results match your search.</div>
+        {% else %}
+          <div style="text-align:center;color:var(--text-muted);padding:40px 0">
+            <div style="font-size:40px;margin-bottom:10px">📋</div>
+            <div>No verified payments yet.</div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- LOCKED ACCOUNTS TAB -->
+  <div id="tab-locked" class="tab-panel">
+    <div class="card section-card" style="overflow:hidden;border-top:3px solid var(--danger)">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div class="section-title" style="margin:0;color:var(--danger)"><i class="fas fa-lock"></i> Locked Student Accounts</div>
+        <span class="badge badge-red">{{ locked_students|length }} locked</span>
+      </div>
+      <div style="padding:16px 24px;background:var(--danger-light);border-bottom:1px solid #feb2b2;font-size:13px;color:var(--danger);display:flex;gap:10px;align-items:flex-start">
+        <i class="fas fa-exclamation-circle" style="margin-top:1px;flex-shrink:0"></i>
+        <span>These students have unpaid dues older than <strong>7 days</strong> and are blocked from logging in. Review their dues and unlock their account once payment is resolved.</span>
+      </div>
+      {% if locked_students %}
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Roll No.</th>
+              <th>Batch</th>
+              <th>bKash</th>
+              <th>Outstanding Due</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in locked_students %}
+            <tr id="locked-row-{{ s.roll_number | replace(' ','_') }}">
+              <td><strong>{{ s.name }}</strong></td>
+              <td>{{ s.roll_number }}</td>
+              <td><span class="badge badge-green">{{ s.batch }}</span></td>
+              <td>{{ s.bkash_number }}</td>
+              <td><strong style="color:var(--danger)">৳{{ "%.0f"|format(s.due_total or 0) }}</strong></td>
+              <td>
+                <button class="btn btn-sm" style="background:var(--primary);color:#fff"
+                  onclick="unlockStudent('{{ s.roll_number }}', this)">
+                  <i class="fas fa-unlock"></i> Unlock
+                </button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div style="text-align:center;color:var(--text-muted);padding:48px 0">
+        <div style="font-size:44px;margin-bottom:10px">🔓</div>
+        <div style="font-size:15px;font-weight:600">No locked accounts</div>
+        <div style="font-size:13px;margin-top:4px">All students are in good standing.</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- WEEKLY ORDERS / LOCK TAB -->
+  <div id="tab-weekly_orders" class="tab-panel">
+    <div class="card section-card" style="overflow:hidden;border-top:3px solid #f59e0b;margin-bottom:16px">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div>
+          <div class="section-title" style="margin:0;color:#d97706"><i class="fas fa-calendar-xmark"></i> Weekly Meal Orders</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:3px" id="non-order-week-label">Current week</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-sm" style="background:#e53e3e;color:#fff" onclick="autoLockNonOrderers()" id="auto-lock-btn">
+            <i class="fas fa-lock"></i> Auto-Lock Non-Orderers
+          </button>
+          <button class="btn btn-outline btn-sm" onclick="unlockAllOrdering()" id="unlock-all-btn">
+            <i class="fas fa-unlock"></i> Unlock All
+          </button>
+          <button class="btn btn-outline btn-sm" onclick="loadNonOrderers()">
+            <i class="fas fa-refresh"></i> Refresh
+          </button>
+        </div>
+      </div>
+      <!-- Info box -->
+      <div style="padding:12px 24px;background:#fffbeb;border-bottom:1px solid #fde68a;font-size:13px;color:#92400e;display:flex;gap:10px;align-items:flex-start">
+        <i class="fas fa-circle-info" style="margin-top:1px;flex-shrink:0;color:#d97706"></i>
+        <span>
+          Students who haven't placed <strong>any meal order</strong> for this week (Mon–Sun) are listed below.
+          You can lock their ordering individually, or use <strong>Auto-Lock</strong> to lock all non-orderers at once.
+          Lock resets automatically when you click <strong>Unlock All</strong> — or unlock one by one.
+          Locked students see a notice on their dashboard and cannot place new orders until unlocked.
+        </span>
+      </div>
+      <!-- Stats row -->
+      <div style="display:flex;gap:0;border-bottom:1px solid var(--border)">
+        <div style="flex:1;padding:16px 20px;text-align:center;border-right:1px solid var(--border)">
+          <div style="font-size:24px;font-weight:700;color:var(--text)" id="wo-total-count">—</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Total Students</div>
+        </div>
+        <div style="flex:1;padding:16px 20px;text-align:center;border-right:1px solid var(--border)">
+          <div style="font-size:24px;font-weight:700;color:#16a34a" id="wo-ordered-count">—</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Ordered This Week</div>
+        </div>
+        <div style="flex:1;padding:16px 20px;text-align:center;border-right:1px solid var(--border)">
+          <div style="font-size:24px;font-weight:700;color:#d97706" id="wo-noorder-count">—</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Haven't Ordered</div>
+        </div>
+        <div style="flex:1;padding:16px 20px;text-align:center">
+          <div style="font-size:24px;font-weight:700;color:#e53e3e" id="wo-locked-count">—</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Ordering Locked</div>
+        </div>
+      </div>
+      <!-- Non-orderers table -->
+      <div id="wo-table-wrap" style="overflow-x:auto;min-height:80px">
+        <div style="text-align:center;padding:40px;color:var(--text-muted)" id="wo-loading">
+          <i class="fas fa-spinner fa-spin" style="font-size:24px"></i>
+          <div style="margin-top:8px">Loading...</div>
+        </div>
+        <table id="wo-table" style="display:none">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Roll</th>
+              <th>Batch</th>
+              <th>Gender</th>
+              <th>Status</th>
+              <th style="text-align:right">Action</th>
+            </tr>
+          </thead>
+          <tbody id="wo-tbody"></tbody>
+        </table>
+        <div id="wo-empty" style="display:none;text-align:center;padding:48px;color:var(--text-muted)">
+          <div style="font-size:44px;margin-bottom:10px">🎉</div>
+          <div style="font-size:15px;font-weight:600">All students have ordered this week!</div>
+          <div style="font-size:13px;margin-top:4px">No non-orderers found.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- All locked students (ordering lock) -->
+    <div class="card section-card" style="overflow:hidden;border-top:3px solid #e53e3e">
+      <div style="padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div class="section-title" style="margin:0;color:var(--danger)"><i class="fas fa-lock"></i> Currently Ordering-Locked Students</div>
+        <span class="badge badge-red" id="wo-locked-badge">0 locked</span>
+      </div>
+      <div id="wo-locked-wrap" style="overflow-x:auto">
+        <div id="wo-locked-empty" style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px">
+          <i class="fas fa-unlock" style="font-size:24px;margin-bottom:6px;display:block;opacity:.4"></i>
+          No students are ordering-locked right now.
+        </div>
+        <table id="wo-locked-table" style="display:none">
+          <thead>
+            <tr><th>#</th><th>Name</th><th>Roll</th><th>Batch</th><th>Gender</th><th style="text-align:right">Action</th></tr>
+          </thead>
+          <tbody id="wo-locked-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div><!-- end tab-weekly_orders -->
+
+  <!-- DUTY ROTATION TAB -->
+  <div id="tab-rotation" class="tab-panel">
+
+    <!-- ── bKash Collection Number (merged into Duty Rotation tab) ─────── -->
+    <div class="my-bkash-card" style="margin-bottom:24px">
+      <div class="my-bkash-card-header">
+        <div class="icon"><i class="fas fa-mobile-alt"></i></div>
+        <div>
+          <div style="font-size:15px;font-weight:700;color:var(--text)">Change bKash Collection Number</div>
+          <div style="font-size:13px;color:var(--text-muted);margin-top:2px">
+            Current: <strong id="currentBkashHeader" style="color:#e2136e">{{ mgr_bkash }}</strong>
+            &nbsp;·&nbsp; If you are the only active manager, it changes instantly.
+            With multiple managers, only 2 approvals are needed.
+          </div>
+        </div>
+      </div>
+      <div class="bkash-body">
+        <div class="bkash-propose-form">
+          <div class="field">
+            <label>New bKash Number</label>
+            <input type="tel" id="newBkashInput" placeholder="01XXXXXXXXX" maxlength="11">
+          </div>
+          <button id="bkashProposeBtn" onclick="proposeBkash()">
+            <i class="fas fa-paper-plane"></i> Send / Apply
+          </button>
+        </div>
+        <p style="font-size:12px;color:var(--text-muted);margin-top:-10px">
+          <i class="fas fa-info-circle"></i>
+          Solo manager → changes immediately. Multiple managers → goes to a vote below.
+        </p>
+      </div>
+    </div>
+
+    <div class="bkash-panel" style="margin-bottom:24px">
+      <div class="bkash-panel-header">
+        <div class="bkash-panel-title">
+          <div class="bkash-icon"><i class="fas fa-vote-yea"></i></div>
+          <div>
+            <h3>Change Requests & Voting</h3>
+            <p>Any 2 active managers must approve a bKash change</p>
+          </div>
+        </div>
+        <div class="bkash-current-badge">
+          <i class="fas fa-circle" style="font-size:8px;color:#e2136e"></i>
+          Active: <span id="currentBkash">{{ mgr_bkash }}</span>
+        </div>
+      </div>
+      <div class="bkash-body">
+        <div class="proposals-title">Pending Votes</div>
+        <div id="bkashProposalsList">
+          <div class="bkash-empty"><i class="fas fa-inbox"></i>Loading...</div>
+        </div>
+        <div id="resolvedSection" style="display:none">
+          <div class="bkash-divider"></div>
+          <div class="proposals-title">Recent History</div>
+          <div class="resolved-list" id="resolvedList"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="overflow:hidden;margin-bottom:24px">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div class="section-title" style="margin:0"><i class="fas fa-rotate" style="color:var(--primary)"></i> Weekly Duty Rotation — 4 Managers × 7 Days</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-outline btn-sm" id="rotBtnThis" onclick="rotShowWeek('this')" style="font-weight:700"><i class="fas fa-calendar-check"></i> This Week</button>
+          <button class="btn btn-outline btn-sm" id="rotBtnNext" onclick="rotShowWeek('next')"><i class="fas fa-calendar-plus"></i> Next Week</button>
+          <button class="btn btn-primary btn-sm" onclick="saveRotation()"><i class="fas fa-save"></i> Save Schedule</button>
+          <button class="btn btn-sm" style="background:var(--danger-light);color:var(--danger);border:1px solid #feb2b2" onclick="clearRotationWeek()"><i class="fas fa-broom"></i> Clear Schedule</button>
+        </div>
+      </div>
+      <div style="padding:20px 24px">
+        <div id="rot-week-label" style="font-size:14px;font-weight:700;color:var(--text-muted);margin-bottom:16px"></div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;min-width:560px">
+            <thead>
+              <tr>
+                <th style="width:44px;text-align:center">Slot</th>
+                <th>Assigned Student</th>
+                <th style="width:130px;text-align:center">Days (Mon–Sun)</th>
+                <th style="width:170px">Note</th>
+                <th style="width:44px"></th>
+              </tr>
+            </thead>
+            <tbody id="rotation-tbody"></tbody>
+          </table>
+        </div>
+        <p style="font-size:12px;color:var(--text-muted);margin-top:12px"><i class="fas fa-info-circle"></i> Assign up to 4 students as duty managers. Day 1 = Monday, Day 7 = Sunday. Each slot covers a range of days within the week.</p>
+        <div id="rot-today-box" style="display:none;margin-top:20px;background:var(--primary-pale);border:1.5px solid #b7e4c7;border-radius:var(--radius-sm);padding:14px 18px">
+          <div style="font-size:12px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px"><i class="fas fa-calendar-day"></i> On Duty Today</div>
+          <div id="rot-today-name" style="font-size:17px;font-weight:700"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Student Picker for Rotation -->
+<div class="modal-overlay" id="rot-picker-modal" style="z-index:400">
+  <div class="modal" style="max-width:400px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <h3 style="font-size:17px"><i class="fas fa-user-plus" style="color:var(--primary)"></i> Pick a Student</h3>
+      <button onclick="closeRotPicker()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted)">×</button>
+    </div>
+    <input type="text" id="rot-search-input" placeholder="Search name or roll…" oninput="rotSearch(this.value)"
+      style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;margin-bottom:10px">
+    <div id="rot-search-results" style="max-height:280px;overflow-y:auto"></div>
+  </div>
+</div>
+
+
+<!-- ── bKASH TAB ──────────────────────────────────────────────────────────── -->
+<div class="container" style="padding-top:0">
+
+
+  <!-- MEAL EDIT REQUESTS TAB -->
+  <div id="tab-edit_requests" class="tab-panel">
+    <div class="card section-card" style="overflow:hidden">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div>
+          <div class="section-title" style="margin:0"><i class="fas fa-pen-to-square" style="color:var(--primary)"></i> Student Meal Edit Requests</div>
+          <p style="font-size:13px;color:var(--text-muted);margin-top:4px">Students requesting to add or cancel a specific meal. Approve or reject each request.</p>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="loadEditRequests()"><i class="fas fa-sync-alt"></i> Refresh</button>
+      </div>
+      <div id="edit-requests-list" style="padding:20px 24px">
+        <div style="text-align:center;color:var(--text-muted);padding:32px 0">
+          <i class="fas fa-spinner fa-spin" style="font-size:24px;margin-bottom:12px"></i>
+          <div>Loading requests…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       COOK'S DAILY SHEET TAB
+       ══════════════════════════════════════════════════════════════════════ -->
+  <div id="tab-cook" class="tab-panel active">
+    <div class="card section-card" style="overflow:hidden">
+
+      <!-- Header -->
+      <div style="background:var(--primary);padding:16px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:44px;height:44px;background:rgba(255,255,255,.2);border-radius:12px;display:grid;place-items:center;font-size:20px;flex-shrink:0">🍳</div>
+          <div>
+            <div style="font-size:16px;font-weight:700;color:#fff">Cook's Daily Sheet</div>
+            <div style="font-size:12px;color:rgba(255,255,255,.8)" id="cook-header-subtitle">Select a date to generate the sheet</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <input type="date" id="cook-date-input"
+            style="padding:8px 12px;border-radius:8px;border:1.5px solid rgba(255,255,255,.35);background:rgba(255,255,255,.15);color:#fff;font-family:var(--font-body);font-size:14px;font-weight:600;cursor:pointer"
+            onchange="loadCookSheet()">
+          <button onclick="loadCookSheet()" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:rgba(255,255,255,.2);border:1.5px solid rgba(255,255,255,.35);border-radius:8px;color:#fff;font-family:var(--font-body);font-size:13px;font-weight:600;cursor:pointer">
+            <i class="fas fa-sync-alt"></i> Refresh
+          </button>
+          <button onclick="printCookSheet()" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:#fff;border:none;border-radius:8px;color:var(--primary);font-family:var(--font-body);font-size:13px;font-weight:700;cursor:pointer">
+            <i class="fas fa-print"></i> Print for Cook
+          </button>
+        </div>
+      </div>
+
+      <!-- Sheet body -->
+      <div style="padding:20px 24px" id="cook-sheet-body">
+        <div style="text-align:center;color:var(--text-muted);padding:40px 0">
+          <div style="font-size:36px;margin-bottom:12px">🍳</div>
+          <div style="font-weight:700;margin-bottom:4px">Pick a date above</div>
+          <div style="font-size:13px">Today's sheet loads automatically.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ORDERED BUT NOT PAID TAB -->
+  <div id="tab-unpaid_orders" class="tab-panel">
+    <div class="card section-card" style="overflow:hidden">
+
+      <!-- Header -->
+      <div style="background:linear-gradient(135deg,#e53e3e,#c53030);padding:16px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:44px;height:44px;background:rgba(255,255,255,.2);border-radius:12px;display:grid;place-items:center;font-size:20px;flex-shrink:0">⏳</div>
+          <div>
+            <div style="font-size:16px;font-weight:700;color:#fff">Ordered But Not Paid</div>
+            <div style="font-size:12px;color:rgba(255,255,255,.85)" id="unpaid-subtitle">All students with unpaid meal orders</div>
+          </div>
+        </div>
+        <button onclick="loadUnpaidOrders()" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:rgba(255,255,255,.2);border:1.5px solid rgba(255,255,255,.35);border-radius:8px;color:#fff;font-family:var(--font-body);font-size:13px;font-weight:600;cursor:pointer">
+          <i class="fas fa-sync-alt"></i> Refresh
+        </button>
+      </div>
+
+      <!-- Summary bar -->
+      <div id="unpaid-summary-bar" style="display:none;background:#fff5f5;border-bottom:1px solid #fed7d7;padding:12px 24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:22px;font-weight:800;color:#e53e3e" id="unpaid-total-students">0</span>
+          <span style="font-size:13px;color:#c53030;font-weight:600">students</span>
+        </div>
+        <div style="width:1px;height:28px;background:#fed7d7"></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:22px;font-weight:800;color:#e53e3e" id="unpaid-total-orders">0</span>
+          <span style="font-size:13px;color:#c53030;font-weight:600">unpaid orders</span>
+        </div>
+        <div style="width:1px;height:28px;background:#fed7d7"></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:13px;color:#c53030;font-weight:600">Total owed:</span>
+          <span style="font-size:20px;font-weight:800;color:#e53e3e">৳<span id="unpaid-total-amount">0</span></span>
+        </div>
+      </div>
+
+      <!-- Table body -->
+      <div style="padding:20px 24px" id="unpaid-orders-body">
+        <div style="text-align:center;color:var(--text-muted);padding:40px 0">
+          <div style="font-size:36px;margin-bottom:12px">⏳</div>
+          <div style="font-weight:700;margin-bottom:4px">Click Refresh to load</div>
+          <div style="font-size:13px">Shows students who ordered meals but haven't submitted any payment.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- end container -->
+
+<style>
+  .edit-req-card {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 18px; border:1.5px solid var(--border); border-radius:var(--radius-sm);
+    margin-bottom:10px; gap:12px; flex-wrap:wrap; background:#f8fafc;
+    transition:border-color .2s;
+  }
+  .edit-req-card:hover { border-color:var(--primary); }
+  .edit-req-info { display:flex; align-items:center; gap:14px; min-width:0; }
+  .edit-req-icon { width:40px;height:40px;border-radius:10px;display:grid;place-items:center;font-size:18px;flex-shrink:0; }
+  .edit-req-icon.cancel { background:var(--danger-light);color:var(--danger); }
+  .edit-req-icon.add    { background:var(--primary-pale);color:var(--primary); }
+  .edit-req-details { min-width:0; }
+  .edit-req-name  { font-size:14px;font-weight:700;margin-bottom:2px; }
+  .edit-req-meta  { font-size:12px;color:var(--text-muted); }
+  .edit-req-reason { font-size:12px;color:#7a5c00;background:#fff8e6;border:1px solid #fcd97d;border-radius:6px;padding:4px 10px;margin-top:4px;display:inline-block; }
+  .edit-req-actions { display:flex;gap:8px;flex-shrink:0; }
+  .btn-approve { padding:8px 16px;border-radius:7px;border:none;background:var(--primary);color:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all .18s; }
+  .btn-approve:hover { background:var(--primary-light); }
+  .btn-reject  { padding:8px 16px;border-radius:7px;border:1.5px solid var(--danger);background:transparent;color:var(--danger);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all .18s; }
+  .btn-reject:hover { background:var(--danger);color:#fff; }
+  [data-theme="dark"] .edit-req-card { background:var(--input-bg) !important; }
+  [data-theme="dark"] .edit-req-reason { background:rgba(240,165,0,0.1) !important; border-color:rgba(240,165,0,0.3) !important; }
+</style>
+
+<script>
+function showTab(name) {
+  // Scope to .tabs > .tab only — avoids collision with floor sub-tabs inside panels
+  document.querySelectorAll('.tabs > .tab').forEach(t => {
+    const oc    = t.getAttribute('onclick') || '';
+    const match = oc.match(/showTab\('([^']+)'\)/);
+    if (match) t.classList.toggle('active', match[1] === name);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById('tab-' + name);
+  if (panel) panel.classList.add('active');
+  if (name === 'cash') loadCashRequests();
+  if (name === 'rotation') loadRotation();
+  if (name === 'cook') setTimeout(loadCookSheet, 50);  // small delay so panel is visible first
+  if (name === 'unpaid_orders') loadUnpaidOrders();
+}
+
+async function loadCashRequests() {
+  const container = document.getElementById('cash-requests-container');
+  try {
+    const r = await fetch('/manager/cash_requests');
+    const d = await r.json();
+    const requests = d.requests;
+    const dot = document.getElementById('cash-dot');
+    if (requests.length > 0) {
+      dot.style.display = '';
+      dot.textContent = requests.length;
+    } else {
+      dot.style.display = 'none';
+    }
+    if (requests.length === 0) {
+      container.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:40px 0"><div style="font-size:40px;margin-bottom:10px">✅</div><div>No pending cash payment requests.</div></div>`;
+      return;
+    }
+    container.innerHTML = requests.map(req => `
+      <div class="proof-card unverified" id="cashreq-${req.id}" style="border-left-color:var(--primary)">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+              <strong style="font-size:15px">${req.student_name}</strong>
+              <span class="badge badge-green">${req.roll_number}</span>
+              <span style="font-size:13px;color:var(--text-muted)">${req.batch}</span>
+            </div>
+            <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px">
+              <i class="fas fa-money-bill-wave" style="color:var(--primary)"></i> ৳${req.amount}
+              <span style="font-size:12px;font-weight:500;color:var(--text-muted);margin-left:8px">Cash Payment</span>
+            </div>
+            <div style="font-size:13px;color:var(--text-muted)">
+              <i class="fas fa-calendar"></i> ${req.requested_at.slice(0,10)}
+              &nbsp;·&nbsp;<i class="fas fa-mobile-alt"></i> bKash: ${req.bkash_number}
+            </div>
+            ${req.note ? `<div style="font-size:13px;background:#f8fafc;border-radius:6px;padding:8px 12px;margin-top:8px;color:var(--text-muted)"><i class="fas fa-comment"></i> ${req.note}</div>` : ''}
+          </div>
+          <span class="badge badge-yellow"><i class="fas fa-clock"></i> Awaiting Decision</span>
+        </div>
+        <div class="proof-actions">
+          <button class="btn btn-primary btn-sm" onclick="acceptCash(${req.id}, this)">
+            <i class="fas fa-check"></i> Accept & Mark Paid
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="declineCash(${req.id}, this)">
+            <i class="fas fa-times"></i> Decline
+          </button>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    container.innerHTML = `<div style="color:var(--danger);padding:20px">Failed to load requests.</div>`;
+  }
+}
+
+async function acceptCash(reqId, btn) {
+  if (!confirm('Accept this cash payment and mark the student\'s meals as paid?')) return;
+  btn.disabled = true; btn.textContent = 'Processing...';
+  const r = await fetch('/manager/accept_cash', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({request_id: reqId})});
+  const d = await r.json();
+  if (d.ok) {
+    document.getElementById('cashreq-'+reqId).style.background = '#e8f5ee';
+    document.getElementById('cashreq-'+reqId).innerHTML = `<div style="display:flex;align-items:center;gap:10px;color:var(--primary);font-weight:700"><i class="fas fa-check-circle" style="font-size:20px"></i> Cash payment accepted & meals marked as paid.</div>`;
+    toast('Cash payment accepted!');
+  } else { toast(d.msg || 'Error', 'error'); btn.disabled = false; btn.textContent = 'Accept & Mark Paid'; }
+}
+
+async function declineCash(reqId, btn) {
+  if (!confirm('Decline this cash payment request?')) return;
+  btn.disabled = true;
+  const r = await fetch('/manager/decline_cash', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({request_id: reqId})});
+  const d = await r.json();
+  if (d.ok) {
+    document.getElementById('cashreq-'+reqId).style.opacity = '.5';
+    document.getElementById('cashreq-'+reqId).innerHTML += `<div style="color:var(--danger);font-size:13px;margin-top:8px"><i class="fas fa-times-circle"></i> Declined.</div>`;
+    toast('Request declined.');
+  } else { toast('Error', 'error'); btn.disabled = false; }
+}
+
+// Load cash count on page load for notification dot
+window.addEventListener('load', async () => {
+  try {
+    const r = await fetch('/manager/cash_requests');
+    const d = await r.json();
+    if (d.requests && d.requests.length > 0) {
+      const dot = document.getElementById('cash-dot');
+      dot.style.display = '';
+      dot.textContent = d.requests.length;
+    }
+  } catch(e) {}
+});
+
+function filterTable() {
+  const q = document.getElementById('search').value.toLowerCase();
+  document.querySelectorAll('#due-table tbody tr').forEach(r => {
+    r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+async function verifyPayment(paymentId, roll, btn) {
+  if (!confirm(`Verify this bKash payment and mark ${roll}'s meals as paid?`)) return;
+  const r = await fetch('/manager/verify_payment', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({payment_id:paymentId, roll})});
+  const d = await r.json();
+  if (d.ok) {
+    toast('Payment verified! Meals marked as paid.');
+    const card = document.getElementById('proof-'+paymentId);
+    if (card) { card.style.opacity='.4'; card.style.borderLeftColor='var(--primary)'; }
+    setTimeout(()=>location.reload(), 1200);
+  }
+}
+
+async function rejectPayment(paymentId, btn) {
+  if (!confirm('Reject this payment proof? The student will need to resubmit.')) return;
+  const r = await fetch('/manager/reject_payment', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({payment_id:paymentId})});
+  const d = await r.json();
+  if (d.ok) {
+    toast('Payment rejected.', 'error');
+    const card = document.getElementById('proof-'+paymentId);
+    if (card) { card.style.opacity='.4'; card.style.borderLeftColor='var(--danger)'; }
+    setTimeout(()=>location.reload(), 1000);
+  }
+}
+
+async function markAllPaid(btn) {
+  const rows = [...document.querySelectorAll('#due-table tbody tr')]
+    .filter(r => r.style.display !== 'none' && r.querySelector('[onclick*="markPaid"]'));
+  if (!rows.length) { toast('No students to mark as paid.', 'error'); return; }
+  if (!confirm(`Mark ALL ${rows.length} visible students as paid?\n\nThis will clear all pending and due meals for each student.`)) return;
+
+  btn.disabled = true;
+  const collectBtn = document.getElementById('bulk-collect-btn');
+  if (collectBtn) collectBtn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+
+  let success = 0, failed = 0;
+  for (const row of rows) {
+    const roll = row.querySelector('[onclick*="markPaid"]')?.getAttribute('onclick')?.match(/'([^']+)'/)?.[1];
+    if (!roll) continue;
+    try {
+      const r = await fetch('/manager/mark_paid', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({roll})});
+      const d = await r.json();
+      if (d.ok) {
+        row.style.transition = 'opacity .25s,transform .25s';
+        row.style.opacity = '0';
+        row.style.transform = 'translateX(20px)';
+        await new Promise(res => setTimeout(res, 260));
+        row.remove();
+        success++;
+      } else { failed++; }
+    } catch(e) { failed++; }
+    updateBulkCount();
+  }
+
+  if (failed === 0) {
+    toast(`✅ ${success} students marked as paid!`);
+  } else {
+    toast(`${success} marked paid, ${failed} failed.`, 'error');
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-check-double"></i> Mark All Paid';
+  if (collectBtn) collectBtn.disabled = false;
+  updateBulkCount();
+  setTimeout(() => location.reload(), 1500);
+}
+
+async function collectAllDue(btn) {
+  const rows = [...document.querySelectorAll('#due-table tbody tr')]
+    .filter(r => r.style.display !== 'none' && r.querySelector('[onclick*="collectDue"]'));
+  if (!rows.length) { toast('No students with "Has Due" status visible.', 'error'); return; }
+  if (!confirm(`Confirm you have physically collected cash dues from ALL ${rows.length} visible "Has Due" students?`)) return;
+
+  btn.disabled = true;
+  const paidBtn = document.getElementById('bulk-paid-btn');
+  if (paidBtn) paidBtn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+
+  let success = 0, failed = 0;
+  for (const row of rows) {
+    const roll = row.querySelector('[onclick*="collectDue"]')?.getAttribute('onclick')?.match(/'([^']+)'/)?.[1];
+    if (!roll) continue;
+    try {
+      const r = await fetch('/manager/collect_due', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({roll})});
+      const d = await r.json();
+      if (d.ok) {
+        row.style.transition = 'opacity .25s,transform .25s';
+        row.style.opacity = '0';
+        row.style.transform = 'translateX(20px)';
+        await new Promise(res => setTimeout(res, 260));
+        row.remove();
+        success++;
+      } else { failed++; }
+    } catch(e) { failed++; }
+    updateBulkCount();
+  }
+
+  if (failed === 0) {
+    toast(`✅ ${success} due amounts collected & marked paid!`);
+  } else {
+    toast(`${success} collected, ${failed} failed.`, 'error');
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-hand-holding-dollar"></i> Collect All Dues';
+  if (paidBtn) paidBtn.disabled = false;
+  updateBulkCount();
+  setTimeout(() => location.reload(), 1500);
+}
+
+async function markPaid(roll, btn) {
+  if (!confirm(`Mark all pending/due meals as paid for ${roll}?`)) return;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  const r = await fetch('/manager/mark_paid', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({roll})});
+  const d = await r.json();
+  if (d.ok) {
+    toast('Payment marked!');
+    const row = btn.closest('tr');
+    row.style.transition = 'opacity .3s,transform .3s';
+    row.style.opacity = '0';
+    row.style.transform = 'translateX(20px)';
+    setTimeout(() => { row.remove(); updateBulkCount(); }, 320);
+  } else { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Mark Paid'; }
+}
+
+async function collectDue(roll, btn) {
+  if (!confirm(`Confirm you have physically collected the due amount from ${roll}?`)) return;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  const r = await fetch('/manager/collect_due', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({roll})});
+  const d = await r.json();
+  if (d.ok) {
+    toast('Due amount collected & marked paid!');
+    const row = btn.closest('tr');
+    row.style.transition = 'opacity .3s,transform .3s';
+    row.style.opacity = '0';
+    row.style.transform = 'translateX(20px)';
+    setTimeout(() => { row.remove(); updateBulkCount(); }, 320);
+  } else { btn.disabled = false; btn.innerHTML = '<i class="fas fa-hand-holding-dollar"></i> Collected'; }
+}
+
+function updateBulkCount() {
+  const visible = [...document.querySelectorAll('#due-table tbody tr')]
+    .filter(r => r.style.display !== 'none').length;
+  const el = document.getElementById('bulk-visible-count');
+  if (el) el.textContent = visible;
+  // Show "all paid" message if table is empty
+  if (visible === 0) {
+    const tbody = document.querySelector('#due-table tbody');
+    if (tbody && tbody.children.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:32px">🎉 All students are paid up!</td></tr>';
+      const bar = document.getElementById('bulk-action-bar');
+      if (bar) bar.style.display = 'none';
+    }
+  }
+}
+
+async function unlockStudent(roll, btn) {
+  if (!confirm(`Unlock account for ${roll}?\n\nMake sure their dues are cleared or an arrangement has been made.`)) return;
+  const r = await fetch('/manager/unlock_student', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({roll})});
+  const d = await r.json();
+  if (d.ok) {
+    toast('Account unlocked successfully!');
+    btn.closest('tr').style.opacity = '.4';
+    btn.innerHTML = '<i class="fas fa-check"></i> Unlocked';
+    btn.disabled = true;
+    setTimeout(() => location.reload(), 1200);
+  } else {
+    toast(d.msg || 'Failed to unlock.', 'error');
+  }
+}
+
+// ── Weekly Orders / Ordering Lock ───────────────────────────────────────────
+async function loadNonOrderers() {
+  const loading = document.getElementById('wo-loading');
+  const table   = document.getElementById('wo-table');
+  const empty   = document.getElementById('wo-empty');
+  if (loading) loading.style.display = '';
+  if (table)   table.style.display = 'none';
+  if (empty)   empty.style.display = 'none';
+  try {
+    const res  = await fetch('/manager/non_orderers');
+    const data = await res.json();
+    renderWOTable(data);
+  } catch(e) {
+    toast('Failed to load non-orderer data.', 'error');
+    if (loading) loading.style.display = 'none';
+  }
+}
+
+function renderWOTable(data) {
+  const { non_orderers, all_locked, all_count, non_order_count, locked_count, week_start, week_end } = data;
+  const loading = document.getElementById('wo-loading');
+  const table   = document.getElementById('wo-table');
+  const empty   = document.getElementById('wo-empty');
+  const tbody   = document.getElementById('wo-tbody');
+  const label   = document.getElementById('non-order-week-label');
+  if (loading) loading.style.display = 'none';
+  const orderedCount = all_count - non_order_count;
+  document.getElementById('wo-total-count').textContent   = all_count;
+  document.getElementById('wo-ordered-count').textContent = orderedCount;
+  document.getElementById('wo-noorder-count').textContent = non_order_count;
+  // Use all_locked (server-computed) for the locked count — covers students
+  // who have orders but were manually locked too
+  document.getElementById('wo-locked-count').textContent  = locked_count;
+  if (label) label.textContent = `Week: ${week_start} → ${week_end}`;
+  if (non_orderers.length === 0) {
+    if (table) table.style.display = 'none';
+    if (empty) empty.style.display = '';
+  } else {
+    if (empty) empty.style.display = 'none';
+    if (table) table.style.display = '';
+    tbody.innerHTML = non_orderers.map((s, i) => `
+      <tr id="wo-row-${s.roll_number.replace(/[^a-zA-Z0-9]/g,'_')}">
+        <td style="color:var(--text-muted)">${i+1}</td>
+        <td><strong>${s.name}</strong></td>
+        <td>${s.roll_number}</td>
+        <td><span class="badge badge-green">${s.batch}</span></td>
+        <td><span class="badge" style="${s.gender==='female'?'background:#fce4ec;color:#c2185b':'background:#e6f0ff;color:#3b5fe2'}">${s.gender==='female'?'♀ Female':'♂ Male'}</span></td>
+        <td>${s.ordering_locked
+          ? '<span class="badge badge-red"><i class="fas fa-lock"></i> Locked</span>'
+          : '<span class="badge badge-yellow"><i class="fas fa-exclamation-triangle"></i> No orders yet</span>'}</td>
+        <td style="text-align:right">${s.ordering_locked
+          ? `<button class="btn btn-sm" style="background:var(--primary);color:#fff" onclick="woUnlock('${s.roll_number}',this)"><i class="fas fa-unlock"></i> Unlock</button>`
+          : `<button class="btn btn-sm" style="background:#e53e3e;color:#fff" onclick="woLock('${s.roll_number}',this)"><i class="fas fa-lock"></i> Lock</button>`}</td>
+      </tr>`).join('');
+  }
+  // Use all_locked (not just the non-orderer subset) so manually locked
+  // students who DO have orders still appear in the locked sub-table
+  renderWOLockedTable(all_locked);
+}
+
+function renderWOLockedTable(locked) {
+  const empty = document.getElementById('wo-locked-empty');
+  const table = document.getElementById('wo-locked-table');
+  const tbody = document.getElementById('wo-locked-tbody');
+  const badge = document.getElementById('wo-locked-badge');
+  if (badge) badge.textContent = `${locked.length} locked`;
+  if (locked.length === 0) {
+    if (empty) empty.style.display = '';
+    if (table) table.style.display = 'none';
+  } else {
+    if (empty) empty.style.display = 'none';
+    if (table) table.style.display = '';
+    tbody.innerHTML = locked.map((s, i) => `
+      <tr id="wol-row-${s.roll_number.replace(/[^a-zA-Z0-9]/g,'_')}">
+        <td style="color:var(--text-muted)">${i+1}</td>
+        <td><strong>${s.name}</strong></td>
+        <td>${s.roll_number}</td>
+        <td><span class="badge badge-green">${s.batch}</span></td>
+        <td><span class="badge" style="${s.gender==='female'?'background:#fce4ec;color:#c2185b':'background:#e6f0ff;color:#3b5fe2'}">${s.gender==='female'?'♀ Female':'♂ Male'}</span></td>
+        <td style="text-align:right">
+          <button class="btn btn-sm" style="background:var(--primary);color:#fff" onclick="woUnlock('${s.roll_number}',this)">
+            <i class="fas fa-unlock"></i> Unlock
+          </button>
+        </td>
+      </tr>`).join('');
+  }
+}
+
+async function woLock(roll, btn) {
+  if (!confirm(`Lock meal ordering for ${roll}?\n\nThis student will see a notice on their dashboard and cannot order meals until you unlock them.`)) return;
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  const r = await fetch('/manager/lock_ordering',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({roll})});
+  const d = await r.json();
+  if (d.ok) { toast(`🔒 ${roll} ordering locked.`); loadNonOrderers(); }
+  else { toast(d.msg||'Failed.','error'); btn.disabled=false; btn.innerHTML='<i class="fas fa-lock"></i> Lock'; }
+}
+
+async function woUnlock(roll, btn) {
+  if (!confirm(`Unlock meal ordering for ${roll}?`)) return;
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  const r = await fetch('/manager/unlock_ordering',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({roll})});
+  const d = await r.json();
+  if (d.ok) { toast(`✅ ${roll} ordering unlocked.`); loadNonOrderers(); }
+  else { toast(d.msg||'Failed.','error'); btn.disabled=false; btn.innerHTML='<i class="fas fa-unlock"></i> Unlock'; }
+}
+
+async function autoLockNonOrderers() {
+  if (!confirm('Auto-lock ordering for ALL students who have NOT placed any meal order this week?\n\nStudents who already ordered are NOT affected.')) return;
+  const btn = document.getElementById('auto-lock-btn');
+  btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Locking...';
+  const r = await fetch('/manager/auto_lock_non_orderers',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+  const d = await r.json();
+  if (d.ok) { toast(`🔒 ${d.msg}`,'success'); loadNonOrderers(); }
+  else toast(d.msg||'Failed.','error');
+  btn.disabled=false; btn.innerHTML='<i class="fas fa-lock"></i> Auto-Lock Non-Orderers';
+}
+
+async function unlockAllOrdering() {
+  if (!confirm('Remove ordering lock from ALL students?\n\nAll students will be able to order meals again (within the weekly window).')) return;
+  const btn = document.getElementById('unlock-all-btn');
+  btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Unlocking...';
+  const r = await fetch('/manager/unlock_all_ordering',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+  const d = await r.json();
+  if (d.ok) { toast('✅ '+d.msg); loadNonOrderers(); }
+  else toast(d.msg||'Failed.','error');
+  btn.disabled=false; btn.innerHTML='<i class="fas fa-unlock"></i> Unlock All';
+}
+
+
+async function clearWeekly() {
+  if (!confirm('Clear meal data older than 7 days? This cannot be undone.')) return;
+  const r = await fetch('/manager/clear_weekly', {method:'POST'});
+  const d = await r.json();
+  if (d.ok) { toast(d.msg); setTimeout(()=>location.reload(),1200); }
+}
+
+async function resetAllMeals() {
+  if (!confirm('⚠️ Reset ALL meal orders and payments?\n\nThis clears every meal record and unlocks all student accounts. Students stay registered.\n\nThis cannot be undone!')) return;
+  const r = await fetch('/admin/reset', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'reset_meals'})});
+  if (r.status === 403 || r.redirected) {
+    toast('Admin access required. Please use the Admin Panel.', 'error');
+    return;
+  }
+  const d = await r.json();
+  if (d.ok) { toast('All meal data reset!'); setTimeout(()=>location.reload(),1500); }
+  else toast(d.msg || 'Error — use Admin Panel for this action.', 'error');
+}
+
+
+// ── FLOOR STUDENTS MODAL ──────────────────────────────────────────────────────
+let _floorModalGender = null;
+let _floorModalFloor  = null;
+let _floorModalSub    = 'all';
+
+const _HOSTEL_NAMES = { 1: 'Campus', 2: 'Sentu House', 3: 'Chairman House' };
+
+async function openFloorModal(gender, floor) {
+  _floorModalGender = gender;
+  _floorModalFloor  = floor;
+  _floorModalSub    = 'all';
+  ['all','lunch','dinner'].forEach(k => {
+    document.getElementById('fsub-'+k).classList.toggle('active', k === 'all');
+  });
+  let label;
+  if (gender === 'male') {
+    label = `<i class="fas fa-mars" style="color:#3b5fe2"></i> Floor ${floor} — Male Students`;
+  } else if (floor) {
+    label = `<i class="fas fa-venus" style="color:#c2185b"></i> ${_HOSTEL_NAMES[floor] || 'Hostel ' + floor} — Female Students`;
+  } else {
+    label = `<i class="fas fa-venus" style="color:#c2185b"></i> All Female Students`;
+  }
+  document.getElementById('floor-modal-title').innerHTML = label;
+  document.getElementById('floor-students-modal').classList.add('open');
+  await renderFloorStudents();
+}
+
+function switchFloorSub(sub) {
+  _floorModalSub = sub;
+  ['all','lunch','dinner'].forEach(k => {
+    document.getElementById('fsub-'+k).classList.toggle('active', k === sub);
+  });
+  renderFloorStudents();
+}
+
+async function renderFloorStudents() {
+  const body = document.getElementById('floor-modal-body');
+  body.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:32px">Loading...</div>';
+  try {
+    const params = new URLSearchParams({ gender: _floorModalGender, sub: _floorModalSub });
+    if (_floorModalFloor !== null) params.set('floor', _floorModalFloor);
+    const r = await fetch('/manager/floor_students?' + params.toString());
+    const d = await r.json();
+    const students = d.students || [];
+    if (!students.length) {
+      body.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:40px 0">
+        <div style="font-size:36px;margin-bottom:10px">👤</div>
+        <div>No students found for this selection.</div>
+      </div>`;
+      return;
+    }
+    const accentColor = _floorModalGender === 'male' ? '#3b5fe2' : '#c2185b';
+    const accentBg    = _floorModalGender === 'male' ? '#e6f0ff'  : '#fce4ec';
+    const gIcon       = _floorModalGender === 'male' ? '🧑' : '👩';
+    body.innerHTML = `
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;font-weight:600;padding:0 2px">${students.length} student(s)</div>
+      ${students.map((s, i) => `
+        <div class="floor-student-card">
+          <div class="floor-student-avatar" style="background:${accentBg};color:${accentColor}">${gIcon}</div>
+          <div class="floor-student-info">
+            <div class="floor-student-name">${s.name}</div>
+            <div class="floor-student-meta">
+              Batch ${s.batch}
+              ${_floorModalGender === 'male'
+                ? ` · Floor ${s.floor || '—'}`
+                : (s.floor ? ` · ${_HOSTEL_NAMES[s.floor] || 'Hostel ' + s.floor}` : '')}
+              ${s.bkash_number ? ` · <i class="fas fa-mobile-alt"></i> ${s.bkash_number}` : ''}
+            </div>
+          </div>
+          <span class="floor-student-badge" style="background:${accentBg};color:${accentColor}">${s.roll_number}</span>
+        </div>
+      `).join('')}
+      `;
+  } catch(e) {
+    body.innerHTML = `<div style="color:var(--danger);padding:20px">Failed to load student list.</div>`;
+  }
+}
+
+
+function showTransferLockedMsg() {
+  document.getElementById('transfer-modal').classList.add('open');
+}
+function openTransferModal() {
+  document.getElementById('transfer-modal').classList.add('open');
+}
+function closeTransferModal() {
+  document.getElementById('transfer-modal').classList.remove('open');
+}
+
+async function searchStudentForTransfer() {
+  const q = document.getElementById('transfer-search').value.trim();
+  if (!q) return;
+  const r = await fetch('/manager/search_student', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query: q})});
+  const d = await r.json();
+  const el = document.getElementById('transfer-results');
+  if (!d.students.length) { el.innerHTML = '<p style="color:var(--text-muted);font-size:14px;text-align:center;padding:12px">No students found.</p>'; return; }
+  el.innerHTML = d.students.map(s => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:1.5px solid var(--border);border-radius:8px;margin-bottom:8px;gap:10px;flex-wrap:wrap">
+      <div>
+        <div style="font-weight:700;font-size:14px">${s.name}</div>
+        <div style="font-size:12px;color:var(--text-muted)">Roll: ${s.roll_number} · Batch: ${s.batch} · Floor ${s.floor || '?'}</div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="sendTransfer(${s.id}, '${s.name}')">
+        <i class="fas fa-paper-plane"></i> Send Invite
+      </button>
+    </div>
+  `).join('');
+}
+
+async function sendTransfer(studentId, name) {
+  if (!confirm(`Send manager transfer invite to ${name}?`)) return;
+  const r = await fetch('/manager/send_transfer', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({student_id: studentId})});
+  const d = await r.json();
+  if (d.ok) { toast(d.msg); closeTransferModal(); }
+  else toast(d.msg, 'error');
+}
+
+// ── HISTORY MODAL ─────────────────────────────────────────────────────────────
+async function openHistoryModal() {
+  document.getElementById('history-modal').classList.add('open');
+  const r = await fetch('/manager/transfer_history');
+  const d = await r.json();
+  const el = document.getElementById('history-content');
+  if (!d.history.length) {
+    el.innerHTML = '<p style="color:var(--text-muted);font-size:14px;text-align:center;padding:24px">No previous managers on record.</p>';
+    return;
+  }
+  el.innerHTML = `
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr>
+        <th style="text-align:left;font-size:11px;color:var(--text-muted);padding:8px 10px;border-bottom:1px solid var(--border)">Manager ID</th>
+        <th style="text-align:left;font-size:11px;color:var(--text-muted);padding:8px 10px;border-bottom:1px solid var(--border)">Name</th>
+        <th style="text-align:left;font-size:11px;color:var(--text-muted);padding:8px 10px;border-bottom:1px solid var(--border)">Roll No.</th>
+        <th style="text-align:left;font-size:11px;color:var(--text-muted);padding:8px 10px;border-bottom:1px solid var(--border)">Assigned By</th>
+        <th style="text-align:left;font-size:11px;color:var(--text-muted);padding:8px 10px;border-bottom:1px solid var(--border)">Tenure Start</th>
+        <th style="text-align:left;font-size:11px;color:var(--text-muted);padding:8px 10px;border-bottom:1px solid var(--border)">Tenure End</th>
+      </tr></thead>
+      <tbody>${d.history.map(h => `
+        <tr>
+          <td style="padding:10px;font-size:12px;font-family:monospace;font-weight:700;color:var(--primary);border-bottom:1px solid var(--border)">${h.manager_id}</td>
+          <td style="padding:10px;font-size:13px;font-weight:600;border-bottom:1px solid var(--border)">${h.student_name}</td>
+          <td style="padding:10px;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border)">${h.roll_number || '—'}</td>
+          <td style="padding:10px;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border)">${h.assigned_by || '—'}</td>
+          <td style="padding:10px;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border)">${(h.tenure_start||'').substring(0,10)}</td>
+          <td style="padding:10px;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border)">${h.tenure_end ? h.tenure_end.substring(0,10) : '<span style="color:var(--primary);font-weight:600">Active</span>'}</td>
+        </tr>
+      `).join('')}</tbody>
+    </table>
+  `;
+}
+
+</script>
+
+<!-- Floor Students Modal — Fullscreen Mobile Sheet -->
+<style>
+  #floor-students-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    display: none;
+    flex-direction: column;
+    background: #fff;
+  }
+  #floor-students-modal.open {
+    display: flex;
+  }
+  .floor-modal-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 18px 12px;
+    border-bottom: 1.5px solid var(--border);
+    background: #fff;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  .floor-modal-back-btn {
+    background: var(--border);
+    border: none;
+    border-radius: 50%;
+    width: 38px;
+    height: 38px;
+    font-size: 18px;
+    cursor: pointer;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background .15s;
+  }
+  .floor-modal-back-btn:active { background: #d1d5db; }
+  .floor-modal-tabs {
+    display: flex;
+    gap: 0;
+    background: #f3f4f6;
+    border-radius: 14px;
+    padding: 5px;
+    margin: 14px 18px 4px;
+  }
+  .floor-modal-tabs .tab {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 10px;
+    padding: 10px 6px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background .18s, color .18s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    white-space: nowrap;
+  }
+  .floor-modal-tabs .tab.active {
+    background: #fff;
+    color: var(--primary, #3b5fe2);
+    box-shadow: 0 1px 6px rgba(0,0,0,.10);
+  }
+  #floor-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 12px 24px;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Make student rows card-like on mobile */
+  .floor-student-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: #f8f9fb;
+    border-radius: 12px;
+    padding: 13px 14px;
+    margin-bottom: 10px;
+    border: 1px solid #e5e7eb;
+  }
+  .floor-student-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    flex-shrink: 0;
+  }
+  .floor-student-info { flex: 1; min-width: 0; }
+  .floor-student-name { font-weight: 700; font-size: 14px; color: #1a202c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .floor-student-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .floor-student-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 20px;
+    flex-shrink: 0;
+  }
+</style>
+
+<div id="floor-students-modal">
+  <!-- Sticky header -->
+  <div class="floor-modal-header">
+    <button class="floor-modal-back-btn" onclick="document.getElementById('floor-students-modal').classList.remove('open')" aria-label="Close">
+      <i class="fas fa-arrow-left"></i>
+    </button>
+    <h3 id="floor-modal-title" style="font-size:16px;font-weight:700;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></h3>
+  </div>
+  <!-- Pill tabs -->
+  <div class="floor-modal-tabs">
+    <button id="fsub-all" class="tab active" onclick="switchFloorSub('all')"><i class="fas fa-users"></i> All</button>
+    <button id="fsub-lunch" class="tab" onclick="switchFloorSub('lunch')"><i class="fas fa-sun"></i> Lunch</button>
+    <button id="fsub-dinner" class="tab" onclick="switchFloorSub('dinner')"><i class="fas fa-moon"></i> Dinner</button>
+  </div>
+  <!-- Scrollable list -->
+  <div id="floor-modal-body">
+    <div style="text-align:center;color:var(--text-muted);padding:48px 0">Loading...</div>
+  </div>
+</div>
+
+<!-- Transfer Manager Modal -->
+<div class="modal-overlay" id="transfer-modal" style="z-index:300">
+  <div class="modal" style="max-width:460px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <h3><i class="fas fa-lock" style="color:var(--text-muted)"></i> Transfer Manager Role</h3>
+      <button onclick="closeTransferModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted)">×</button>
+    </div>
+    <div style="text-align:center;padding:24px 16px">
+      <div style="width:70px;height:70px;background:var(--accent-light);border-radius:20px;display:grid;place-items:center;font-size:32px;margin:0 auto 18px">🔒</div>
+      <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:8px">Admin-Controlled Feature</div>
+      <p style="color:var(--text-muted);font-size:14px;line-height:1.6;margin-bottom:20px">Manager role transfers are now handled exclusively by the system administrator. This ensures proper handover and security.</p>
+      <div style="background:var(--accent-light);border:1px solid #fcd97d;border-radius:10px;padding:14px 16px;font-size:13px;color:#7a5c00;text-align:left;margin-bottom:20px">
+        <div style="font-weight:700;margin-bottom:6px"><i class="fas fa-circle-info"></i> How to transfer the manager role:</div>
+        <ol style="margin-left:16px;line-height:2">
+          <li>Contact the system administrator (developer)</li>
+          <li>Provide the new manager's <strong>roll number</strong></li>
+          <li>Admin will assign the role from the Admin Panel</li>
+          <li>The new manager gets a temporary password valid for <strong>7 days</strong></li>
+        </ol>
+      </div>
+      <button onclick="closeTransferModal()" class="btn btn-outline" style="width:100%;justify-content:center">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Manager History Modal -->
+<div class="modal-overlay" id="history-modal" style="z-index:300">
+  <div class="modal" style="max-width:640px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <h3><i class="fas fa-history" style="color:var(--primary)"></i> Previous Meal Managers</h3>
+      <button onclick="document.getElementById('history-modal').classList.remove('open')" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted)">×</button>
+    </div>
+    <div id="history-content" style="overflow-x:auto">
+      <p style="color:var(--text-muted);font-size:14px;text-align:center;padding:24px">Loading...</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOTAL BILL MODAL ──────────────────────────────────────────────────── -->
+<style>
+  #bill-modal .modal { max-width: 560px; }
+  .bill-date-bar { display:flex; align-items:center; gap:10px; margin-bottom:22px; flex-wrap:wrap; }
+  .bill-date-bar input[type=date] {
+    padding: 9px 14px; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+    font-family: inherit; font-size: 14px; color: var(--text); background: #fff;
+    transition: border .2s;
+  }
+  .bill-date-bar input[type=date]:focus { outline:none; border-color:var(--primary); }
+  .bill-grand { background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    color:#fff; border-radius: var(--radius); padding: 22px 28px; text-align:center; margin-bottom:18px; }
+  .bill-grand .amt { font-size:42px; font-weight:800; letter-spacing:1px; }
+  .bill-grand .sub { font-size:14px; opacity:.85; margin-top:4px; }
+  .bill-section-title { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.8px;
+    color:var(--text-muted); margin:18px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+  .bill-row { display:flex; align-items:center; justify-content:space-between;
+    padding:10px 14px; border-radius:var(--radius-sm); margin-bottom:6px; font-size:14px; }
+  .bill-row-label { display:flex; align-items:center; gap:8px; font-weight:600; }
+  .bill-row-amt { font-weight:700; font-size:15px; }
+  .bill-floor-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .bill-floor-table th { text-align:left; font-size:11px; text-transform:uppercase;
+    letter-spacing:.5px; color:var(--text-muted); padding:7px 10px;
+    border-bottom:1px solid var(--border); background:#f8fafc; }
+  .bill-floor-table td { padding:9px 10px; border-bottom:1px solid var(--border); }
+  .bill-floor-table tr:last-child td { border-bottom:none; }
+  .bill-print-btn { background:#f8fafc; border:1.5px solid var(--border); color:var(--text-muted);
+    padding:8px 18px; border-radius:var(--radius-sm); font-size:13px; font-weight:600;
+    cursor:pointer; display:inline-flex; align-items:center; gap:7px; transition:all .18s; }
+  .bill-print-btn:hover { border-color:var(--primary); color:var(--primary); }
+  @media print {
+    body * { visibility: hidden !important; }
+    #bill-print-wrapper, #bill-print-wrapper * { visibility: visible !important; }
+    #bill-print-wrapper {
+      position: fixed !important;
+      inset: 0 !important;
+      background: #fff !important;
+      padding: 20mm 15mm !important;
+      z-index: 99999 !important;
+      overflow: visible !important;
+    }
+    .bill-print-btn, #bill-modal-close, .bill-date-bar button { display:none !important; }
+    .bill-print-header { display:block !important; }
+    .bill-date-bar input[type=date] { display:none !important; }
+    #bill-print-date-label { display:inline !important; font-weight:700; font-size:14px; color:#1a6b3a; }
+    .bill-floor-table tr { page-break-inside:avoid; }
+    @page { size: A4 portrait; margin: 0; }
+  }
+  .bill-print-header { display:none; text-align:center; margin-bottom:16px; padding-bottom:12px; border-bottom:2px solid var(--primary); }
+  .bill-print-header h2 { font-size:18px; margin-bottom:4px; }
+  .bill-print-header p { font-size:12px; color:#555; }
+  #bill-print-date-label { display:none; }
+</style>
+
+<!-- Hidden print-only wrapper (shown via JS print) -->
+<div id="bill-print-wrapper" style="display:none;padding:0"></div>
+
+<div class="modal-overlay" id="bill-modal" style="z-index:350">
+  <div class="modal" style="max-width:560px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <h3 style="font-size:18px"><i class="fas fa-calculator" style="color:var(--primary)"></i> Total Bill Calculator</h3>
+      <button id="bill-modal-close" onclick="closeBillModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-muted)">×</button>
+    </div>
+
+    <div class="bill-date-bar">
+      <label style="font-size:13px;font-weight:600;color:var(--text-muted)"><i class="fas fa-calendar"></i> Date:</label>
+      <input type="date" id="bill-date-input">
+      <span id="bill-print-date-label"></span>
+      <button class="btn btn-primary btn-sm" onclick="loadBill()"><i class="fas fa-rotate-right"></i> Calculate</button>
+      <button class="bill-print-btn" onclick="printBill()"><i class="fas fa-print"></i> Print</button>
+    </div>
+
+    <div id="bill-content">
+      <div style="text-align:center;color:var(--text-muted);padding:40px 0">
+        <div style="font-size:36px;margin-bottom:10px">📊</div>
+        <div>Select a date and click Calculate</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Live date display
+(function updateLiveDate() {
+  const el = document.getElementById('live-date');
+  if (el) {
+    const now = new Date();
+    const opts = { weekday:'long', year:'numeric', month:'long', day:'numeric' };
+    el.textContent = now.toLocaleDateString('en-US', opts);
+  }
+})();
+
+// ── VERIFIED PAYMENTS ─────────────────────────────────────────────────────────
+function filterVerified() {
+  const q = document.getElementById('verified-search').value.toLowerCase();
+  let visible = 0;
+  document.querySelectorAll('#verified-list .proof-card').forEach(card => {
+    const match = (card.dataset.search || card.textContent.toLowerCase()).includes(q);
+    card.style.display = match ? '' : 'none';
+    if (match) visible++;
+  });
+  const emptyMsg = document.getElementById('verified-empty-msg');
+  if (emptyMsg) emptyMsg.style.display = (visible === 0 && q) ? '' : 'none';
+}
+
+function printVerified() {
+  const cards = [...document.querySelectorAll('#verified-list .proof-card')]
+    .filter(c => c.style.display !== 'none');
+  if (!cards.length) { toast('No verified payments to print.', 'error'); return; }
+  const today = new Date().toLocaleDateString('en-US', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+  const rows = cards.map(c => {
+    const name  = c.querySelector('strong')?.textContent || '';
+    const roll  = c.querySelector('.badge-green')?.textContent || '';
+    const spans = [...c.querySelectorAll('span')];
+    const batch = spans.find(s => /^\d{4}$/.test(s.textContent.trim()))?.textContent || '';
+    const txn   = c.querySelector('.txn-badge')?.textContent || '';
+    const strongs = [...c.querySelectorAll('strong')];
+    const amt   = strongs.find(s => s.textContent.includes('৳'))?.textContent || '';
+    const dateEl = c.querySelector('.fa-calendar');
+    const date  = dateEl ? dateEl.parentElement.textContent.trim() : '';
+    const noteEl = c.querySelector('.fa-comment');
+    const note  = noteEl ? noteEl.parentElement.textContent.trim() : '';
+    return `<tr>
+      <td>${name}</td><td>${roll}</td><td>${batch}</td>
+      <td>${txn}</td><td style="color:#1a6b3a;font-weight:700">${amt}</td>
+      <td>${date}</td><td style="font-size:11px;color:#666">${note}</td>
+    </tr>`;
+  }).join('');
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head><title>Verified Payments — NMMS</title>
+  <style>
+    body{font-family:sans-serif;padding:30px;color:#111}
+    h2{font-size:18px;margin-bottom:4px}
+    p{font-size:12px;color:#666;margin-bottom:18px}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th{text-align:left;background:#f0f0f0;padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #ccc}
+    td{padding:8px 10px;border-bottom:1px solid #e0e0e0}
+    tr:last-child td{border-bottom:none}
+    .footer{margin-top:20px;font-size:11px;color:#999;text-align:right}
+  </style></head><body>
+  <h2>NMMS — Verified Payment Records</h2>
+  <p>Printed: ${today} &nbsp;·&nbsp; Total records: ${cards.length}</p>
+  <table>
+    <thead><tr><th>Name</th><th>Roll No.</th><th>Batch</th><th>Txn / Method</th><th>Amount</th><th>Date</th><th>Note</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="footer">Netrokona Medical Meal Management System</div>
+  </body></html>`);
+  win.document.close();
+  win.focus();
+  win.print();
+}
+
+// ── TOTAL BILL MODAL ─────────────────────────────────────────────────────────
+function openBillModal() {
+  const today = new Date().toISOString().slice(0,10);
+  const inp = document.getElementById('bill-date-input');
+  if (inp) inp.value = today;
+  document.getElementById('bill-modal').classList.add('open');
+  loadBill();
+}
+function closeBillModal() {
+  document.getElementById('bill-modal').classList.remove('open');
+}
+
+function printBill() {
+  // Copy bill content into the dedicated print wrapper, then trigger print
+  const src = document.getElementById('bill-content');
+  const wrapper = document.getElementById('bill-print-wrapper');
+  if (!src || !wrapper) { window.print(); return; }
+  const dateInp = document.getElementById('bill-date-input');
+  const dateStr = dateInp ? dateInp.value : '';
+  const [y, m, d2] = (dateStr || '').split('-');
+  const fmtDate = dateStr
+    ? new Date(+y, +m-1, +d2).toLocaleDateString('en-US', {weekday:'long', year:'numeric', month:'long', day:'numeric'})
+    : '';
+  wrapper.innerHTML = `
+    <div style="font-family:'Plus Jakarta Sans',sans-serif;color:#1a202c">
+      <div style="text-align:center;margin-bottom:18px;padding-bottom:14px;border-bottom:2px solid #1a6b3a">
+        <h2 style="font-size:18px;margin:0 0 4px">Netrokona Medical College — NMMS Total Bill</h2>
+        <p style="font-size:12px;color:#555;margin:0">Bill for: <strong style="color:#1a6b3a">${fmtDate}</strong> &nbsp;·&nbsp; Generated: ${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}</p>
+      </div>
+      ${src.innerHTML}
+    </div>`;
+  // wrapper must be display:block (not display:none) for the print visibility trick to work
+  wrapper.style.display = 'block';
+  window.print();
+  // Restore after print dialog closes
+  setTimeout(() => { wrapper.style.display = 'none'; }, 500);
+}
+// Close bill modal on overlay click
+document.addEventListener('DOMContentLoaded', function() {
+  const bm = document.getElementById('bill-modal');
+  if (bm) bm.addEventListener('click', function(e) { if (e.target === this) closeBillModal(); });
+  loadUnpaidOrders();
+  // Auto-load overdue students panel on page open
+  loadOverdueStudents();
+});
+
+// ── Manager: Overdue "Forgot to Pay" Panel ──────────────────────────────────
+async function loadOverdueStudents() {
+  const body  = document.getElementById('overdue-panel-body');
+  const badge = document.getElementById('overdue-badge');
+  if (!body) return;
+  body.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:16px 0;font-size:13px"><i class="fas fa-spinner fa-spin"></i> Loading…</div>';
+
+  let data;
+  try {
+    const res = await fetch('/manager/overdue_students');
+    data = await res.json();
+  } catch(_) {
+    body.innerHTML = '<div style="color:var(--danger);font-size:13px;padding:8px 0">⚠️ Could not load. Check your connection.</div>';
+    return;
+  }
+
+  const list = data.students || [];
+
+  // Update badge
+  if (list.length > 0) {
+    badge.textContent = list.length;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+
+  if (!list.length) {
+    body.innerHTML = '<div style="text-align:center;padding:20px 0;color:var(--text-muted);font-size:13px">🎉 No students with forgotten payments right now!</div>';
+    return;
+  }
+
+  const urgencyColor = (days) => {
+    if (days >= 14) return '#e53e3e';
+    if (days >= 7)  return '#d97706';
+    if (days >= 3)  return '#b45309';
+    return '#718096';
+  };
+  const urgencyBg = (days) => {
+    if (days >= 14) return '#fff5f5';
+    if (days >= 7)  return '#fffbeb';
+    if (days >= 3)  return '#fff8e6';
+    return '#f8fafc';
+  };
+
+  const rows = list.map(s => {
+    const color = urgencyColor(s.days_overdue);
+    const bg    = urgencyBg(s.days_overdue);
+    const urgencyTag = s.days_overdue >= 14
+      ? `<span style="background:#fff5f5;color:#e53e3e;border:1px solid #fc8181;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px">🚨 ${s.days_overdue}d overdue</span>`
+      : s.days_overdue >= 7
+      ? `<span style="background:#fffbeb;color:#b45309;border:1px solid #fcd97d;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px">⚠️ ${s.days_overdue}d overdue</span>`
+      : `<span style="background:#f8fafc;color:#718096;border:1px solid #e2e8f0;font-size:11px;padding:2px 8px;border-radius:20px">${s.days_overdue}d ago</span>`;
+    const proofTag = s.has_pending_proof
+      ? `<span style="background:#eff6ff;color:#2563eb;border:1px solid #93c5fd;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px" title="Student submitted a bKash screenshot — check Payments tab">📎 bKash proof pending</span>`
+      : '';
+    const cashTag = s.has_pending_cash
+      ? `<span style="background:#f0fdf4;color:#16a34a;border:1px solid #86efac;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px" title="Student submitted a cash payment request — check Payments tab">💵 Cash request pending</span>`
+      : '';
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;
+                  padding:12px 14px;border-radius:8px;background:${bg};border:1px solid ${color}22;margin-bottom:8px">
+        <div style="min-width:0;flex:1">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px">
+            <strong style="font-size:14px">${s.name}</strong>
+            <span style="background:var(--primary-pale);color:var(--primary);font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px">Batch ${s.batch}</span>
+            <span style="color:var(--text-muted);font-size:12px">Roll ${s.roll_number}</span>
+            ${s.gender === 'male' && s.floor ? `<span style="color:var(--text-muted);font-size:12px">· Floor ${s.floor}</span>` : ''}
+            ${urgencyTag}${proofTag}${cashTag}
+          </div>
+          <div style="font-size:12px;color:var(--text-muted)">
+            <strong style="color:${color}">৳${Math.round(s.total_due)}</strong> unpaid
+            · ${s.meal_count} meal${s.meal_count > 1 ? 's' : ''}
+            · bKash: <span style="font-family:monospace">${s.bkash_number}</span>
+            · Oldest unpaid: ${s.oldest_unpaid}
+          </div>
+        </div>
+        <button onclick="markPaid('${s.roll_number}', this)"
+          style="background:var(--primary);color:#fff;border:none;border-radius:8px;padding:7px 14px;
+                 font-family:var(--font-body);font-size:12px;font-weight:700;cursor:pointer;
+                 display:inline-flex;align-items:center;gap:6px;flex-shrink:0">
+          <i class="fas fa-check"></i> Mark Paid
+        </button>
+      </div>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">
+      Students with any unpaid meal orders (including this week's). <span style="background:#eff6ff;color:#2563eb;border:1px solid #93c5fd;padding:1px 6px;border-radius:10px;font-size:11px">📎 bKash proof pending</span> and <span style="background:#f0fdf4;color:#16a34a;border:1px solid #86efac;padding:1px 6px;border-radius:10px;font-size:11px">💵 Cash request pending</span> tags mean the student already submitted — check the Payments tab to verify them.
+    </div>
+    ${rows}`;
+}
+
+
+async function loadBill() {
+  const inp = document.getElementById('bill-date-input');
+  const date = inp ? inp.value : new Date().toISOString().slice(0,10);
+  if (!date) return;
+  const printGenEl = document.getElementById('bill-print-generated');
+  if (printGenEl) printGenEl.textContent = new Date().toLocaleDateString('en-US', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+  const printDateLbl = document.getElementById('bill-print-date-label');
+  if (printDateLbl) {
+    const [y,m,d2] = date.split('-');
+    printDateLbl.textContent = 'Bill for: ' + new Date(y, m-1, d2).toLocaleDateString('en-US', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+  }
+  const content = document.getElementById('bill-content');
+  if (!content) return;
+  content.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:40px 0"><i class="fas fa-spinner fa-spin" style="font-size:28px;color:var(--primary)"></i><div style="margin-top:12px;font-weight:600">Calculating bill…</div></div>';
+  try {
+    const r = await fetch('/manager/total_bill?date=' + encodeURIComponent(date));
+    if (!r.ok) throw new Error('Server error ' + r.status);
+    const d = await r.json();
+    renderBill(d);
+  } catch(e) {
+    content.innerHTML = `<div style="text-align:center;color:var(--danger);padding:32px 0">
+      <i class="fas fa-exclamation-circle" style="font-size:32px"></i>
+      <div style="margin-top:10px;font-weight:600">Could not load bill</div>
+      <div style="font-size:13px;margin-top:6px;color:var(--text-muted)">${e.message}</div>
+      <button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="loadBill()"><i class="fas fa-rotate-right"></i> Retry</button>
+    </div>`;
+  }
+}
+
+function renderBill(d) {
+  const fmt = n => '৳' + (n||0).toLocaleString();
+  const price = d.price_per_meal;
+
+  const floorsHtml = d.floors.length ? `
+    <div class="bill-section-title"><i class="fas fa-building"></i> Floor-wise Breakdown (Male)</div>
+    <table class="bill-floor-table">
+      <thead><tr><th>Floor</th><th>Lunch</th><th>Dinner</th><th>Total Meals</th><th>Amount</th></tr></thead>
+      <tbody>
+        ${d.floors.map(f => `
+          <tr>
+            <td><span class="badge badge-green"><i class="fas fa-layer-group"></i> Floor ${f.floor ?? '—'}</span></td>
+            <td>${f.lunch}</td>
+            <td>${f.dinner}</td>
+            <td><strong>${f.total}</strong></td>
+            <td><strong>${fmt(f.total * price)}</strong></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  ` : `<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:12px 0">No male floor data for this date.</div>`;
+
+  const noData = d.total_meals === 0;
+
+  document.getElementById('bill-content').innerHTML = `
+    ${noData ? `
+      <div style="text-align:center;color:var(--text-muted);padding:40px 0">
+        <div style="font-size:40px;margin-bottom:10px">🍽️</div>
+        <div style="font-size:15px;font-weight:600">No meals ordered on ${d.date}</div>
+        <div style="font-size:13px;margin-top:4px">Bill total: ৳0</div>
+      </div>
+    ` : `
+      <div class="bill-grand">
+        <div style="font-size:13px;opacity:.8;margin-bottom:6px">📅 ${d.date} &nbsp;·&nbsp; ৳${price}/meal</div>
+        <div class="amt">${fmt(d.grand_total)}</div>
+        <div class="sub">${d.total_meals} meals total (${d.lunch_total} lunch + ${d.dinner_total} dinner)</div>
+      </div>
+
+      <div class="bill-section-title"><i class="fas fa-utensils"></i> Meal Summary</div>
+      <div class="bill-row" style="background:#f0f7f2">
+        <div class="bill-row-label"><i class="fas fa-sun" style="color:var(--primary)"></i> Total Lunch</div>
+        <div class="bill-row-amt">${d.lunch_total} meals &nbsp;→&nbsp; <span style="color:var(--primary)">${fmt(d.lunch_total * price)}</span></div>
+      </div>
+      <div class="bill-row" style="background:#fff8e6">
+        <div class="bill-row-label"><i class="fas fa-moon" style="color:var(--accent)"></i> Total Dinner</div>
+        <div class="bill-row-amt">${d.dinner_total} meals &nbsp;→&nbsp; <span style="color:#b07800">${fmt(d.dinner_total * price)}</span></div>
+      </div>
+
+      <div class="bill-section-title"><i class="fas fa-venus-mars"></i> By Gender</div>
+      <div class="bill-row" style="background:#e6f0ff">
+        <div class="bill-row-label"><i class="fas fa-mars" style="color:#3b5fe2"></i> Male</div>
+        <div class="bill-row-amt" style="color:#3b5fe2">${d.male_lunch + d.male_dinner} meals (L:${d.male_lunch} D:${d.male_dinner}) &nbsp; ${fmt((d.male_lunch + d.male_dinner) * price)}</div>
+      </div>
+      <div class="bill-row" style="background:#fce4ec">
+        <div class="bill-row-label"><i class="fas fa-venus" style="color:#c2185b"></i> Female</div>
+        <div class="bill-row-amt" style="color:#c2185b">${d.female_lunch + d.female_dinner} meals (L:${d.female_lunch} D:${d.female_dinner}) &nbsp; ${fmt((d.female_lunch + d.female_dinner) * price)}</div>
+      </div>
+
+      ${floorsHtml}
+    `}
+  `;
+}
+
+// ── DUTY ROTATION ──────────────────────────────────────────────────────────────
+const DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+let _rotData     = null;   // full data from /manager/rotation
+let _rotWeek     = 'this'; // 'this' or 'next'
+let _rotSlots    = [];     // working copy [{slot, student_id, student_name, roll_number, day_from, day_to, note}, ...]
+let _rotPickSlot = null;   // which slot is being edited
+
+function rotAddDays(isoDate, days) {
+  const d = new Date(isoDate + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0,10);
+}
+
+function rotFormatWeekLabel(weekStart) {
+  const d0 = new Date(weekStart + 'T00:00:00');
+  const d6 = new Date(weekStart + 'T00:00:00');
+  d6.setDate(d6.getDate() + 6);
+  const opts = {month:'short', day:'numeric'};
+  return `Week of ${d0.toLocaleDateString('en-US', opts)} – ${d6.toLocaleDateString('en-US', opts)}`;
+}
+
+async function loadRotation() {
+  const r = await fetch('/manager/rotation');
+  _rotData = await r.json();
+  _rotSlots = buildDefaultSlots(_rotData[_rotWeek === 'this' ? 'this_week' : 'next_week']);
+  renderRotation();
+  renderDutyRosterCard();
+}
+
+function buildDefaultSlots(existing) {
+  // Start with 4 empty slots
+  const slots = [1,2,3,4].map(slot => ({
+    slot, student_id: null, student_name: '', roll_number: '', day_from: 1, day_to: 7, note: ''
+  }));
+  // Fill in any existing
+  if (existing) {
+    existing.forEach(row => {
+      const s = slots.find(s => s.slot === row.slot);
+      if (s) Object.assign(s, {
+        student_id: row.student_id, student_name: row.student_name || '',
+        roll_number: row.roll_number || '', day_from: row.day_from, day_to: row.day_to, note: row.note || ''
+      });
+    });
+  }
+  return slots;
+}
+
+function renderRotation() {
+  const weekStart = _rotWeek === 'this' ? _rotData.week_start : _rotData.next_week_start;
+  document.getElementById('rot-week-label').textContent =
+    (_rotWeek === 'this' ? '📅 This Week — ' : '📅 Next Week — ') + rotFormatWeekLabel(weekStart);
+
+  const tbody = document.getElementById('rotation-tbody');
+  tbody.innerHTML = _rotSlots.map((s, i) => {
+    const slotColors = ['#1a6b3a','#f0a500','#3b5fe2','#c2185b'];
+    const c = slotColors[i];
+    const dayFromLabel = DAY_NAMES[s.day_from - 1] || 'Mon';
+    const dayToLabel   = DAY_NAMES[s.day_to   - 1] || 'Sun';
+    return `
+    <tr>
+      <td style="text-align:center">
+        <span style="background:${c};color:#fff;width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">${s.slot}</span>
+      </td>
+      <td>
+        ${s.student_name
+          ? `<div style="font-weight:700;font-size:14px">${s.student_name}</div>
+             <div style="font-size:12px;color:var(--text-muted)">${s.roll_number}</div>`
+          : `<span style="color:var(--text-muted);font-size:13px;font-style:italic">— Not assigned —</span>`}
+        <button class="btn btn-outline btn-sm" style="margin-top:6px;font-size:12px;padding:5px 10px"
+          onclick="openRotPicker(${i})"><i class="fas fa-user-pen"></i> ${s.student_name ? 'Change' : 'Assign'}</button>
+        ${s.student_name ? `<button class="btn btn-sm" style="margin-top:6px;margin-left:4px;font-size:12px;padding:5px 10px;background:var(--danger-light);color:var(--danger);border:1px solid #feb2b2" onclick="clearRotSlot(${i})"><i class="fas fa-times"></i></button>` : ''}
+      </td>
+      <td style="text-align:center">
+        <div style="display:flex;align-items:center;gap:4px;justify-content:center">
+          <select onchange="_rotSlots[${i}].day_from=parseInt(this.value);renderRotation()" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit">
+            ${DAY_NAMES.map((n,di) => `<option value="${di+1}" ${di+1===s.day_from?'selected':''}>${n}</option>`).join('')}
+          </select>
+          <span style="font-size:11px;color:var(--text-muted)">to</span>
+          <select onchange="_rotSlots[${i}].day_to=parseInt(this.value);renderRotation()" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit">
+            ${DAY_NAMES.map((n,di) => `<option value="${di+1}" ${di+1===s.day_to?'selected':''}>${n}</option>`).join('')}
+          </select>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:3px">${dayFromLabel}–${dayToLabel}</div>
+      </td>
+      <td>
+        <input type="text" value="${s.note || ''}" placeholder="e.g. Evening only"
+          oninput="_rotSlots[${i}].note=this.value"
+          style="width:100%;padding:6px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit">
+      </td>
+      <td></td>
+    </tr>`;
+  }).join('');
+
+  // Today highlight (only for current week)
+  const todayBox = document.getElementById('rot-today-box');
+  if (_rotWeek === 'this' && _rotData) {
+    const todayDayNum = _rotData.weekday + 1; // weekday 0=Mon → dayNum 1
+    const onDuty = _rotSlots.filter(s => s.student_name && s.day_from <= todayDayNum && s.day_to >= todayDayNum);
+    if (onDuty.length > 0) {
+      document.getElementById('rot-today-name').textContent =
+        onDuty.map(s => `${s.student_name} (${s.roll_number})`).join(' & ');
+      todayBox.style.display = '';
+    } else {
+      todayBox.style.display = 'none';
+    }
+  } else {
+    todayBox.style.display = 'none';
+  }
+}
+
+function rotShowWeek(dir) {
+  _rotWeek = dir === 'next' ? 'next' : 'this';
+  _rotSlots = buildDefaultSlots(_rotData[_rotWeek === 'this' ? 'this_week' : 'next_week']);
+  // Update button highlight
+  document.getElementById('rotBtnThis').style.fontWeight = _rotWeek === 'this' ? '700' : '500';
+  document.getElementById('rotBtnThis').style.borderColor = _rotWeek === 'this' ? 'var(--primary)' : '';
+  document.getElementById('rotBtnThis').style.color = _rotWeek === 'this' ? 'var(--primary)' : '';
+  document.getElementById('rotBtnNext').style.fontWeight = _rotWeek === 'next' ? '700' : '500';
+  document.getElementById('rotBtnNext').style.borderColor = _rotWeek === 'next' ? 'var(--primary)' : '';
+  document.getElementById('rotBtnNext').style.color = _rotWeek === 'next' ? 'var(--primary)' : '';
+  renderRotation();
+}
+
+async function saveRotation() {
+  const weekStart = _rotWeek === 'this' ? _rotData.week_start : _rotData.next_week_start;
+  const r = await fetch('/manager/rotation/save', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ week_start: weekStart, slots: _rotSlots.filter(s => s.student_name) })
+  });
+  const d = await r.json();
+  if (d.ok) { toast('Rotation schedule saved! ✅'); loadRotation(); }
+  else { toast(d.msg, 'error'); }
+}
+
+async function clearRotationWeek() {
+  // Guard: rotation data must be loaded first
+  if (!_rotData) {
+    try { await loadRotation(); } catch(e) { toast('Failed to load rotation data', 'error'); return; }
+  }
+  const weekStart = _rotWeek === 'this' ? _rotData.week_start : _rotData.next_week_start;
+  const weekLabel = _rotWeek === 'this' ? 'this week' : 'next week';
+  if (!weekStart) { toast('Could not determine week — please reload the page', 'error'); return; }
+  if (!confirm(`Clear the entire rotation schedule for ${weekLabel}? Pending duty invites will also be removed.`)) return;
+  try {
+    const r = await fetch('/manager/rotation/clear', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ week_start: weekStart })
+    });
+    if (!r.ok) throw new Error('Server error ' + r.status);
+    const d = await r.json();
+    if (d.ok) {
+      // Reset local working copy immediately so UI clears without waiting for reload
+      _rotSlots = [1,2,3,4].map(slot => ({
+        slot, student_id: null, student_name: '', roll_number: '', day_from: 1, day_to: 7, note: ''
+      }));
+      renderRotation();
+      toast('Rotation cleared ✅');
+      loadRotation(); // re-sync with server in background
+    } else {
+      toast(d.msg || 'Clear failed', 'error');
+    }
+  } catch(e) {
+    toast('Clear failed: ' + e.message, 'error');
+  }
+}
+
+// Student picker
+let _rotSearchTimeout = null;
+function openRotPicker(slotIdx) {
+  _rotPickSlot = slotIdx;
+  document.getElementById('rot-search-input').value = '';
+  document.getElementById('rot-search-results').innerHTML = '';
+  document.getElementById('rot-picker-modal').classList.add('open');
+  document.getElementById('rot-search-input').focus();
+}
+function closeRotPicker() {
+  document.getElementById('rot-picker-modal').classList.remove('open');
+  _rotPickSlot = null;
+}
+function rotSearch(q) {
+  clearTimeout(_rotSearchTimeout);
+  if (!q.trim()) { document.getElementById('rot-search-results').innerHTML = ''; return; }
+  _rotSearchTimeout = setTimeout(async () => {
+    const r = await fetch('/manager/rotation/search_students?q=' + encodeURIComponent(q));
+    const d = await r.json();
+    const el = document.getElementById('rot-search-results');
+    if (!d.students || d.students.length === 0) {
+      el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">No students found</div>';
+      return;
+    }
+    el.innerHTML = d.students.map(s => `
+      <div onclick="pickRotStudent(${s.id},'${s.name.replace(/'/g,"\\'")}','${s.roll_number}')"
+        style="padding:10px 14px;cursor:pointer;border-radius:8px;display:flex;justify-content:space-between;align-items:center;transition:background .15s"
+        onmouseover="this.style.background='var(--primary-pale)'" onmouseout="this.style.background=''">
+        <div>
+          <div style="font-weight:700;font-size:14px">${s.name}</div>
+          <div style="font-size:12px;color:var(--text-muted)">Roll: ${s.roll_number} · Batch ${s.batch}</div>
+        </div>
+        <i class="fas fa-plus" style="color:var(--primary)"></i>
+      </div>`).join('');
+  }, 250);
+}
+function pickRotStudent(id, name, roll) {
+  if (_rotPickSlot === null) return;
+  _rotSlots[_rotPickSlot].student_id   = id;
+  _rotSlots[_rotPickSlot].student_name = name;
+  _rotSlots[_rotPickSlot].roll_number  = roll;
+  closeRotPicker();
+  renderRotation();
+  renderDutyRosterCard();
+}
+function clearRotSlot(i) {
+  if (!_rotSlots[i]) return;
+  _rotSlots[i].student_id   = null;
+  _rotSlots[i].student_name = '';
+  _rotSlots[i].roll_number  = '';
+  _rotSlots[i].note         = '';
+  renderRotation();
+  renderDutyRosterCard();
+}
+function renderDutyRosterCard() {
+  if (!_rotData) return;
+  const thisWeekSlots = buildDefaultSlots(_rotData.this_week);
+  const slotColors = ['#1a6b3a','#f0a500','#3b5fe2','#c2185b'];
+  const slotBg     = ['#e8f5ee','#fff8e6','#eef2ff','#fff0f5'];
+  const todayNum   = _rotData.weekday + 1; // 1=Mon…7=Sun
+
+  // Week label
+  const ws = _rotData.week_start;
+  const d0 = new Date(ws + 'T00:00:00'), d6 = new Date(ws + 'T00:00:00');
+  d6.setDate(d6.getDate() + 6);
+  const fmt = {month:'short', day:'numeric'};
+  document.getElementById('roster-week-label').textContent =
+    d0.toLocaleDateString('en-US', fmt) + ' – ' + d6.toLocaleDateString('en-US', fmt);
+
+  const container = document.getElementById('duty-roster-slots');
+  container.innerHTML = thisWeekSlots.map((s, i) => {
+    const assigned = !!s.student_name;
+    const onDutyNow = assigned && s.day_from <= todayNum && s.day_to >= todayNum;
+    const dayLabel  = s.day_from === s.day_to
+      ? DAY_NAMES[s.day_from - 1]
+      : DAY_NAMES[s.day_from - 1] + '–' + DAY_NAMES[s.day_to - 1];
+    return `<div style="padding:14px 18px;border-right:1px solid var(--border);${onDutyNow ? 'background:'+slotBg[i]+';' : ''}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="background:${slotColors[i]};color:#fff;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">${s.slot}</span>
+        <span style="font-size:11px;color:var(--text-muted);font-weight:600">${dayLabel}</span>
+        ${onDutyNow ? '<span style="background:'+slotColors[i]+';color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px">TODAY</span>' : ''}
+      </div>
+      ${assigned
+        ? `<div style="font-weight:700;font-size:14px;color:var(--text)">${s.student_name}</div>
+           <div style="font-size:12px;color:var(--text-muted)">Roll: ${s.roll_number}</div>
+           ${s.note ? '<div style="font-size:11px;color:var(--text-muted);margin-top:3px;font-style:italic">'+s.note+'</div>' : ''}`
+        : `<div style="font-size:13px;color:var(--text-muted);font-style:italic">— Not assigned —</div>`}
+    </div>`;
+  }).join('');
+
+  // Today on-duty banner
+  const onDutyToday = thisWeekSlots.filter(s => s.student_name && s.day_from <= todayNum && s.day_to >= todayNum);
+  const todayBox = document.getElementById('duty-on-today');
+  if (onDutyToday.length > 0) {
+    document.getElementById('duty-on-today-text').textContent =
+      'On duty today: ' + onDutyToday.map(s => `${s.student_name} (${s.roll_number})`).join(' & ');
+    todayBox.style.display = '';
+  } else {
+    todayBox.style.display = 'none';
+  }
+}
+
+// Auto-load rotation summary on dashboard load
+window.addEventListener('DOMContentLoaded', () => {
+  fetch('/manager/rotation').then(r => r.json()).then(data => {
+    _rotData = data;
+    _rotSlots = buildDefaultSlots(data.this_week);
+    renderDutyRosterCard();
+  }).catch(() => {});
+});
+
+// ── bKash Proposal Panel ──────────────────────────────────────────────────────
+let _myManagerId = null;
+
+async function loadBkashProposals() {
+  try {
+    const res  = await fetch('/manager/bkash_proposals');
+    const data = await res.json();
+    _myManagerId = data.my_id;
+    renderProposals(data.pending, data.resolved);
+    // Refresh the tab badge with up-to-date count
+    const cnt = (data.pending || []).filter(p => p.my_vote === null || p.my_vote === undefined).length;
+    const dot = document.getElementById('bkash-dot');
+    const btn = document.getElementById('bkash-tab-btn');
+    if (dot) { dot.style.display = cnt > 0 ? 'inline-block' : 'none'; dot.textContent = cnt; }
+    if (btn) { const ic = btn.querySelector('i'); if (ic) ic.style.color = cnt > 0 ? '#e2136e' : ''; }
+  } catch(e) {
+    const el = document.getElementById('bkashProposalsList');
+    if (el) el.innerHTML = '<div class="bkash-empty"><i class="fas fa-exclamation-circle"></i>Could not load proposals.</div>';
+  }
+}
+
+function renderProposals(pending, resolved) {
+  const list = document.getElementById('bkashProposalsList');
+  if (!list) return;
+  if (!pending.length) {
+    list.innerHTML = '<div class="bkash-empty"><i class="fas fa-check-circle"></i>No pending proposals.</div>';
+  } else {
+    list.innerHTML = pending.map(p => {
+      const isOwn   = p.proposer_manager_id === _myManagerId;
+      const total   = p.total_managers - 1;   // other active managers
+      const needed  = 2;  // only 2 approvals required
+      const pct     = total > 0 ? Math.round((p.approve_count / total) * 100) : 100;
+      const timeAgo = _bkashTimeAgo(p.created_at);
+      let voteSection = '';
+      if (isOwn) {
+        voteSection = `<span class="own-proposal-chip"><i class="fas fa-hourglass-half"></i> Your proposal — waiting for all others to approve</span>`;
+      } else if (p.my_vote === 'approve') {
+        voteSection = `<span class="voted-chip approve"><i class="fas fa-check"></i> You approved</span>`;
+      } else if (p.my_vote === 'reject') {
+        voteSection = `<span class="voted-chip reject"><i class="fas fa-times"></i> You rejected</span>`;
+      } else {
+        voteSection = `
+          <button class="btn-approve" onclick="voteOnProposal(${p.id},'approve')"><i class="fas fa-check"></i> Approve</button>
+          <button class="btn-reject"  onclick="voteOnProposal(${p.id},'reject')"><i class="fas fa-times"></i> Reject</button>`;
+      }
+      return `
+        <div class="proposal-card ${isOwn?'mine':''} ${p.my_vote?'voted':''}" id="prop-${p.id}">
+          <div class="proposal-top">
+            <div>
+              <div class="proposal-bkash"><i class="fas fa-mobile-alt" style="font-size:14px;margin-right:6px"></i>${p.proposed_bkash}</div>
+              <div class="proposal-who">Proposed by <strong>${p.proposer_name}</strong> · ${timeAgo}</div>
+            </div>
+            <div style="font-size:12px;color:var(--text-muted);text-align:right">
+              ${p.approve_count}/${needed} approved<br>
+              <span style="color:var(--danger)">${p.reject_count ? p.reject_count+' reject' + (p.reject_count!==1?'s':'') : 'any reject = denied'}</span>
+            </div>
+          </div>
+          <div class="vote-bar-wrap">
+            <div class="vote-bar-label"><span>Approvals (need 2)</span><span>${p.approve_count} / ${total} managers</span></div>
+            <div class="vote-bar-track"><div class="vote-bar-fill" style="width:${pct}%"></div></div>
+          </div>
+          <div class="vote-btns">${voteSection}</div>
+        </div>`;
+    }).join('');
+  }
+  const resolvedSec  = document.getElementById('resolvedSection');
+  const resolvedList = document.getElementById('resolvedList');
+  if (resolvedSec && resolvedList) {
+    if (resolved.length) {
+      resolvedSec.style.display = '';
+      resolvedList.innerHTML = resolved.map(r => `
+        <div class="resolved-item">
+          <span class="resolved-badge ${r.status}">${r.status}</span>
+          <span style="font-weight:700;color:#e2136e">${r.proposed_bkash}</span>
+          <span style="color:var(--text-muted)">by ${r.proposer_name}</span>
+          <span style="color:var(--text-muted);margin-left:auto;font-size:12px">${_bkashTimeAgo(r.resolved_at)}</span>
+        </div>`).join('');
+    } else {
+      resolvedSec.style.display = 'none';
+    }
+  }
+}
+
+async function proposeBkash() {
+  const input = document.getElementById('newBkashInput');
+  const btn   = document.getElementById('bkashProposeBtn');
+  const bkash = (input.value || '').trim();
+  if (!bkash) { toast('Enter a bKash number first.', 'error'); return; }
+  if (!/^01[3-9]\d{8}$/.test(bkash)) { toast('Invalid format — must be 01XXXXXXXXX (11 digits)', 'error'); return; }
+  btn.classList.add('busy');
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+  try {
+    const res  = await fetch('/manager/bkash_propose', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({bkash_number: bkash})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast(data.msg, 'success');
+      input.value = '';
+      if (data.auto_approved) {
+        ['currentBkash','currentBkashHeader'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = bkash;
+        });
+      }
+      await loadBkashProposals();
+    } else {
+      toast(data.msg, 'error');
+    }
+  } catch(e) { toast('Network error.', 'error'); }
+  finally {
+    btn.classList.remove('busy');
+    btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send / Apply';
+  }
+}
+
+async function voteOnProposal(proposalId, vote) {
+  try {
+    const res  = await fetch('/manager/bkash_vote', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({proposal_id: proposalId, vote})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast(data.msg, 'success');
+      await loadBkashProposals();
+      if (data.resolved && vote === 'approve') location.reload();
+    } else { toast(data.msg, 'error'); }
+  } catch(e) { toast('Network error.', 'error'); }
+}
+
+function _bkashTimeAgo(isoStr) {
+  if (!isoStr) return '';
+  const diff = Math.floor((Date.now() - new Date(isoStr + (isoStr.includes('T')?'':'Z'))) / 1000);
+  if (diff < 60)    return 'just now';
+  if (diff < 3600)  return Math.floor(diff/60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+  return Math.floor(diff/86400) + 'd ago';
+}
+
+
+
+
+// ── Meal Edit Requests ─────────────────────────────────────────────────────
+async function loadEditRequests() {
+  const list = document.getElementById('edit-requests-list');
+  if (!list) return;
+  list.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:32px 0"><i class="fas fa-spinner fa-spin" style="font-size:22px;margin-bottom:10px"></i><div>Loading…</div></div>';
+  try {
+    const res  = await fetch('/manager/edit_requests');
+    const data = await res.json();
+    const reqs = data.requests || [];
+
+    // Update badge
+    const dot = document.getElementById('edit-req-dot');
+    if (reqs.length > 0) { dot.style.display='inline-block'; dot.textContent=reqs.length; }
+    else                 { dot.style.display='none'; }
+
+    if (reqs.length === 0) {
+      list.innerHTML = `
+        <div style="text-align:center;color:var(--text-muted);padding:40px 0">
+          <div style="font-size:40px;margin-bottom:12px">✅</div>
+          <div style="font-weight:700;margin-bottom:4px">No pending meal edit requests</div>
+          <div style="font-size:13px">Students' requests to add/cancel meals will appear here.</div>
+        </div>`;
+      return;
+    }
+
+    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    list.innerHTML = reqs.map(r => {
+      const d = new Date(r.meal_date + 'T00:00:00');
+      const niceDate = `${dayNames[d.getDay()]} ${d.getDate()} ${monthNames[d.getMonth()]}`;
+      const actionLabel = r.action === 'cancel' ? 'Cancel' : 'Add';
+      const mealLabel   = r.meal_type === 'lunch' ? '🥗 Lunch' : '🍛 Dinner';
+      const iconClass   = r.action === 'cancel' ? 'cancel' : 'add';
+      const iconFA      = r.action === 'cancel' ? 'fa-times' : 'fa-plus';
+      const timeAgo     = r.created_at ? r.created_at.slice(0,16).replace('T',' ') : '';
+      const reasonHtml  = r.reason ? `<span class="edit-req-reason"><i class="fas fa-comment"></i> ${r.reason}</span>` : '';
+      return `
+        <div class="edit-req-card" id="edit-req-card-${r.id}">
+          <div class="edit-req-info">
+            <div class="edit-req-icon ${iconClass}"><i class="fas ${iconFA}"></i></div>
+            <div class="edit-req-details">
+              <div class="edit-req-name">${r.student_name} <span class="badge badge-green" style="font-size:11px">Batch ${r.batch} · Roll ${r.roll_number}</span></div>
+              <div class="edit-req-meta"><strong>${actionLabel} ${mealLabel}</strong> · ${niceDate} · Requested ${timeAgo}</div>
+              ${reasonHtml}
+            </div>
+          </div>
+          <div class="edit-req-actions">
+            <button class="btn-approve" onclick="decideEditRequest(${r.id},'approved')">
+              <i class="fas fa-check"></i> Approve
+            </button>
+            <button class="btn-reject" onclick="decideEditRequest(${r.id},'rejected')">
+              <i class="fas fa-times"></i> Reject
+            </button>
+          </div>
+        </div>`;
+    }).join('');
+  } catch(e) {
+    list.innerHTML = '<div style="text-align:center;color:var(--danger);padding:32px 0">Failed to load requests.</div>';
+  }
+}
+
+async function decideEditRequest(reqId, verdict) {
+  const card = document.getElementById('edit-req-card-' + reqId);
+  if (card) {
+    card.style.opacity = '0.5';
+    card.style.pointerEvents = 'none';
+  }
+  const r = await fetch('/manager/decide_edit_request', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ request_id: reqId, verdict })
+  });
+  const d = await r.json();
+  if (d.ok) {
+    const label = verdict === 'approved' ? '✅ Approved' : '❌ Rejected';
+    toast(`${label} — student has been notified.`, verdict === 'approved' ? 'success' : 'error');
+    await loadEditRequests();
+  } else {
+    toast(d.msg || 'Error.', 'error');
+    if (card) { card.style.opacity='1'; card.style.pointerEvents=''; }
+  }
+}
+
+// Auto-poll edit requests badge every 60 seconds
+(async function initEditRequestBadge() {
+  try {
+    const res  = await fetch('/manager/edit_requests');
+    const data = await res.json();
+    const cnt  = (data.requests || []).length;
+    const dot  = document.getElementById('edit-req-dot');
+    if (dot) { dot.style.display = cnt > 0 ? 'inline-block' : 'none'; dot.textContent = cnt; }
+  } catch(e) {}
+})();
+
+// ── Cook Sheet ────────────────────────────────────────────────────────────────
+
+// Set today as default date on page load
+(function initCookDate() {
+  const today = new Date();
+  const yyyy  = today.getFullYear();
+  const mm    = String(today.getMonth() + 1).padStart(2, '0');
+  const dd    = String(today.getDate()).padStart(2, '0');
+  const inp   = document.getElementById('cook-date-input');
+  if (inp) inp.value = `${yyyy}-${mm}-${dd}`;
+})();
+
+function _cookFmtDate(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  const days   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+let _cookData = null;
+
+async function loadCookSheet() {
+  const dateInput = document.getElementById('cook-date-input');
+  if (!dateInput) return;
+  const dateVal = dateInput.value;
+  if (!dateVal) return;
+
+  const body     = document.getElementById('cook-sheet-body');
+  const subtitle = document.getElementById('cook-header-subtitle');
+  if (!body) return;
+
+  body.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:40px 0">
+    <i class="fas fa-spinner fa-spin" style="font-size:24px;margin-bottom:12px;display:block"></i>Loading…</div>`;
+
+  let data;
+  try {
+    const controller = new AbortController();
+    const tid        = setTimeout(() => controller.abort(), 12000);
+    const res        = await fetch('/manager/cook_sheet?date=' + encodeURIComponent(dateVal),
+                                   { signal: controller.signal });
+    clearTimeout(tid);
+
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    data = await res.json();
+
+  } catch(err) {
+    const isAbort = err.name === 'AbortError';
+    body.innerHTML = `
+      <div style="text-align:center;padding:36px 20px">
+        <div style="font-size:36px;margin-bottom:10px">${isAbort ? '⏱️' : '⚠️'}</div>
+        <div style="font-size:15px;font-weight:700;color:var(--danger);margin-bottom:6px">
+          ${isAbort ? 'Request timed out' : 'Network error'}
+        </div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:18px">
+          ${isAbort ? 'Server took too long. Check connection and try again.'
+                    : 'Could not reach the server. Check your internet connection.'}
+        </div>
+        <button onclick="loadCookSheet()"
+          style="display:inline-flex;align-items:center;gap:8px;padding:10px 22px;
+                 background:var(--primary);color:#fff;border:none;border-radius:8px;
+                 font-family:var(--font-body);font-size:14px;font-weight:700;cursor:pointer">
+          <i class="fas fa-sync-alt"></i> Retry
+        </button>
+      </div>`;
+    return;
+  }
+
+  if (!data.ok) {
+    body.innerHTML = `
+      <div style="text-align:center;padding:32px 20px">
+        <div style="font-size:14px;color:var(--danger);margin-bottom:14px">
+          <i class="fas fa-exclamation-triangle"></i> ${data.msg || 'Failed to load.'}
+        </div>
+        <button onclick="loadCookSheet()"
+          style="display:inline-flex;align-items:center;gap:8px;padding:9px 20px;
+                 background:var(--primary);color:#fff;border:none;border-radius:8px;
+                 font-family:var(--font-body);font-size:13px;font-weight:700;cursor:pointer">
+          <i class="fas fa-sync-alt"></i> Retry
+        </button>
+      </div>`;
+    return;
+  }
+
+  _cookData = data;
+  if (subtitle) subtitle.textContent = _cookFmtDate(dateVal);
+
+  const { lunch, dinner, floor_lunch, floor_dinner } = data;
+  const grandTotal = (lunch.total || 0) + (dinner.total || 0);
+
+  function mealBlock(label, emoji, mealData, floorData) {
+    const floorRows = (floorData || []).filter(f => f.floor != null).map(f => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-radius:8px;margin-bottom:5px;background:#e6f0ff;border:1px solid #b3d1f5">
+          <span style="display:flex;align-items:center;gap:8px;color:#3b5fe2;font-size:13px;font-weight:600">
+            <i class="fas fa-layer-group" style="font-size:11px"></i> Floor ${f.floor}
+          </span>
+          <span style="font-size:18px;font-weight:800;color:#3b5fe2">${f.count}</span>
+        </div>`).join('');
+
+    return `
+        <div style="margin-bottom:22px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding-bottom:10px;border-bottom:2px solid var(--border)">
+            <span style="font-size:22px">${emoji}</span>
+            <span style="font-size:15px;font-weight:700;color:var(--text)">${label}</span>
+            <span style="margin-left:auto;font-size:24px;font-weight:800;color:var(--primary)">${mealData.total}</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:8px;margin-bottom:5px;background:var(--primary-pale);border:1.5px solid #b7e4c7">
+            <span style="display:flex;align-items:center;gap:8px;color:var(--primary);font-size:14px;font-weight:700">
+              <i class="fas fa-users"></i> Total ${label}
+            </span>
+            <span style="font-size:22px;font-weight:800;color:var(--primary)">${mealData.total}</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:8px;margin-bottom:5px;background:#fce4ec;border:1.5px solid #f48fb1">
+            <span style="display:flex;align-items:center;gap:8px;color:#c2185b;font-size:13px;font-weight:600">
+              <i class="fas fa-venus"></i> Female
+            </span>
+            <span style="font-size:20px;font-weight:800;color:#c2185b">${mealData.female}</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:8px;margin-bottom:5px;background:#e6f0ff;border:1px solid #b3d1f5">
+            <span style="display:flex;align-items:center;gap:8px;color:#3b5fe2;font-size:13px;font-weight:600">
+              <i class="fas fa-mars"></i> Male (all floors)
+            </span>
+            <span style="font-size:20px;font-weight:800;color:#3b5fe2">${mealData.male}</span>
+          </div>
+          ${floorRows}
+        </div>`;
+  }
+
+  body.innerHTML = `
+      ${mealBlock('Lunch', '🌤️', lunch, floor_lunch)}
+      ${mealBlock('Dinner', '🌙', dinner, floor_dinner)}
+      <div style="display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,var(--primary),var(--primary-light));color:#fff;border-radius:var(--radius-sm);padding:16px 20px;margin-top:4px">
+        <span style="font-size:15px;font-weight:700;opacity:.95">🍽️ Grand Total Meals</span>
+        <span style="font-size:34px;font-weight:800">${grandTotal}</span>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px">
+        <i class="fas fa-clock"></i> Refreshed: ${new Date().toLocaleTimeString()} &nbsp;·&nbsp; Click <strong>Print for Cook</strong> to hand to the kitchen.
+      </div>`;
+}
+
+
+function printCookSheet() {
+  const d = _cookData;
+  if (!d) { toast('Load the cook sheet first.', 'error'); return; }
+  const dateVal   = document.getElementById('cook-date-input').value;
+  const niceDateStr = _cookFmtDate(dateVal);
+  const grandTotal  = (d.lunch.total || 0) + (d.dinner.total || 0);
+
+  function floorTableRows(floors) {
+    return (floors || []).filter(f => f.floor != null)
+      .map(f => `<tr><td style="padding:5px 10px;border:1px solid #ccc">Floor ${f.floor}</td><td style="padding:5px 10px;border:1px solid #ccc;text-align:right;font-weight:700;font-size:15px">${f.count}</td></tr>`)
+      .join('');
+  }
+
+  function mealTable(label, emoji, mealData, floorData) {
+    return `
+      <div style="margin-bottom:18px">
+        <h2 style="font-size:15px;font-weight:800;border-bottom:2px solid #333;padding-bottom:4px;margin-bottom:8px">${emoji} ${label.toUpperCase()} — Total: ${mealData.total}</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <tr style="background:#f0f0f0"><td style="padding:5px 10px;border:1px solid #ccc;font-weight:700">Total:</td><td style="padding:5px 10px;border:1px solid #ccc;text-align:right;font-weight:800;font-size:16px">${mealData.total}</td></tr>
+          <tr><td style="padding:5px 10px;border:1px solid #ccc">Female:</td><td style="padding:5px 10px;border:1px solid #ccc;text-align:right;font-weight:700;font-size:15px">${mealData.female}</td></tr>
+          <tr><td style="padding:5px 10px;border:1px solid #ccc">Male:</td><td style="padding:5px 10px;border:1px solid #ccc;text-align:right;font-weight:700;font-size:15px">${mealData.male}</td></tr>
+          ${floorTableRows(floorData)}
+        </table>
+      </div>`;
+  }
+
+  const win = window.open('', '_blank', 'width=420,height=640');
+  win.document.write(`<!DOCTYPE html><html><head>
+    <meta charset="UTF-8">
+    <title>Cook Sheet — ${niceDateStr}</title>
+    <style>
+      @page { size: A5 portrait; margin: 12mm 14mm; }
+      body { font-family: Arial, sans-serif; color: #000; padding: 0; margin: 0; }
+      .header { text-align:center; border-bottom:3px solid #1a6b3a; padding-bottom:10px; margin-bottom:16px; }
+      .header h1 { font-size:18px; margin-bottom:3px; color:#1a6b3a; }
+      .header p { font-size:12px; color:#555; margin:2px 0; }
+      .grand { background:#1a6b3a; color:#fff; padding:10px 14px; border-radius:6px; display:flex; justify-content:space-between; align-items:center; margin-top:12px; }
+      .grand span:first-child { font-size:14px; font-weight:700; }
+      .grand span:last-child  { font-size:22px; font-weight:800; }
+      .footer { margin-top:16px; border-top:1px dashed #aaa; padding-top:8px; font-size:10px; color:#999; text-align:center; }
+    </style>
+  </head><body>
+    <div class="header">
+      <h1>Netrokona Medical — Cook Sheet</h1>
+      <p><strong>${niceDateStr}</strong></p>
+      <p>Printed: ${new Date().toLocaleString()}</p>
+    </div>
+    ${mealTable('Lunch',  '🌤️', d.lunch,  d.floor_lunch)}
+    ${mealTable('Dinner', '🌙', d.dinner, d.floor_dinner)}
+    <div class="grand">
+      <span>🍽️ Grand Total Meals</span>
+      <span>${grandTotal}</span>
+    </div>
+    <div class="footer">NMMS — Netrokona Medical Meal Management System</div>
+  </body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); }, 400);
+}
+
+// ── bKash proposal badge — init + auto-poll every 60s ─────────────────────
+async function updateBkashBadge() {
+  try {
+    const res  = await fetch('/manager/bkash_proposals');
+    const data = await res.json();
+    const cnt  = (data.pending || []).filter(p => p.my_vote === null || p.my_vote === undefined).length;
+    const dot  = document.getElementById('bkash-dot');
+    const btn  = document.getElementById('bkash-tab-btn');
+    if (dot) {
+      dot.style.display = cnt > 0 ? 'inline-block' : 'none';
+      dot.textContent   = cnt;
+    }
+    if (btn) {
+      btn.style.position = 'relative';
+      if (cnt > 0) {
+        btn.style.animation = 'none';
+        // Pulse the tab label text to draw attention
+        btn.querySelector('i').style.color = '#e2136e';
+      } else {
+        btn.querySelector('i').style.color = '';
+      }
+    }
+  } catch(e) {}
+}
+updateBkashBadge();
+setInterval(updateBkashBadge, 60000);
+
+setInterval(async () => {
+  try {
+    const res  = await fetch('/manager/edit_requests');
+    const data = await res.json();
+    const cnt  = (data.requests || []).length;
+    const dot  = document.getElementById('edit-req-dot');
+    if (dot) { dot.style.display = cnt > 0 ? 'inline-block' : 'none'; dot.textContent = cnt; }
+  } catch(e) {}
+}, 60000);
+
+// ── Ordered But Not Paid ─────────────────────────────────────────────────────
+
+async function loadUnpaidOrders() {
+  const body    = document.getElementById('unpaid-orders-body');
+  const dot     = document.getElementById('unpaid-dot');
+  const sumBar  = document.getElementById('unpaid-summary-bar');
+
+  body.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:40px 0"><i class="fas fa-spinner fa-spin" style="font-size:24px"></i><div style="margin-top:12px;font-size:13px">Loading…</div></div>`;
+  sumBar.style.display = 'none';
+
+  try {
+    const res  = await fetch('/manager/ordered_not_paid');
+    const data = await res.json();
+
+    if (!data.ok || data.count === 0) {
+      body.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:40px 0"><div style="font-size:36px;margin-bottom:10px">✅</div><div style="font-weight:700;margin-bottom:4px">All clear!</div><div style="font-size:13px">No students with unpaid orders. All clear!</div></div>`;
+      dot.style.display = 'none';
+      return;
+    }
+
+    // Update notification dot
+    dot.style.display = 'inline-block';
+    dot.textContent   = data.count;
+
+    // Summary bar
+    const totalOrders = data.students.reduce((s, x) => s + parseInt(x.order_count || 0), 0);
+    const totalAmt    = data.students.reduce((s, x) => s + parseFloat(x.total_amount || 0), 0);
+    document.getElementById('unpaid-total-students').textContent = data.count;
+    document.getElementById('unpaid-total-orders').textContent   = totalOrders;
+    document.getElementById('unpaid-total-amount').textContent   = Math.round(totalAmt);
+    sumBar.style.display = 'flex';
+
+    // Update subtitle
+    document.getElementById('unpaid-subtitle').textContent =
+      `${data.count} student(s) with unpaid orders`;
+
+    const rows = data.students.map(s => {
+      const genderIcon  = s.gender === 'female' ? '👩' : '👨';
+      const HOSTEL_NAMES = {1:'Campus', 2:'Sentu House', 3:'Chairman House'};
+      const floorLabel  = s.floor
+        ? (s.gender === 'female' ? (HOSTEL_NAMES[s.floor] || `Hostel ${s.floor}`) : `Floor ${s.floor}`)
+        : '—';
+      const mealList   = (s.order_details || '').split(', ').slice(0, 5).join('<br>') +
+                         ((s.order_details || '').split(', ').length > 5 ? '<br><span style="color:var(--text-muted)">…</span>' : '');
+      return `
+        <tr>
+          <td>
+            <div style="font-weight:700;font-size:14px">${genderIcon} ${s.name}</div>
+          </td>
+          <td>
+            <span style="font-family:monospace;font-size:13px;font-weight:700;background:var(--primary-pale);color:var(--primary);padding:3px 8px;border-radius:6px">${s.roll_number}</span>
+          </td>
+          <td style="font-size:13px;color:var(--text-muted)">
+            Batch ${s.batch}
+          </td>
+          <td style="font-size:12px;color:var(--text-muted)">${floorLabel}</td>
+          <td style="text-align:center">
+            <span style="background:#fff0f0;color:#e53e3e;font-weight:700;border-radius:8px;padding:4px 10px;font-size:13px">${s.order_count}</span>
+          </td>
+          <td style="font-size:11px;color:var(--text-muted);line-height:1.8">${mealList}</td>
+          <td>
+            <span style="font-size:15px;font-weight:800;color:#e53e3e">৳${Math.round(s.total_amount)}</span>
+          </td>
+        </tr>`;
+    }).join('');
+
+    body.innerHTML = `
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:560px">
+          <thead>
+            <tr style="background:var(--sidebar-bg,#f7fafc)">
+              <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);border-bottom:2px solid var(--border)">Name</th>
+              <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);border-bottom:2px solid var(--border)">Roll</th>
+              <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);border-bottom:2px solid var(--border)">Batch</th>
+              <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);border-bottom:2px solid var(--border)">Floor</th>
+              <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);border-bottom:2px solid var(--border)">Orders</th>
+              <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);border-bottom:2px solid var(--border)">Meal Details</th>
+              <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);border-bottom:2px solid var(--border)">Amount Due</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </div>
+      <div style="padding:10px 2px;font-size:12px;color:var(--text-muted);margin-top:4px">
+        <i class="fas fa-info-circle"></i>
+        These students selected meal(s) on the meal page but have not submitted a bKash or cash payment.
+        They appear here until their payment is verified by you.
+      </div>`;
+
+  } catch(e) {
+    body.innerHTML = `<div style="text-align:center;color:var(--danger);padding:30px 0"><i class="fas fa-exclamation-triangle"></i> Failed to load. Please try again.</div>`;
+    console.error('loadUnpaidOrders error:', e);
+  }
+}
+// ── Live stat refresh — runs after every verify/reject action ─────────────────
+async function refreshDashboardStats() {
+  try {
+    const res  = await fetch('/manager/dashboard_stats');
+    const data = await res.json();
+    if (!data.ok) return;
+    const pa = document.getElementById('stat-pending-amount');
+    const tr = document.getElementById('stat-total-received');
+    if (pa) pa.textContent = '৳' + Math.round(data.pending_amount);
+    if (tr) tr.textContent = '৳' + Math.round(data.total_received);
+  } catch(_) {}
+}
+// Refresh stats after a short delay whenever a payment is verified or rejected
+const _origVerifyPayment = window.verifyPayment;
+const _origRejectPayment = window.rejectPayment;
+// Patch via MutationObserver on the payments panel to detect DOM changes
+(function() {
+  const target = document.getElementById('tab-payments');
+  if (!target) return;
+  new MutationObserver(() => {
+    setTimeout(refreshDashboardStats, 800);
+  }).observe(target, { childList: true, subtree: true });
+})();
+// Also refresh every 2 minutes automatically
+setInterval(refreshDashboardStats, 120000);
+
+</script>
+
+{% endblock %}

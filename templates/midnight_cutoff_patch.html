@@ -1,0 +1,436 @@
+<!--
+  ══════════════════════════════════════════════════════════════════════════════
+  PATCH: Midnight Deadline for Meal Ordering
+  ══════════════════════════════════════════════════════════════════════════════
+
+  RULE:
+    To order meal for Day X, the student must do so before 12:00 AM
+    (midnight at the end of Day X-1 / start of Day X).
+    In other words: book tomorrow's (May 19) meal before midnight tonight (May 18).
+
+  HOW TO APPLY — 3 steps, all in student_dashboard.html
+  ═══════════════════════════════════════════════════════
+
+  STEP 1 — Add CSS (inside the existing <style> block)
+  STEP 2 — Replace the week-grid Jinja template block
+  STEP 3 — Replace the toggleMeal() JS function
+
+  ══════════════════════════════════════════════════════════════════════════════
+-->
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     STEP 1 — CSS
+     Add this inside the existing <style> block in student_dashboard.html.
+     ══════════════════════════════════════════════════════════════════════════ -->
+<style>
+/* ── Midnight-locked day card ─────────────────────────────────────────────── */
+.day-card.deadline-locked {
+  background: #f8fafc;
+  opacity: 0.72;
+}
+.day-card.deadline-locked .day-name,
+.day-card.deadline-locked .day-num {
+  color: #a0aec0;
+}
+.meal-btn.deadline-locked-btn {
+  background: #f1f5f9 !important;
+  color: #a0aec0 !important;
+  border-color: #e2e8f0 !important;
+  cursor: not-allowed !important;
+  pointer-events: none;
+  font-size: 11px !important;
+}
+
+/* ── Deadline countdown chip on today's card ─────────────────────────────── */
+.deadline-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 20px;
+  margin-top: 3px;
+  white-space: nowrap;
+  letter-spacing: .1px;
+}
+.deadline-chip.urgent   { background: #fff5f5; color: #e53e3e; border: 1px solid #fc8181; }
+.deadline-chip.warning  { background: #fff8e6; color: #b07800; border: 1px solid #fcd97d; }
+.deadline-chip.ok       { background: #e8f5ee; color: #1a6b3a; border: 1px solid #b7e4c7; }
+
+/* ── Deadline info banner above week grid ────────────────────────────────── */
+.deadline-info-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(135deg, #fff8e6, #fffdf5);
+  border: 1.5px solid #fcd97d;
+  border-radius: var(--radius-sm);
+  padding: 11px 16px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: #7a5c00;
+}
+.deadline-info-bar i { color: #f0a500; flex-shrink: 0; }
+.deadline-info-bar strong { color: #5a4000; }
+</style>
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     STEP 2 — TEMPLATE: Replace the <div class="week-grid"> block
+     
+     FIND this line in student_dashboard.html:
+         <div class="week-grid">
+     
+     And replace from that line all the way to its closing </div>
+     (the one right after {% endfor %}) with the block below.
+     
+     The block is identical to the original except:
+       • Each day card gets  data-date="{{ d }}"  (already exists in your code)
+       • Each meal button gets  data-date="{{ d }}" data-type="lunch/dinner"
+         (used by the JS deadline check)
+       • The info hint text at the bottom is updated
+     
+     NOTE: The deadline LOCKING itself is done entirely in JS (Step 3).
+     The Jinja template just adds data attributes — no Python changes needed.
+     ══════════════════════════════════════════════════════════════════════════ -->
+
+<!-- ── Deadline rule info bar (shown above the week grid) ── -->
+<div class="deadline-info-bar" id="deadlineInfoBar">
+  <i class="fas fa-clock"></i>
+  <span>
+    <strong>Ordering deadline: midnight (12:00 AM).</strong>
+    To book a meal for any day, you must order it before midnight the night before.
+    <span id="deadlineCountdownText" style="margin-left:4px;font-weight:700"></span>
+  </span>
+</div>
+
+<!-- Paste your existing <div class="week-grid"> block here unchanged.      -->
+<!-- The JS in Step 3 will handle locking based on the data-date attribute. -->
+<!-- The only extra thing to add to each meal button is:                    -->
+<!--   data-meal-date="{{ d }}" data-meal-type="lunch"  (or "dinner")      -->
+<!--                                                                         -->
+<!-- Full example for the lunch button (replace your existing lunch button): -->
+
+<!--
+  LUNCH BUTTON — replace your existing lunch {% if / elif / else %} with:
+
+  {% if lunch_paid %}
+    <button class="meal-btn paid" disabled
+            data-meal-date="{{ d }}" data-meal-type="lunch">
+      <i class="fas fa-check"></i> Lunch
+    </button>
+  {% elif lunch_due %}
+    <button class="meal-btn due-status" disabled
+            data-meal-date="{{ d }}" data-meal-type="lunch">
+      <i class="fas fa-clock"></i> Lunch
+    </button>
+  {% else %}
+    <button class="meal-btn {% if lunch_ordered %}ordered{% endif %}"
+            data-meal-date="{{ d }}" data-meal-type="lunch"
+            onclick="toggleMeal('{{ d }}','lunch',this)">
+      {% if lunch_ordered %}<i class="fas fa-check"></i>{% else %}<i class="fas fa-plus"></i>{% endif %} Lunch
+    </button>
+  {% endif %}
+
+  DINNER BUTTON — same pattern with dinner_paid / dinner_due / dinner_ordered:
+
+  {% if dinner_paid %}
+    <button class="meal-btn paid" disabled
+            data-meal-date="{{ d }}" data-meal-type="dinner">
+      <i class="fas fa-check"></i> Dinner
+    </button>
+  {% elif dinner_due %}
+    <button class="meal-btn due-status" disabled
+            data-meal-date="{{ d }}" data-meal-type="dinner">
+      <i class="fas fa-clock"></i> Dinner
+    </button>
+  {% else %}
+    <button class="meal-btn {% if dinner_ordered %}ordered{% endif %}"
+            data-meal-date="{{ d }}" data-meal-type="dinner"
+            onclick="toggleMeal('{{ d }}','dinner',this)">
+      {% if dinner_ordered %}<i class="fas fa-check"></i>{% else %}<i class="fas fa-plus"></i>{% endif %} Dinner
+    </button>
+  {% endif %}
+-->
+
+<!-- Also update the info span at the bottom of the week grid section.      -->
+<!-- FIND:                                                                   -->
+<!--   <span>You can order meals for today and the next 6 days at any       -->
+<!--   time. Only the Meal Manager can lock or unlock your ordering          -->
+<!--   access.</span>                                                        -->
+<!-- REPLACE WITH:                                                           -->
+<!--   <span>You can order meals for today and the next 6 days.             -->
+<!--   <strong>Deadline: midnight (12:00 AM)</strong> — you must book a     -->
+<!--   day's meal before midnight the night before. Today's meals can be    -->
+<!--   ordered until midnight tonight.</span>                                -->
+
+<!-- Also add the lock status row to the legend. FIND the legend div and    -->
+<!-- add this inside it alongside the other spans:                           -->
+<!--   <span><span style="background:#f1f5f9;color:#a0aec0;                 -->
+<!--     padding:2px 8px;border-radius:4px;font-size:11px">⏰</span>        -->
+<!--     Deadline passed</span>                                              -->
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     STEP 3 — JAVASCRIPT
+     
+     FIND the toggleMeal() function in student_dashboard.html and REPLACE
+     the ENTIRE function (from  function toggleMeal(  to its closing  }  )
+     with the version below.
+     
+     Also ADD the two helper functions (isMidnightLocked and
+     applyDeadlineLocks) somewhere in the script block.
+     ══════════════════════════════════════════════════════════════════════════ -->
+
+<script>
+// ════════════════════════════════════════════════════════════════════════════
+// MIDNIGHT DEADLINE HELPERS
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Returns true if it is now PAST the midnight deadline for the given date.
+ *
+ * Rule: to order a meal for `mealDateStr` (e.g. "2026-05-19"),
+ * the student must do so before 00:00 AM on that date.
+ * Equivalently: right now must be BEFORE midnight of that date,
+ * i.e. now < 2026-05-19 00:00:00.
+ *
+ * Today's date is NEVER deadline-locked (you can still order today's meals
+ * until midnight tonight — which is actually tomorrow 00:00 AM).
+ */
+function isMidnightLocked(mealDateStr) {
+  const now      = new Date();
+  // Midnight at the START of mealDateStr (local time)
+  const deadline = new Date(mealDateStr + 'T00:00:00');
+  // If now >= deadline → the ordering window for this date has passed
+  return now >= deadline;
+}
+
+/**
+ * Formats a countdown to the next midnight (end of today).
+ * e.g. "3h 42m left to book tomorrow"
+ */
+function midnightCountdown() {
+  const now      = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(0, 0, 0, 0);
+
+  const diff   = tomorrow - now;       // ms
+  const hours  = Math.floor(diff / 3600000);
+  const mins   = Math.floor((diff % 3600000) / 60000);
+
+  return { hours, mins, diff };
+}
+
+/**
+ * Apply deadline locks to every meal button in the week grid.
+ * Called on page load and every minute.
+ */
+function applyDeadlineLocks() {
+  // Update countdown text
+  const { hours, mins, diff } = midnightCountdown();
+  const countdownEl = document.getElementById('deadlineCountdownText');
+  if (countdownEl) {
+    if (hours < 1) {
+      countdownEl.innerHTML =
+        `<span style="color:#e53e3e">⚠️ Only ${mins}m left to book tomorrow's meals!</span>`;
+    } else if (hours < 3) {
+      countdownEl.innerHTML =
+        `<span style="color:#b07800">⏳ ${hours}h ${mins}m left to book tomorrow's meals.</span>`;
+    } else {
+      countdownEl.innerHTML =
+        `<span style="color:#1a6b3a">${hours}h ${mins}m until tomorrow's booking deadline.</span>`;
+    }
+  }
+
+  // Lock meal buttons whose date has passed midnight
+  document.querySelectorAll('.meal-btn[data-meal-date]').forEach(btn => {
+    const mealDate = btn.getAttribute('data-meal-date');
+    if (!mealDate) return;
+
+    // Already paid / due / cancel-pending — don't touch
+    if (btn.classList.contains('paid') ||
+        btn.classList.contains('due-status') ||
+        btn.classList.contains('cancel-pending')) return;
+
+    const locked = isMidnightLocked(mealDate);
+
+    if (locked && !btn.classList.contains('ordered')) {
+      // Unordered past-deadline → lock it
+      btn.disabled = true;
+      btn.classList.add('deadline-locked-btn');
+      btn.removeAttribute('onclick');
+      const mealType = btn.getAttribute('data-meal-type') || '';
+      btn.innerHTML  = `<i class="fas fa-clock" style="font-size:10px"></i> ${mealType.charAt(0).toUpperCase()+mealType.slice(1)}`;
+      btn.title      = 'Ordering deadline passed (midnight). You can no longer book this meal.';
+    }
+
+    // Also dim the day-card wrapper
+    const dayCard = btn.closest('.day-card');
+    if (dayCard && locked) {
+      dayCard.classList.add('deadline-locked');
+    }
+  });
+
+  // Add per-day countdown chips on today's card only
+  const today = new Date();
+  const pad   = n => String(n).padStart(2, '0');
+  const todayStr = `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
+
+  document.querySelectorAll(`.day-card[data-date="${todayStr}"]`).forEach(card => {
+    // Remove any existing chip first
+    const existing = card.querySelector('.deadline-chip');
+    if (existing) existing.remove();
+
+    const chip = document.createElement('div');
+    chip.className = 'deadline-chip ' + (hours < 1 ? 'urgent' : hours < 3 ? 'warning' : 'ok');
+    chip.innerHTML = `<i class="fas fa-clock" style="font-size:8px"></i> ${hours}h ${mins}m`;
+    chip.title     = `${hours}h ${mins}m left to book tomorrow's meals`;
+
+    // Insert after the date number line
+    const dayNum = card.querySelector('.day-num');
+    if (dayNum && dayNum.nextSibling) {
+      card.insertBefore(chip, dayNum.nextSibling.nextSibling || null);
+    } else {
+      card.appendChild(chip);
+    }
+  });
+}
+
+// Run immediately and then every 60 seconds
+document.addEventListener('DOMContentLoaded', function() {
+  applyDeadlineLocks();
+  setInterval(applyDeadlineLocks, 60000);
+});
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// REPLACEMENT toggleMeal() — with midnight deadline guard
+// ════════════════════════════════════════════════════════════════════════════
+
+function toggleMeal(date, type, btn) {
+  if (_mealRequestInFlight) return;
+
+  // ── MIDNIGHT DEADLINE CHECK ──────────────────────────────────────────────
+  // Block ordering (but NOT cancelling) if the deadline has passed.
+  const isOrdered = btn.classList.contains('ordered');
+  if (!isOrdered && isMidnightLocked(date)) {
+    // Build a nice date label
+    const d         = new Date(date + 'T00:00:00');
+    const dayNames  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const monthNames= ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const niceDateStr = `${dayNames[d.getDay()]}, ${d.getDate()} ${monthNames[d.getMonth()]}`;
+    toast(
+      `⏰ Deadline passed — you can no longer book ${capitalize(type)} for ${niceDateStr}. Orders must be placed before midnight.`,
+      'error'
+    );
+    // Apply lock immediately so button dims
+    applyDeadlineLocks();
+    return;
+  }
+
+  // ── EXISTING CONFIRM MODAL LOGIC (unchanged) ─────────────────────────────
+  const d = new Date(date + 'T00:00:00');
+  const dayNames   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const niceDateStr = `${dayNames[d.getDay()]}, ${d.getDate()} ${monthNames[d.getMonth()]}`;
+
+  _pendingMeal = { date, type, btn, isOrdered };
+
+  if (isOrdered) {
+    document.getElementById('meal-confirm-icon').textContent = '🗑️';
+    document.getElementById('meal-confirm-title').textContent = 'Cancel ' + capitalize(type) + '?';
+    document.getElementById('meal-confirm-body').innerHTML =
+      `Are you sure you want to <strong>cancel your ${capitalize(type)}</strong> order for <strong>${niceDateStr}</strong>?`;
+    document.getElementById('meal-confirm-ok').className = 'btn btn-danger';
+    document.getElementById('meal-confirm-ok').innerHTML = '<i class="fas fa-times"></i> Yes, Cancel Order';
+    document.getElementById('meal-confirm-ok').style.flex = '1';
+    document.getElementById('meal-confirm-ok').style.justifyContent = 'center';
+  } else {
+    // ── Show deadline warning in the modal if time is running short ──────
+    const { hours, mins } = midnightCountdown();
+    let deadlineNote = '';
+    if (hours < 3) {
+      deadlineNote = `<div style="margin-top:10px;padding:8px 12px;background:#fff8e6;border:1px solid #fcd97d;border-radius:7px;font-size:12px;color:#7a5c00">
+        <i class="fas fa-clock"></i> <strong>Booking deadline in ${hours}h ${mins}m.</strong> Orders lock at midnight.
+      </div>`;
+    }
+    document.getElementById('meal-confirm-icon').textContent = type === 'lunch' ? '🥗' : '🍛';
+    document.getElementById('meal-confirm-title').textContent = 'Confirm ' + capitalize(type) + ' Order';
+    document.getElementById('meal-confirm-body').innerHTML =
+      `Order <strong>${capitalize(type)}</strong> for <strong>${niceDateStr}</strong>?
+       <br><span style="font-size:13px;color:var(--text-muted)">This will add <strong>৳50</strong> to your due amount.</span>
+       ${deadlineNote}`;
+    document.getElementById('meal-confirm-ok').className = 'btn btn-primary';
+    document.getElementById('meal-confirm-ok').innerHTML = '<i class="fas fa-check"></i> Yes, Order ' + capitalize(type);
+    document.getElementById('meal-confirm-ok').style.flex = '1';
+    document.getElementById('meal-confirm-ok').style.justifyContent = 'center';
+  }
+  document.getElementById('meal-confirm-modal').classList.add('open');
+  document.getElementById('meal-confirm-ok').disabled = false;
+}
+</script>
+
+
+<!--
+  ══════════════════════════════════════════════════════════════════════════════
+  BACKEND NOTE (app.py) — optional but recommended
+  ══════════════════════════════════════════════════════════════════════════════
+
+  The JS above provides a client-side guard. For full security, also add a
+  server-side check in the /student/order route in app.py:
+
+  from datetime import datetime, date
+
+  @app.route('/student/order', methods=['POST'])
+  @login_required
+  def student_order():
+      data      = request.get_json()
+      meal_date = data.get('meal_date')   # "YYYY-MM-DD"
+      meal_type = data.get('meal_type')
+
+      # ── MIDNIGHT DEADLINE CHECK ──────────────────────────────────────────
+      try:
+          order_date = datetime.strptime(meal_date, '%Y-%m-%d').date()
+          today      = date.today()
+          if order_date < today:
+              return jsonify(ok=False, msg='Ordering deadline has passed for this date.')
+          # If ordering for today, it's allowed anytime during the day.
+          # If ordering for a future date, it must be placed before midnight
+          # of the previous day — which from the server's perspective simply
+          # means: order_date > today is always fine (future dates are open),
+          # and order_date == today is also fine (today is open all day).
+          # The "book tomorrow before midnight tonight" rule means:
+          #   right now < midnight(order_date)
+          # Since server time is BD time (UTC+6), use:
+          from datetime import datetime
+          now_bd    = datetime.utcnow() + timedelta(hours=6)
+          deadline  = datetime(order_date.year, order_date.month, order_date.day, 0, 0, 0)
+          if now_bd >= deadline:
+              return jsonify(ok=False, msg='Ordering deadline has passed for this date. You must book before midnight.',
+                             locked=True)
+      except ValueError:
+          return jsonify(ok=False, msg='Invalid date.')
+
+      # ... rest of your existing order logic unchanged ...
+
+  ══════════════════════════════════════════════════════════════════════════════
+  SUMMARY OF CHANGES
+  ══════════════════════════════════════════════════════════════════════════════
+
+  | Layer        | Change                                                     |
+  |--------------|-----------------------------------------------------------|
+  | CSS          | .deadline-locked, .deadline-locked-btn, .deadline-chip     |
+  | HTML         | Add data-meal-date / data-meal-type attrs to meal buttons  |
+  | HTML         | Add .deadline-info-bar above week grid                     |
+  | JS           | isMidnightLocked(dateStr) — pure date check                |
+  | JS           | midnightCountdown() — time to next midnight                |
+  | JS           | applyDeadlineLocks() — runs on load + every 60s            |
+  | JS           | toggleMeal() — guards new orders with deadline check       |
+  | app.py       | /student/order → server-side deadline validation (optional)|
+
+  ══════════════════════════════════════════════════════════════════════════════
+-->

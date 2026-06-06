@@ -1,0 +1,202 @@
+<!--
+  ══════════════════════════════════════════════════════════════════════════════
+  FIX: student_dashboard.html — two patches
+  1. Due banner clears (or changes state) after student submits bKash payment
+  2. Meal toggle button is locked during the async request (prevents double-click races)
+  ══════════════════════════════════════════════════════════════════════════════
+-->
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     PATCH 1 — Replace the due banner block
+     
+     FIND this entire block in student_dashboard.html (around line 315):
+     
+       {% if due > 0 %}
+       <!-- Unpaid due warning banner -->
+       <div style="background:linear-gradient(135deg,#fff5f5,#fff);border:1.5px solid #fc8181; ...">
+         ...
+       </div>
+       {% endif %}
+     
+     REPLACE IT WITH the block below.
+     ══════════════════════════════════════════════════════════════════════════ -->
+
+{% if due > 0 %}
+  {% if has_pending_payment %}
+  <!-- ── Payment submitted, awaiting manager verification ── -->
+  <div id="due-banner"
+       style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1.5px solid #86efac;border-radius:var(--radius);
+              padding:14px 18px;margin-bottom:16px;display:flex;align-items:flex-start;gap:12px">
+    <div style="width:36px;height:36px;border-radius:10px;background:#dcfce7;display:grid;place-items:center;
+                flex-shrink:0;font-size:18px">
+      ✅
+    </div>
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:700;font-size:14px;color:#15803d;margin-bottom:2px">
+        bKash payment submitted — waiting for manager to verify
+      </div>
+      <div style="font-size:13px;color:#166534;line-height:1.5">
+        Your payment of <strong>৳{{ "%.0f"|format(due) }}</strong>
+        {% if pending_payment_txn %}(TxnID: <code style="font-size:12px;background:rgba(0,0,0,.06);padding:1px 5px;border-radius:4px">{{ pending_payment_txn }}</code>){% endif %}
+        is pending manager review. Your due balance will clear once they verify it.
+        <span style="display:inline-flex;align-items:center;gap:4px;background:#bbf7d0;color:#166534;
+                     border-radius:6px;padding:1px 8px;font-size:12px;font-weight:700;margin-left:4px">
+          <i class="fas fa-hourglass-half" style="font-size:10px"></i> Pending Verification
+        </span>
+      </div>
+    </div>
+  </div>
+
+  {% else %}
+  <!-- ── Unpaid due warning banner (no payment submitted yet) ── -->
+  <div id="due-banner"
+       style="background:linear-gradient(135deg,#fff5f5,#fff);border:1.5px solid #fc8181;border-radius:var(--radius);
+              padding:14px 18px;margin-bottom:16px;display:flex;align-items:flex-start;gap:12px">
+    <div style="width:36px;height:36px;border-radius:10px;background:#fff5f5;display:grid;place-items:center;
+                flex-shrink:0;font-size:18px;color:var(--danger)">
+      <i class="fas fa-triangle-exclamation"></i>
+    </div>
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:700;font-size:14px;color:var(--danger);margin-bottom:2px">
+        You have ৳{{ "%.0f"|format(due) }} in unpaid meals
+      </div>
+      <div style="font-size:13px;color:#718096;line-height:1.5">
+        Please send payment via bKash to your Meal Manager and tap
+        <strong>Mark as Paid</strong> below — or ask the manager to record your cash payment.
+        {% if meal_locked %}
+          <span style="display:inline-flex;align-items:center;gap:4px;background:#fff5f5;color:var(--danger);
+                       border:1px solid #fc8181;border-radius:6px;padding:1px 8px;font-size:12px;font-weight:700;margin-left:4px">
+            <i class="fas fa-lock" style="font-size:10px"></i> Ordering locked
+          </span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+{% endif %}
+
+<!--
+  EXPLANATION:
+  - has_pending_payment = True  →  student already submitted bKash txn;
+    show a GREEN "awaiting verification" banner so they know their payment
+    was received and not to pay again.
+  - has_pending_payment = False →  original red warning banner.
+  - due == 0  →  no banner at all (already paid and verified).
+  
+  The banner disappears completely on the NEXT page load after the manager
+  verifies the payment (which sets payment_status='paid' and due becomes 0).
+  No JS polling needed — the state is correct immediately after page reload,
+  which already happens after submitPayment() succeeds.
+-->
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     PATCH 2 — Replace the confirmMealAction() JS function
+     
+     FIND the async function confirmMealAction() block (around line 1220 in
+     student_dashboard.html) and replace the ENTIRE function with this version.
+     
+     CHANGES:
+     - Button is disabled + shows spinner during the fetch (prevents double-clicks
+       and race conditions that caused intermittent "did nothing" behaviour).
+     - On ok:False the button is re-enabled and its state is restored.
+     - On network error the button is also safely restored.
+     ══════════════════════════════════════════════════════════════════════════ -->
+
+<script>
+async function confirmMealAction() {
+  if (!_pendingMeal) return;
+  const { date, type, btn, isOrdered } = _pendingMeal;
+  closeMealConfirm();
+
+  // ── Lock the button immediately to prevent double-tap races ──────────────
+  const originalHTML    = btn.innerHTML;
+  const originalClass   = btn.className;
+  btn.disabled          = true;
+  btn.style.opacity     = '0.65';
+  btn.innerHTML         = '<i class="fas fa-spinner fa-spin" style="font-size:10px"></i>';
+
+  const url = isOrdered ? '/student/cancel_order' : '/student/order';
+
+  let d;
+  try {
+    const r = await fetch(url, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ meal_date: date, meal_type: type })
+    });
+    d = await r.json();
+  } catch (err) {
+    // Network error — restore button
+    btn.innerHTML  = originalHTML;
+    btn.className  = originalClass;
+    btn.disabled   = false;
+    btn.style.opacity = '1';
+    toast('Network error — please try again.', 'error');
+    _pendingMeal = null;
+    return;
+  }
+
+  if (!d.ok) {
+    // Server rejected — restore button to its previous state
+    btn.innerHTML  = originalHTML;
+    btn.className  = originalClass;
+    btn.disabled   = false;
+    btn.style.opacity = '1';
+
+    if (d.locked) {
+      toast(d.msg, 'error');
+      // Optionally show a "Locked" badge on the button
+      btn.innerHTML = '<i class="fas fa-lock" style="font-size:10px"></i> Locked';
+      btn.disabled  = true;
+    } else {
+      toast(d.msg || 'Something went wrong', 'error');
+    }
+    _pendingMeal = null;
+    return;
+  }
+
+  // ── Success path ──────────────────────────────────────────────────────────
+  if (d.via_request) {
+    // Cancel routed to manager for approval
+    btn.classList.remove('ordered');
+    btn.classList.add('cancel-pending');
+    btn.disabled      = true;
+    btn.style.opacity = '1';
+    btn.innerHTML     = '<i class="fas fa-hourglass-half" style="font-size:10px"></i> Pending';
+    btn.title         = 'Cancel request pending manager approval';
+    toast('📩 Cancel request sent to manager for approval.', 'success');
+    _pendingMeal = null;
+    return;
+  }
+
+  // Toggle ordered state
+  const nowOrdered = !isOrdered;
+  if (nowOrdered) {
+    btn.classList.add('ordered');
+    btn.innerHTML = '<i class="fas fa-check"></i> ' + capitalize(type);
+  } else {
+    btn.classList.remove('ordered');
+    btn.innerHTML = '<i class="fas fa-plus"></i> ' + capitalize(type);
+  }
+  btn.disabled      = false;
+  btn.style.opacity = '1';
+  toast(nowOrdered ? capitalize(type) + ' ordered!' : capitalize(type) + ' cancelled');
+
+  // Reload to refresh due amount and summary cards
+  setTimeout(() => location.reload(), 800);
+  _pendingMeal = null;
+}
+</script>
+
+<!--
+  ALSO: after submitPayment() succeeds (student submits bKash TxnID),
+  the page reloads — and now has_pending_payment=True on the server,
+  so the banner will flip to GREEN automatically. No extra JS needed.
+  
+  The banner returns to RED if:
+  - Manager REJECTS the payment (payment row deleted or status='rejected')
+    → has_pending_payment becomes False, due still > 0 → red banner shows again.
+  - Manager VERIFIES the payment → meal_orders set to 'paid' → due=0 → no banner.
+-->

@@ -1,0 +1,158 @@
+{# ════════════════════════════════════════════════════════════════════════════
+   ADD THIS BLOCK inside student_dashboard.html, in the profile / settings area.
+   It gives students a form to request a bKash/phone number change.
+   ════════════════════════════════════════════════════════════════════════════ #}
+
+<!-- ── Phone/bKash Change Request Card ────────────────────────────────────── -->
+<div class="card shadow-sm mb-4" id="phoneChangeCard">
+  <div class="card-header bg-warning-subtle d-flex align-items-center gap-2">
+    <i class="bi bi-phone-fill text-warning"></i>
+    <strong>Change bKash / Phone Number</strong>
+  </div>
+  <div class="card-body">
+
+    <!-- Current number display -->
+    <p class="mb-3 text-muted small">
+      Current bKash: <span class="fw-bold text-dark" id="currentBkashDisplay">{{ student.bkash_number }}</span>
+    </p>
+
+    <!-- Pending request notice (shown dynamically) -->
+    <div id="pendingPhoneNotice" class="alert alert-info d-none py-2 small">
+      <i class="bi bi-hourglass-split me-1"></i>
+      You have a <strong>pending</strong> phone change request. Waiting for admin approval.
+    </div>
+
+    <!-- Request form -->
+    <form id="phoneChangeForm" class="row g-2">
+      <div class="col-12 col-sm-6">
+        <label class="form-label small fw-semibold">New bKash Number</label>
+        <input type="text" class="form-control form-control-sm" id="newBkashInput"
+               placeholder="01XXXXXXXXX" maxlength="11">
+      </div>
+      <div class="col-12 col-sm-6">
+        <label class="form-label small fw-semibold">Your Password (to confirm)</label>
+        <input type="password" class="form-control form-control-sm" id="phoneChangePwd"
+               placeholder="Enter your password">
+      </div>
+      <div class="col-12">
+        <label class="form-label small fw-semibold">Reason <span class="text-muted">(optional)</span></label>
+        <input type="text" class="form-control form-control-sm" id="phoneChangeReason"
+               placeholder="e.g. Lost previous SIM, switched to new number" maxlength="300">
+      </div>
+      <div class="col-12 mt-1">
+        <button type="submit" class="btn btn-warning btn-sm px-4" id="submitPhoneChange">
+          <i class="bi bi-send me-1"></i>Submit Request
+        </button>
+      </div>
+    </form>
+
+    <!-- Result message -->
+    <div id="phoneChangeResult" class="mt-2"></div>
+
+    <!-- History toggle -->
+    <div class="mt-3">
+      <button class="btn btn-link btn-sm p-0 text-secondary" onclick="loadPhoneChangeHistory()">
+        <i class="bi bi-clock-history me-1"></i>View request history
+      </button>
+      <div id="phoneChangeHistory" class="mt-2"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Phone Change Logic ──────────────────────────────────────────────────────
+
+// On page load, check for any pending request
+(function checkPendingPhoneRequest() {
+  fetch('/student/phone_change_status')
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) return;
+      const pending = data.requests.find(r => r.status === 'pending');
+      if (pending) {
+        document.getElementById('pendingPhoneNotice').classList.remove('d-none');
+        document.getElementById('phoneChangeForm').style.opacity = '0.5';
+        document.getElementById('submitPhoneChange').disabled = true;
+      }
+    }).catch(() => {});
+})();
+
+document.getElementById('phoneChangeForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const newBkash = document.getElementById('newBkashInput').value.trim();
+  const pwd      = document.getElementById('phoneChangePwd').value.trim();
+  const reason   = document.getElementById('phoneChangeReason').value.trim();
+  const resultEl = document.getElementById('phoneChangeResult');
+
+  if (!newBkash || !pwd) {
+    resultEl.innerHTML = `<div class="alert alert-warning py-1 small">Please fill in new bKash number and password.</div>`;
+    return;
+  }
+  if (!/^01[3-9]\d{8}$/.test(newBkash)) {
+    resultEl.innerHTML = `<div class="alert alert-danger py-1 small">Invalid bKash number. Must be 11 digits starting with 013–019.</div>`;
+    return;
+  }
+
+  document.getElementById('submitPhoneChange').disabled = true;
+  document.getElementById('submitPhoneChange').innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Submitting…';
+
+  fetch('/student/request_phone_change', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ new_bkash: newBkash, password: pwd, reason: reason })
+  })
+  .then(r => r.json())
+  .then(data => {
+    document.getElementById('submitPhoneChange').innerHTML = '<i class="bi bi-send me-1"></i>Submit Request';
+    if (data.ok) {
+      resultEl.innerHTML = `<div class="alert alert-success py-1 small"><i class="bi bi-check-circle me-1"></i>${data.msg}</div>`;
+      document.getElementById('pendingPhoneNotice').classList.remove('d-none');
+      document.getElementById('phoneChangeForm').style.opacity = '0.5';
+      document.getElementById('submitPhoneChange').disabled = true;
+    } else {
+      document.getElementById('submitPhoneChange').disabled = false;
+      resultEl.innerHTML = `<div class="alert alert-danger py-1 small">${data.msg}</div>`;
+    }
+  }).catch(() => {
+    document.getElementById('submitPhoneChange').disabled = false;
+    document.getElementById('submitPhoneChange').innerHTML = '<i class="bi bi-send me-1"></i>Submit Request';
+    resultEl.innerHTML = `<div class="alert alert-danger py-1 small">Network error. Please try again.</div>`;
+  });
+});
+
+function loadPhoneChangeHistory() {
+  const el = document.getElementById('phoneChangeHistory');
+  el.innerHTML = '<div class="text-muted small"><span class="spinner-border spinner-border-sm me-1"></span>Loading…</div>';
+  fetch('/student/phone_change_status')
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok || !data.requests.length) {
+        el.innerHTML = '<p class="text-muted small">No requests yet.</p>';
+        return;
+      }
+      const badge = {
+        pending:  'bg-warning text-dark',
+        approved: 'bg-success',
+        rejected: 'bg-danger'
+      };
+      const rows = data.requests.map(r => `
+        <tr class="small">
+          <td>${r.old_bkash}</td>
+          <td>${r.new_bkash}</td>
+          <td><span class="badge ${badge[r.status] || 'bg-secondary'}">${r.status}</span></td>
+          <td class="text-muted">${r.reason || '—'}</td>
+          <td class="text-muted">${r.created_at.slice(0,10)}</td>
+        </tr>`).join('');
+      el.innerHTML = `
+        <table class="table table-sm table-bordered small mb-0">
+          <thead class="table-light">
+            <tr><th>Old bKash</th><th>New bKash</th><th>Status</th><th>Reason</th><th>Date</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    }).catch(() => {
+      el.innerHTML = '<p class="text-danger small">Failed to load history.</p>';
+    });
+}
+</script>

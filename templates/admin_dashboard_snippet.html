@@ -1,0 +1,155 @@
+{# ════════════════════════════════════════════════════════════════════════════
+   ADD THIS BLOCK inside admin_dashboard.html (or admin_students.html).
+   Shows a panel for reviewing & approving phone change requests.
+   ════════════════════════════════════════════════════════════════════════════ #}
+
+<!-- ── Phone/bKash Change Requests Panel ─────────────────────────────────── -->
+<div class="card shadow-sm mb-4" id="adminPhoneRequestsCard">
+  <div class="card-header bg-danger-subtle d-flex align-items-center justify-content-between">
+    <div class="d-flex align-items-center gap-2">
+      <i class="bi bi-phone-fill text-danger"></i>
+      <strong>bKash / Phone Change Requests</strong>
+      <span class="badge bg-danger rounded-pill" id="pendingPhoneCount" style="display:none"></span>
+    </div>
+    <button class="btn btn-sm btn-outline-secondary" onclick="loadAdminPhoneRequests()">
+      <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+    </button>
+  </div>
+  <div class="card-body p-0">
+    <div id="adminPhoneRequestsBody" class="p-3 text-muted small">
+      <button class="btn btn-sm btn-outline-primary" onclick="loadAdminPhoneRequests()">
+        <i class="bi bi-eye me-1"></i>Load Requests
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Admin Phone Change Panel ─────────────────────────────────────────────────
+
+function loadAdminPhoneRequests() {
+  const body = document.getElementById('adminPhoneRequestsBody');
+  body.innerHTML = '<div class="text-muted small p-3"><span class="spinner-border spinner-border-sm me-1"></span>Loading…</div>';
+
+  fetch('/admin/phone_change_requests')
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok || !data.requests.length) {
+        body.innerHTML = '<p class="text-muted small p-3 mb-0">No requests found.</p>';
+        return;
+      }
+
+      const pending = data.requests.filter(r => r.status === 'pending');
+      const cntEl   = document.getElementById('pendingPhoneCount');
+      if (pending.length) {
+        cntEl.textContent = pending.length;
+        cntEl.style.display = '';
+      } else {
+        cntEl.style.display = 'none';
+      }
+
+      const badge = {
+        pending:  'bg-warning text-dark',
+        approved: 'bg-success',
+        rejected: 'bg-danger'
+      };
+
+      const rows = data.requests.map(r => `
+        <tr id="phoneRow_${r.id}" class="${r.status === 'pending' ? 'table-warning' : ''}">
+          <td class="small">
+            <strong>${r.name}</strong><br>
+            <span class="text-muted">${r.roll_number} · Batch ${r.batch} · Floor ${r.floor}</span>
+          </td>
+          <td class="small font-monospace">${r.old_bkash}</td>
+          <td class="small font-monospace fw-bold text-success">→ ${r.new_bkash}</td>
+          <td class="small text-muted">${r.reason || '—'}</td>
+          <td class="small">${r.created_at.slice(0,16).replace('T',' ')}</td>
+          <td class="small">
+            <span class="badge ${badge[r.status] || 'bg-secondary'}">${r.status}</span>
+            ${r.decided_at ? `<br><span class="text-muted" style="font-size:0.7rem">${r.decided_at.slice(0,10)}</span>` : ''}
+          </td>
+          <td>
+            ${r.status === 'pending' ? `
+              <div class="d-flex gap-1">
+                <button class="btn btn-success btn-sm px-2 py-1"
+                  onclick="decidePhoneChange(${r.id}, 'approved')"
+                  title="Approve – will update student bKash immediately">
+                  <i class="bi bi-check-lg"></i> Approve
+                </button>
+                <button class="btn btn-danger btn-sm px-2 py-1"
+                  onclick="decidePhoneChange(${r.id}, 'rejected')"
+                  title="Reject request">
+                  <i class="bi bi-x-lg"></i> Reject
+                </button>
+              </div>` : '<span class="text-muted small">Done</span>'}
+          </td>
+        </tr>`).join('');
+
+      body.innerHTML = `
+        <div class="table-responsive">
+          <table class="table table-bordered table-hover table-sm mb-0 align-middle small">
+            <thead class="table-light">
+              <tr>
+                <th>Student</th>
+                <th>Current bKash</th>
+                <th>Requested New</th>
+                <th>Reason</th>
+                <th>Submitted</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }).catch(() => {
+      body.innerHTML = '<p class="text-danger small p-3 mb-0">Failed to load. Check console.</p>';
+    });
+}
+
+function decidePhoneChange(reqId, verdict) {
+  const label = verdict === 'approved' ? 'APPROVE' : 'REJECT';
+  if (!confirm(`${label} this phone change request?\n\n${verdict === 'approved' ? "This will immediately update the student's bKash number." : "The student's bKash number will NOT change."}`)) return;
+
+  const row = document.getElementById(`phoneRow_${reqId}`);
+  if (row) row.style.opacity = '0.5';
+
+  fetch('/admin/decide_phone_change', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ request_id: reqId, verdict: verdict })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) {
+      // Small success toast
+      showAdminToast(data.msg, verdict === 'approved' ? 'success' : 'secondary');
+      // Reload the panel
+      loadAdminPhoneRequests();
+    } else {
+      if (row) row.style.opacity = '1';
+      showAdminToast(data.msg, 'danger');
+    }
+  }).catch(() => {
+    if (row) row.style.opacity = '1';
+    showAdminToast('Network error. Please try again.', 'danger');
+  });
+}
+
+// Reusable toast (uses Bootstrap if available, else alert)
+function showAdminToast(msg, type='success') {
+  if (typeof bootstrap !== 'undefined' && document.getElementById('adminToastEl')) {
+    // If you have a toast container already, use it
+  }
+  // Simple fallback: floating div
+  const t = document.createElement('div');
+  t.className = `alert alert-${type} position-fixed bottom-0 end-0 m-3 shadow small`;
+  t.style.zIndex = 9999;
+  t.innerHTML = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+// Auto-load on page ready (optional – remove if you want manual load)
+document.addEventListener('DOMContentLoaded', loadAdminPhoneRequests);
+</script>

@@ -1,0 +1,347 @@
+<!--
+══════════════════════════════════════════════════════════════════════════════
+  PATCH 1 — admin_dashboard.html
+  Fixes:
+    1. Floor Change Requests panel — shows hostel names for female students
+       instead of "Floor 1 → Floor 2" (meaningless to females)
+    2. Direct Floor Update dropdown — gender-aware (male=floors, female=hostels)
+    3. Approval dropdown — female requests show hostel options, not Floor 1-7
+
+  HOW TO APPLY
+  ─────────────
+  A) Replace the <div id="floor-req-list"> rendering JS inside loadFloorRequests()
+     (around line 1773 in admin_dashboard.html) — replace the list.innerHTML = d.requests.map(...)
+     template with the one in BLOCK_A below.
+
+  B) Replace the "Direct Floor Update" HTML section (the 3 inputs + button block
+     starting with the <input id="direct-floor-roll"> around line 577) with BLOCK_B.
+
+  C) Replace the approveFloor() JS function with BLOCK_C.
+
+  D) Replace the directFloorUpdate() JS function with BLOCK_D.
+══════════════════════════════════════════════════════════════════════════════
+-->
+
+
+<!--
+══ BLOCK_A — Replace list.innerHTML = d.requests.map(req => ` ... `).join('');
+   in loadFloorRequests() (the big template literal)
+══ FIND this text and replace it:
+   list.innerHTML = d.requests.map(req => `
+     <div style="background:#161b22 ...
+
+   REPLACE WITH:
+-->
+<!--  ↓↓↓  Paste inside the <script> block, replacing the old map template  ↓↓↓  -->
+<script id="patch1-block-a-reference">
+// ── HOSTEL HELPERS ────────────────────────────────────────────────────────────
+const HOSTEL_MAP = { 1: 'Campus', 2: 'Sentu House', 3: 'Chairman House' };
+
+function floorLabel(floor, gender) {
+  if (gender === 'female') return HOSTEL_MAP[floor] || `Hostel ${floor}`;
+  return `Floor ${floor}`;
+}
+
+function floorOptionsHtml(currentVal, gender) {
+  if (gender === 'female') {
+    return [1, 2, 3].map(f =>
+      `<option value="${f}" ${f === currentVal ? 'selected' : ''}>${HOSTEL_MAP[f]}</option>`
+    ).join('');
+  }
+  return [1, 2, 3, 4, 5, 6, 7].map(f =>
+    `<option value="${f}" ${f === currentVal ? 'selected' : ''}>Floor ${f}</option>`
+  ).join('');
+}
+
+// ── PATCHED loadFloorRequests ─────────────────────────────────────────────────
+async function loadFloorRequests() {
+  const list = document.getElementById('floor-req-list');
+  if (!list) return;
+  try {
+    const r = await fetch('/admin/floor_change_requests');
+    if (!r.ok) {
+      if (r.status === 401) {
+        list.innerHTML = '<div style="color:#f0883e;font-size:13px;padding:12px">⚠️ Session expired. <a href="/admin/login" style="color:#58a6ff">Log in again</a>.</div>';
+        return;
+      }
+      throw new Error('HTTP ' + r.status);
+    }
+    const d = await r.json();
+    if (d.error === 'not_authenticated') {
+      list.innerHTML = '<div style="color:#f0883e;font-size:13px;padding:12px">⚠️ Session expired. <a href="/admin/login" style="color:#58a6ff">Log in again</a>.</div>';
+      return;
+    }
+    const badge = document.getElementById('floor-req-badge');
+    if (!d.requests || d.requests.length === 0) {
+      list.innerHTML = '<div style="text-align:center;padding:16px;color:#484f58;font-size:13px">No pending floor change requests.</div>';
+      if (badge) badge.style.display = 'none';
+      return;
+    }
+    if (badge) { badge.textContent = d.requests.length; badge.style.display = ''; }
+
+    list.innerHTML = d.requests.map(req => {
+      const isFemale   = req.gender === 'female';
+      const fromLabel  = floorLabel(req.current_floor,   req.gender);
+      const toLabel    = floorLabel(req.requested_floor, req.gender);
+      const kindLabel  = isFemale ? 'Hostel' : 'Floor';
+      const genderTag  = isFemale
+        ? '<span style="background:rgba(247,120,161,.15);color:#f778a1;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;margin-left:6px">♀ Female</span>'
+        : '<span style="background:rgba(88,166,255,.12);color:#58a6ff;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;margin-left:6px">♂ Male</span>';
+      const optionsHtml = floorOptionsHtml(req.requested_floor, req.gender);
+
+      return `
+        <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:14px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+            <div>
+              <div style="font-weight:700;color:#e6edf3;font-size:14px">
+                ${req.student_name}
+                ${genderTag}
+                <span style="color:#8b949e;font-weight:400;font-size:13px">(${req.roll_number}, Batch ${req.batch})</span>
+              </div>
+              <div style="color:#8b949e;font-size:12px;margin-top:5px">
+                ${kindLabel}: <span style="color:#e6edf3">${fromLabel}</span>
+                → <strong style="color:#f0883e">${toLabel}</strong>
+                ${req.reason ? `· <em style="color:#8b949e">"${req.reason}"</em>` : ''}
+                · Requested ${req.created_at ? req.created_at.slice(0,10) : ''}
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;align-items:center">
+              <select id="approve-floor-${req.id}"
+                style="padding:6px 10px;border-radius:6px;border:1px solid #30363d;background:#0d1117;color:#e6edf3;font-size:13px">
+                ${optionsHtml}
+              </select>
+              <button onclick="approveFloor(${req.id},'${req.roll_number}','${req.gender}')"
+                style="padding:7px 14px;border-radius:6px;background:#238636;color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer">
+                <i class="fas fa-check"></i> Approve
+              </button>
+              <button onclick="rejectFloor(${req.id})"
+                style="padding:7px 14px;border-radius:6px;background:#da3633;color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer">
+                <i class="fas fa-times"></i> Reject
+              </button>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  } catch(e) {
+    if (list) list.innerHTML = '<div style="color:#f85149;font-size:13px;padding:12px">❌ Failed to load requests. <button onclick="loadFloorRequests()" style="background:none;border:none;color:#58a6ff;cursor:pointer;font-size:13px">Retry</button></div>';
+  }
+}
+// Load on page ready
+document.addEventListener('DOMContentLoaded', loadFloorRequests);
+</script>
+
+
+<!--
+══ BLOCK_B — Replace the "Direct Floor Update" HTML inside the reset-zone
+   (the flex row with direct-floor-roll, direct-floor-num, and Update Floor button)
+
+   FIND:
+     <div style="font-size:13px;font-weight:700;color:#e6edf3;margin-bottom:10px">Direct Floor Update (no request needed)</div>
+     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+       ...3 inputs...
+     </div>
+
+   REPLACE WITH the HTML below:
+-->
+<div style="font-size:13px;font-weight:700;color:#e6edf3;margin-bottom:10px">
+  Direct Floor Update <span style="color:#8b949e;font-weight:400">(no request needed)</span>
+</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;align-items:flex-end">
+
+  <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:130px">
+    <label style="font-size:11px;color:#8b949e;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Roll Number</label>
+    <input type="text" id="direct-floor-roll" placeholder="e.g. NMC2023001"
+      oninput="onDirectFloorRollInput(this)"
+      style="padding:9px 12px;border-radius:8px;border:1.5px solid #30363d;background:#0d1117;color:#e6edf3;font-family:inherit;font-size:13px;width:100%">
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:4px;flex:0 0 auto">
+    <label style="font-size:11px;color:#8b949e;font-weight:700;text-transform:uppercase;letter-spacing:.4px">
+      Gender (auto-fills)
+    </label>
+    <div id="direct-floor-gender-tag" style="padding:9px 12px;border-radius:8px;background:#161b22;border:1px solid #30363d;font-size:12px;color:#8b949e;min-width:90px;text-align:center">
+      — unknown —
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:120px">
+    <label style="font-size:11px;color:#8b949e;font-weight:700;text-transform:uppercase;letter-spacing:.4px" id="direct-floor-label">Floor / Hostel</label>
+    <select id="direct-floor-num"
+      style="padding:9px 12px;border-radius:8px;border:1.5px solid #30363d;background:#0d1117;color:#e6edf3;font-family:inherit;font-size:13px">
+      <option value="">— enter roll first —</option>
+    </select>
+  </div>
+
+  <button style="background:#d97706;color:#fff;border:none;white-space:nowrap;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;align-self:flex-end"
+    onclick="directFloorUpdate()">
+    <i class="fas fa-save"></i> Update
+  </button>
+</div>
+<div id="direct-floor-result" style="font-size:13px;margin-top:6px"></div>
+
+
+<!--
+══ BLOCK_C — Replace approveFloor() JS function (note: added gender param)
+══ BLOCK_D — Replace directFloorUpdate() JS function
+   Paste both inside the <script> block (replacing the old functions).
+-->
+<script id="patch1-block-cd-reference">
+
+// ── BLOCK_C: patched approveFloor (gender-aware) ──────────────────────────────
+async function approveFloor(reqId, roll, gender) {
+  const sel = document.getElementById('approve-floor-' + reqId);
+  const newFloor = sel ? parseInt(sel.value) : null;
+  if (!newFloor) return;
+  const label = gender === 'female'
+    ? (HOSTEL_MAP[newFloor] || `Hostel ${newFloor}`)
+    : `Floor ${newFloor}`;
+  if (!confirm(`Approve ${gender === 'female' ? 'hostel' : 'floor'} change to "${label}" for ${roll}?`)) return;
+  const r = await fetch('/admin/update_student_floor', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ roll_number: roll, floor: newFloor, request_id: reqId })
+  });
+  const d = await r.json();
+  showToast(d.msg, d.ok ? '#238636' : '#da3633');
+  if (d.ok) loadFloorRequests();
+}
+
+async function rejectFloor(reqId) {
+  const r = await fetch('/admin/reject_floor_change', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ request_id: reqId })
+  });
+  const d = await r.json();
+  showToast(d.msg, d.ok ? '#238636' : '#da3633');
+  if (d.ok) loadFloorRequests();
+}
+
+// ── BLOCK_D: patched directFloorUpdate (gender-aware) ────────────────────────
+
+// Store detected gender for current roll
+let _directFloorGender = null;
+
+async function onDirectFloorRollInput(input) {
+  const roll = input.value.trim();
+  const genderTag  = document.getElementById('direct-floor-gender-tag');
+  const sel        = document.getElementById('direct-floor-num');
+  const lbl        = document.getElementById('direct-floor-label');
+  const res        = document.getElementById('direct-floor-result');
+  _directFloorGender = null;
+  res.textContent = '';
+
+  if (roll.length < 5) {
+    genderTag.textContent = '— unknown —';
+    genderTag.style.color = '#8b949e';
+    sel.innerHTML = '<option value="">— enter roll first —</option>';
+    lbl.textContent = 'Floor / Hostel';
+    return;
+  }
+
+  // Debounce: wait 600ms
+  input._lookupTimer && clearTimeout(input._lookupTimer);
+  input._lookupTimer = setTimeout(async () => {
+    try {
+      const r = await fetch('/admin/lookup_student?roll=' + encodeURIComponent(roll));
+      if (!r.ok) throw new Error();
+      const d = await r.json();
+      if (!d.ok || !d.student) {
+        genderTag.textContent = '— not found —';
+        genderTag.style.color = '#f85149';
+        sel.innerHTML = '<option value="">— student not found —</option>';
+        return;
+      }
+      const gender = d.student.gender;
+      _directFloorGender = gender;
+      if (gender === 'female') {
+        genderTag.innerHTML = '<i class="fas fa-venus"></i> Female';
+        genderTag.style.color = '#f778a1';
+        lbl.textContent = 'Hostel';
+        sel.innerHTML = `
+          <option value="">Select hostel…</option>
+          <option value="1">Campus</option>
+          <option value="2">Sentu House</option>
+          <option value="3">Chairman House</option>`;
+      } else {
+        genderTag.innerHTML = '<i class="fas fa-mars"></i> Male';
+        genderTag.style.color = '#58a6ff';
+        lbl.textContent = 'Floor';
+        sel.innerHTML = `
+          <option value="">Select floor…</option>
+          <option value="1">Floor 1</option><option value="2">Floor 2</option>
+          <option value="3">Floor 3</option><option value="4">Floor 4</option>
+          <option value="5">Floor 5</option><option value="6">Floor 6</option>
+          <option value="7">Floor 7</option>`;
+      }
+      // Pre-select current floor if returned
+      if (d.student.floor) sel.value = d.student.floor;
+    } catch(e) {
+      // If no lookup route exists, fall back to showing both options
+      genderTag.textContent = '— enter manually —';
+      genderTag.style.color = '#8b949e';
+      lbl.textContent = 'Floor / Hostel';
+      sel.innerHTML = `
+        <option value="">Select…</option>
+        <optgroup label="Male Floors">
+          ${[1,2,3,4,5,6,7].map(f=>`<option value="${f}">Floor ${f}</option>`).join('')}
+        </optgroup>
+        <optgroup label="Female Hostels">
+          <option value="1">1 — Campus</option>
+          <option value="2">2 — Sentu House</option>
+          <option value="3">3 — Chairman House</option>
+        </optgroup>`;
+    }
+  }, 600);
+}
+
+async function directFloorUpdate() {
+  const roll  = document.getElementById('direct-floor-roll').value.trim();
+  const floor = document.getElementById('direct-floor-num').value;
+  const res   = document.getElementById('direct-floor-result');
+  if (!roll || !floor) {
+    res.innerHTML = '<span style="color:#f0883e">⚠️ Enter roll number and select a floor/hostel.</span>';
+    return;
+  }
+  const label = _directFloorGender === 'female'
+    ? (HOSTEL_MAP[parseInt(floor)] || `Hostel ${floor}`)
+    : `Floor ${floor}`;
+  res.innerHTML = '<span style="color:#8b949e"><i class="fas fa-spinner fa-spin"></i> Updating…</span>';
+  const r = await fetch('/admin/update_student_floor', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ roll_number: roll, floor: parseInt(floor) })
+  });
+  const d = await r.json();
+  res.innerHTML = d.ok
+    ? `<span style="color:#3fb950">✅ Updated to ${label}.</span>`
+    : `<span style="color:#f85149">❌ ${d.msg}</span>`;
+  if (d.ok) {
+    loadFloorRequests();
+    // Reset gender tag
+    document.getElementById('direct-floor-gender-tag').textContent = '— unknown —';
+    document.getElementById('direct-floor-gender-tag').style.color = '#8b949e';
+    document.getElementById('direct-floor-num').innerHTML = '<option value="">— enter roll first —</option>';
+    _directFloorGender = null;
+  }
+}
+</script>
+<!--
+══════════════════════════════════════════════════════════════════════════════
+  ALSO NEEDED IN app.py — the lookup route (used by onDirectFloorRollInput)
+  Add this route if it doesn't already exist:
+
+    @app.route('/admin/lookup_student')
+    @admin_required
+    def admin_lookup_student():
+        roll = request.args.get('roll', '').strip()
+        if not roll:
+            return jsonify({'ok': False, 'msg': 'roll required'})
+        conn    = get_db()
+        student = queryOne(conn,
+            "SELECT id, name, roll_number, batch, gender, floor FROM students WHERE roll_number=%s",
+            (roll,))
+        conn.close()
+        if not student:
+            return jsonify({'ok': False, 'msg': 'Not found'})
+        return jsonify({'ok': True, 'student': dict(student)})
+
+══════════════════════════════════════════════════════════════════════════════
+-->

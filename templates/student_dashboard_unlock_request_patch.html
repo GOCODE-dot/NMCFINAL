@@ -1,0 +1,113 @@
+<!--
+══════════════════════════════════════════════════════════════════════
+  student_dashboard.html — Ordering Unlock Request Button Patch
+══════════════════════════════════════════════════════════════════════
+
+  WHAT THIS ADDS:
+  ─────────────────
+  When `ordering_locked` is true, the student already sees a "locked"
+  notice on their dashboard. This patch adds a "Request Unlock" button
+  inside that notice so they can send a one-tap message to the manager.
+
+  HOW TO FIND THE RIGHT SPOT:
+  ─────────────────────────────
+  Search for the text that renders when ordering_locked is true.
+  It's typically something like:
+
+    {% if ordering_locked %}
+      ... "Your meal ordering has been locked by the manager" ...
+    {% endif %}
+
+  Paste the button block (BLOCK_A below) somewhere inside that {% if %}
+  block, ideally right after the explanatory text.
+
+  Also paste BLOCK_B (the JS function) into the page's <script> block.
+
+══════════════════════════════════════════════════════════════════════
+-->
+
+
+<!-- ══ BLOCK_A: HTML — paste inside the {% if ordering_locked %} block ══ -->
+
+<div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(229,62,62,0.2)">
+  <p style="font-size:13px;color:var(--text-muted);margin-bottom:10px">
+    <i class="fas fa-info-circle"></i>
+    If you believe this lock was applied in error, or you have made arrangements with the manager,
+    you can send an unlock request directly.
+  </p>
+
+  <!-- Request form (shown after clicking the button) -->
+  <div id="unlock-req-form" style="display:none;margin-top:8px">
+    <textarea id="unlock-req-reason" rows="2"
+      placeholder="Optional: explain why you should be unlocked (e.g. 'I was on leave this week')"
+      style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
+             font-family:var(--font-body);font-size:13px;resize:vertical;margin-bottom:8px;
+             color:var(--text);background:var(--input-bg,#fff)"></textarea>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm" style="background:var(--primary);color:#fff"
+        onclick="submitOrderingUnlockRequest()" id="submit-unlock-btn">
+        <i class="fas fa-paper-plane"></i> Send Unlock Request
+      </button>
+      <button class="btn btn-sm btn-outline"
+        onclick="document.getElementById('unlock-req-form').style.display='none'">
+        Cancel
+      </button>
+    </div>
+  </div>
+
+  <!-- Trigger button (hidden once form opens or request sent) -->
+  <div id="unlock-req-trigger">
+    <button class="btn btn-sm" id="unlock-req-open-btn"
+      style="background:transparent;color:var(--danger);border:1.5px solid var(--danger)"
+      onclick="document.getElementById('unlock-req-form').style.display='';
+               document.getElementById('unlock-req-trigger').style.display='none'">
+      <i class="fas fa-lock-open"></i> Request Unlock from Manager
+    </button>
+  </div>
+
+  <!-- Status message shown after request is sent -->
+  <div id="unlock-req-status" style="display:none;font-size:13px;margin-top:6px"></div>
+</div>
+
+
+<!-- ══ BLOCK_B: JS — paste into the page's <script> block ══════════════ -->
+<script>
+async function submitOrderingUnlockRequest() {
+  const btn    = document.getElementById('submit-unlock-btn');
+  const reason = (document.getElementById('unlock-req-reason').value || '').trim();
+  const status = document.getElementById('unlock-req-status');
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending…';
+
+  try {
+    const res  = await fetch('/student/request_ordering_unlock', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ reason })
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      // Hide form, show success
+      document.getElementById('unlock-req-form').style.display    = 'none';
+      document.getElementById('unlock-req-trigger').style.display = 'none';
+      status.style.display  = '';
+      status.style.color    = 'var(--primary, #1a6b3a)';
+      status.innerHTML = `<i class="fas fa-check-circle"></i> ${data.msg}`;
+    } else {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Unlock Request';
+      status.style.display = '';
+      status.style.color   = 'var(--danger, #e53e3e)';
+      status.innerHTML     = `<i class="fas fa-exclamation-circle"></i> ${data.msg}`;
+    }
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Unlock Request';
+    status.style.display = '';
+    status.style.color   = 'var(--danger, #e53e3e)';
+    status.textContent   = 'Network error. Please try again.';
+  }
+}
+</script>

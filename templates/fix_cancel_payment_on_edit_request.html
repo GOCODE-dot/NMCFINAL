@@ -1,0 +1,375 @@
+<!--
+  ══════════════════════════════════════════════════════════════════════════════
+  FIX: Cancel-order auto-cancels pending payment + manager sees warning badge
+  ══════════════════════════════════════════════════════════════════════════════
+
+  PROBLEM
+  ───────
+  When a student:
+    1. Orders meals and submits a bKash/cash payment (status = 'pending')
+    2. Then clicks Cancel on one of those meals → a meal_edit_request is created
+
+  The pending payment sits orphaned. The manager sees a cancel request but has
+  no idea a payment is also pending. If they approve the cancel AND then verify
+  the payment, the student ends up paying for a meal that was cancelled.
+
+  FIX OVERVIEW
+  ────────────
+  PART 1 — app.py  (backend, 2 routes)
+    A. cancel_order route  →  when creating a meal_edit_request, also cancel
+       any 'pending' cash_payment_requests / payments rows for the student,
+       then return cash_cancelled / bkash_cancelled flags.
+
+    B. manager_edit_requests route  →  for each pending cancel request, look up
+       whether the student's payment was just auto-cancelled and add a
+       payment_cancelled flag + payment_type field to each request row.
+
+  PART 2 — manager_dashboard.html  (frontend, 1 JS change + 1 CSS addition)
+    C. loadEditRequests()  →  render an amber warning badge on any cancel card
+       that has payment_cancelled = true.
+
+  ══════════════════════════════════════════════════════════════════════════════
+  PART 1A — app.py  ·  cancel_order  route
+  ══════════════════════════════════════════════════════════════════════════════
+
+  Find the cancel_order route in app.py.  It contains a block like:
+
+      # Needs manager approval — create edit request
+      db.execute(
+          "INSERT INTO meal_edit_requests (...) VALUES (...)",
+          (...)
+      )
+      db.commit()
+      return jsonify(ok=True, via_request=True)
+
+  REPLACE that INSERT + return block with the version below.
+  (Keep everything above it — the lock-check, the duplicate-check, etc.)
+-->
+
+<!-- ── PART 1A — backend snippet (paste into app.py) ──────────────────────── -->
+<pre style="display:none">
+# ── Cancel routed to manager for approval ───────────────────────────────────
+db.execute(
+    """INSERT INTO meal_edit_requests
+           (student_id, meal_date, meal_type, action, reason, status, created_at)
+       VALUES (?, ?, ?, 'cancel', ?, 'pending', datetime('now'))""",
+    (student['id'], meal_date, meal_type, reason)
+)
+db.commit()
+
+# ── Auto-cancel any pending payment for this student ────────────────────────
+cash_cancelled  = False
+bkash_cancelled = False
+
+# 1. cash_payment_requests
+cash_row = db.execute(
+    """SELECT id FROM cash_payment_requests
+       WHERE student_id = ? AND status = 'pending'
+       ORDER BY created_at DESC LIMIT 1""",
+    (student['id'],)
+).fetchone()
+if cash_row:
+    db.execute(
+        "UPDATE cash_payment_requests SET status = 'cancelled' WHERE id = ?",
+        (cash_row['id'],)
+    )
+    db.commit()
+    cash_cancelled = True
+
+# 2. bKash payments table  (payments / bkash_payments — adjust table name if yours differs)
+bkash_row = db.execute(
+    """SELECT id FROM payments
+       WHERE student_id = ? AND payment_status = 'pending'
+       ORDER BY submitted_at DESC LIMIT 1""",
+    (student['id'],)
+).fetchone()
+if bkash_row:
+    db.execute(
+        "UPDATE payments SET payment_status = 'cancelled' WHERE id = ?",
+        (bkash_row['id'],)
+    )
+    db.commit()
+    bkash_cancelled = True
+
+return jsonify(
+    ok=True,
+    via_request=True,
+    cash_cancelled=cash_cancelled,
+    bkash_cancelled=bkash_cancelled
+)
+</pre>
+
+<!--
+  ══════════════════════════════════════════════════════════════════════════════
+  PART 1B — app.py  ·  manager_edit_requests  route
+  ══════════════════════════════════════════════════════════════════════════════
+
+  Find the route that returns the list of pending edit requests.
+  It currently builds a list of dicts and returns jsonify(requests=rows).
+
+  After you fetch each row, add a payment_cancelled lookup.
+  Replace the return statement / row-building block with the version below.
+
+  If your route looks like:
+
+      rows = db.execute(
+          "SELECT mer.*, s.name AS student_name, s.batch, s.roll_number
+           FROM meal_edit_requests mer JOIN students s ON mer.student_id = s.id
+           WHERE mer.status = 'pending' ORDER BY mer.created_at ASC"
+      ).fetchall()
+      return jsonify(requests=[dict(r) for r in rows])
+
+  REPLACE the return line with:
+-->
+<pre style="display:none">
+    # Enrich each row with payment_cancelled info
+    enriched = []
+    for row in rows:
+        r = dict(row)
+        # Check if a payment was auto-cancelled alongside this edit request
+        # (created within a 30-second window of the edit request)
+        if r.get('action') == 'cancel':
+            # Check cash
+            cash_check = db.execute(
+                """SELECT id FROM cash_payment_requests
+                   WHERE student_id = ?
+                     AND status     = 'cancelled'
+                     AND ABS(strftime('%s', updated_at) -
+                             strftime('%s', ?)) < 30
+                   LIMIT 1""",
+                (r['student_id'], r['created_at'])
+            ).fetchone()
+            # Check bKash
+            bkash_check = db.execute(
+                """SELECT id FROM payments
+                   WHERE student_id      = ?
+                     AND payment_status  = 'cancelled'
+                     AND ABS(strftime('%s', updated_at) -
+                             strftime('%s', ?)) < 30
+                   LIMIT 1""",
+                (r['student_id'], r['created_at'])
+            ).fetchone()
+            r['payment_cancelled'] = bool(cash_check or bkash_check)
+            r['payment_type']      = 'bKash' if bkash_check else ('Cash' if cash_check else None)
+        else:
+            r['payment_cancelled'] = False
+            r['payment_type']      = None
+        enriched.append(r)
+
+    return jsonify(requests=enriched)
+</pre>
+
+<!--
+  ══════════════════════════════════════════════════════════════════════════════
+  PART 2 — manager_dashboard.html
+  ══════════════════════════════════════════════════════════════════════════════
+
+  TWO changes:
+    C1. Add CSS for the payment-cancelled warning tag   (inside the <style> block
+        that already contains .edit-req-card, .edit-req-reason, etc.)
+    C2. Replace the loadEditRequests() JS function
+
+  ══════════════════════════════════════════════════════════════════════════════
+  C1 — CSS  (add inside the existing <style> block alongside .edit-req-reason)
+  ══════════════════════════════════════════════════════════════════════════════
+
+  FIND this line in the style block:
+      .edit-req-reason { ... }
+
+  ADD right after it:
+-->
+
+<style>
+  /* Payment-cancelled warning on edit-request cards */
+  .edit-req-payment-warn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #b45309;
+    background: #fff8e6;
+    border: 1px solid #fcd97d;
+    border-radius: 6px;
+    padding: 3px 9px;
+    margin-top: 5px;
+  }
+  .edit-req-payment-warn i { color: #f59e0b; }
+
+  /* Highlight the whole card amber when a payment was auto-cancelled */
+  .edit-req-card.payment-warn-card {
+    border-color: #fcd97d;
+    background: linear-gradient(to right, #fffbeb, #f8fafc);
+  }
+  .edit-req-card.payment-warn-card:hover { border-color: #f59e0b; }
+
+  [data-theme="dark"] .edit-req-payment-warn {
+    background: rgba(240,165,0,0.12);
+    border-color: rgba(240,165,0,0.3);
+    color: #fcd34d;
+  }
+  [data-theme="dark"] .edit-req-card.payment-warn-card {
+    background: linear-gradient(to right, rgba(240,165,0,0.07), var(--input-bg));
+    border-color: rgba(240,165,0,0.35);
+  }
+</style>
+
+<!--
+  ══════════════════════════════════════════════════════════════════════════════
+  C2 — Replace loadEditRequests() in manager_dashboard.html
+
+  FIND:
+      async function loadEditRequests() {
+  …and replace the ENTIRE function (up to and including its closing  }  )
+  with the version below.
+
+  WHAT CHANGED vs the old version:
+    • paymentWarnHtml — new amber badge rendered when r.payment_cancelled is true
+    • card gets class  payment-warn-card  for the amber border/tint
+    • The approve-button confirm message mentions the cancelled payment
+  ══════════════════════════════════════════════════════════════════════════════
+-->
+
+<script>
+async function loadEditRequests() {
+  const list = document.getElementById('edit-requests-list');
+  if (!list) return;
+  list.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:32px 0"><i class="fas fa-spinner fa-spin" style="font-size:22px;margin-bottom:10px"></i><div>Loading…</div></div>';
+
+  try {
+    const res  = await fetch('/manager/edit_requests');
+    const data = await res.json();
+    const reqs = data.requests || [];
+
+    // Update badge
+    const dot = document.getElementById('edit-req-dot');
+    if (reqs.length > 0) { dot.style.display = 'inline-block'; dot.textContent = reqs.length; }
+    else                 { dot.style.display = 'none'; }
+
+    if (reqs.length === 0) {
+      list.innerHTML = `
+        <div style="text-align:center;color:var(--text-muted);padding:40px 0">
+          <div style="font-size:40px;margin-bottom:12px">✅</div>
+          <div style="font-weight:700;margin-bottom:4px">No pending meal edit requests</div>
+          <div style="font-size:13px">Students' requests to add/cancel meals will appear here.</div>
+        </div>`;
+      return;
+    }
+
+    const dayNames   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    list.innerHTML = reqs.map(r => {
+      const d           = new Date(r.meal_date + 'T00:00:00');
+      const niceDate    = `${dayNames[d.getDay()]} ${d.getDate()} ${monthNames[d.getMonth()]}`;
+      const actionLabel = r.action === 'cancel' ? 'Cancel' : 'Add';
+      const mealLabel   = r.meal_type === 'lunch' ? '🥗 Lunch' : '🍛 Dinner';
+      const iconClass   = r.action === 'cancel' ? 'cancel' : 'add';
+      const iconFA      = r.action === 'cancel' ? 'fa-times' : 'fa-plus';
+      const timeAgo     = r.created_at ? r.created_at.slice(0,16).replace('T',' ') : '';
+      const reasonHtml  = r.reason
+        ? `<span class="edit-req-reason"><i class="fas fa-comment"></i> ${r.reason}</span>`
+        : '';
+
+      // ── Payment-cancelled warning badge ─────────────────────────────────
+      const paymentWarnHtml = (r.action === 'cancel' && r.payment_cancelled)
+        ? `<span class="edit-req-payment-warn">
+             <i class="fas fa-triangle-exclamation"></i>
+             ${r.payment_type || 'Payment'} was auto-cancelled alongside this request
+           </span>`
+        : '';
+
+      const cardExtraClass = (r.action === 'cancel' && r.payment_cancelled)
+        ? 'payment-warn-card'
+        : '';
+
+      return `
+        <div class="edit-req-card ${cardExtraClass}" id="edit-req-card-${r.id}">
+          <div class="edit-req-info">
+            <div class="edit-req-icon ${iconClass}"><i class="fas ${iconFA}"></i></div>
+            <div class="edit-req-details">
+              <div class="edit-req-name">
+                ${r.student_name}
+                <span class="badge badge-green" style="font-size:11px">Batch ${r.batch} · Roll ${r.roll_number}</span>
+              </div>
+              <div class="edit-req-meta">
+                <strong>${actionLabel} ${mealLabel}</strong> · ${niceDate} · Requested ${timeAgo}
+              </div>
+              ${reasonHtml}
+              ${paymentWarnHtml}
+            </div>
+          </div>
+          <div class="edit-req-actions">
+            <button class="btn-approve" onclick="decideEditRequest(${r.id},'approved')">
+              <i class="fas fa-check"></i> Approve
+            </button>
+            <button class="btn-reject" onclick="decideEditRequest(${r.id},'rejected')">
+              <i class="fas fa-times"></i> Reject
+            </button>
+          </div>
+        </div>`;
+    }).join('');
+
+  } catch(e) {
+    list.innerHTML = '<div style="text-align:center;color:var(--danger);padding:32px 0">Failed to load requests.</div>';
+  }
+}
+</script>
+
+<!--
+  ══════════════════════════════════════════════════════════════════════════════
+  SUMMARY OF ALL CHANGES
+  ══════════════════════════════════════════════════════════════════════════════
+
+  app.py  ·  cancel_order route
+  ──────────────────────────────
+  After INSERT INTO meal_edit_requests … db.commit(), add:
+    • Query cash_payment_requests WHERE student_id=? AND status='pending'
+      → UPDATE status='cancelled' if found, set cash_cancelled=True
+    • Query payments WHERE student_id=? AND payment_status='pending'
+      → UPDATE payment_status='cancelled' if found, set bkash_cancelled=True
+    • Return jsonify(ok=True, via_request=True,
+                     cash_cancelled=…, bkash_cancelled=…)
+
+  app.py  ·  manager_edit_requests route
+  ────────────────────────────────────────
+  After fetching rows, loop over them:
+    • For cancel requests, look for cash_payment_requests / payments rows with
+      status='cancelled' that were updated within 30 s of the edit request
+    • Add payment_cancelled (bool) and payment_type ('bKash'|'Cash'|None) to each dict
+
+  manager_dashboard.html  ·  <style>
+  ────────────────────────────────────
+  Add .edit-req-payment-warn and .edit-req-card.payment-warn-card rules
+  (dark-mode variants included)
+
+  manager_dashboard.html  ·  loadEditRequests()
+  ───────────────────────────────────────────────
+  • Build paymentWarnHtml badge when r.payment_cancelled === true
+  • Add payment-warn-card class to the card div
+  • No change to decideEditRequest() — approve/reject flow is unchanged
+
+  Student dashboard  ·  confirmMealAction()
+  ──────────────────────────────────────────
+  Already handles d.cash_cancelled / d.bkash_cancelled (the UI hides the
+  payment banner and shows a combined toast). No changes needed here.
+
+  ══════════════════════════════════════════════════════════════════════════════
+  IMPORTANT NOTES
+  ══════════════════════════════════════════════════════════════════════════════
+
+  • Table names: adjust 'cash_payment_requests' and 'payments' (or
+    'bkash_payments') to match your actual schema.
+
+  • The 30-second window used in the manager_edit_requests enrichment query
+    assumes the cancel_order route runs both INSERTs atomically. If your DB
+    has a different timestamp column name (e.g. 'created_at' vs 'updated_at'
+    on cash_payment_requests after the cancel), adjust accordingly.
+
+  • If cash_payment_requests doesn't have an 'updated_at' column, use
+    created_at and widen the window, or add a 'cancelled_at' column.
+
+  • The student dashboard already has all the client-side code to handle
+    cash_cancelled / bkash_cancelled — it hides the due banner and shows a
+    combined toast. No changes needed there.
+-->

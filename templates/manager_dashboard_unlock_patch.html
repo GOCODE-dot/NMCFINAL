@@ -1,0 +1,297 @@
+<!--
+══════════════════════════════════════════════════════════════════════
+  manager_dashboard.html — TWO PATCHES
+  ─────────────────────────────────────────────────────────────────────
+
+  PATCH A — Fix the "white bar" (stray container div)
+  PATCH B — Ordering Unlock Requests panel (new tab + JS)
+
+══════════════════════════════════════════════════════════════════════
+
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ PATCH A: WHITE BAR FIX                                          │
+  │                                                                 │
+  │ Problem:                                                        │
+  │   Around line 1077 there is a stray                            │
+  │     <div class="container" style="padding-top:0">              │
+  │   that wraps tab-bkash, tab-edit_requests, tab-cook, and       │
+  │   tab-unpaid_orders.  It sits OUTSIDE the main .container but  │
+  │   renders as a full-width white box, creating a visible bar     │
+  │   between the Rotation tab content and the page footer.        │
+  │                                                                 │
+  │ Fix (one line change in manager_dashboard.html):               │
+  │                                                                 │
+  │   FIND this exact line (~line 1077):                           │
+  │     <!-- ── bKASH TAB ─── ... -->                              │
+  │     <div class="container" style="padding-top:0">              │
+  │                                                                 │
+  │   REPLACE the opening tag WITH (remove the outer div entirely) │
+  │   by merging those tab panels back inside the main .container   │
+  │   that closes at the </div> before the Student Picker modal.   │
+  │                                                                 │
+  │   Concretely:                                                   │
+  │   1. DELETE line 1077:  <div class="container" ...>            │
+  │   2. DELETE line 1247:  </div><!-- end container -->           │
+  │      (the closing tag of that stray container)                 │
+  │                                                                 │
+  │   Then move those four tab divs inside the main .container     │
+  │   (i.e. before its </div> at line 1061).                       │
+  │                                                                 │
+  │   OR — the simpler CSS-only fix: add this to the <style> block │
+  │   so the stray div becomes invisible and doesn't push layout:  │
+  └─────────────────────────────────────────────────────────────────┘
+
+  CSS-ONLY WHITE BAR FIX — add anywhere in manager_dashboard.html's
+  existing <style> block (e.g. just before the closing </style>):
+-->
+
+<!-- ══ PATCH A: CSS-ONLY WHITE BAR FIX ══════════════════════════════ -->
+<!-- Add the following rule to the <style> block in manager_dashboard.html -->
+<!--
+  .container + .container {
+    padding-top: 0 !important;
+    background: transparent !important;
+  }
+-->
+<!--
+  HOWEVER the cleanest fix is structural. Here is the exact diff to apply
+  in manager_dashboard.html:
+
+  Line ~1077  →  DELETE:
+    <div class="container" style="padding-top:0">
+
+  Line ~1247  →  DELETE:
+    </div><!-- end container -->
+
+  And move the 4 tab panels (tab-bkash, tab-edit_requests, tab-cook,
+  tab-unpaid_orders) so they sit inside the EXISTING main .container
+  (the one that opened at line 311), just before its closing </div>
+  at line 1061.
+
+  In other words, move the block from ~1076–1247 to ~1060 (inside
+  the main container before it closes).
+-->
+
+
+<!-- ══ PATCH B: ORDERING UNLOCK REQUESTS PANEL ══════════════════════
+
+  HOW TO ADD:
+
+  STEP 1 — Add a tab button.
+  In the .tabs div (around line 417), add this button after the
+  "Locked Accounts" tab button:
+
+    <button class="tab" onclick="showTab('unlock_requests');loadOrderingUnlockRequests()" id="unlock-req-tab-btn">
+      <i class="fas fa-lock-open"></i> Unlock Requests
+      <span class="notification-dot" id="unlock-req-dot" style="display:none">0</span>
+    </button>
+
+  STEP 2 — Add the tab panel HTML below.
+  Paste it inside the main .container, after the existing
+  "Currently Ordering-Locked Students" card (around line 1021).
+
+  STEP 3 — Add the JS block at the bottom of the <script> section
+  (just before the final </script> tag around line 3324).
+
+══════════════════════════════════════════════════════════════════════ -->
+
+
+<!-- ── ORDERING UNLOCK REQUESTS TAB PANEL ──────────────────────────── -->
+<!-- Paste this block inside the main .container, after the weekly_orders tab panel -->
+
+  <!-- ORDERING UNLOCK REQUESTS TAB -->
+  <div id="tab-unlock_requests" class="tab-panel">
+    <div class="card section-card" style="overflow:hidden;border-top:3px solid var(--primary)">
+
+      <!-- Header -->
+      <div style="padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div>
+          <div class="section-title" style="margin:0;color:var(--primary)">
+            <i class="fas fa-lock-open"></i> Student Ordering Unlock Requests
+          </div>
+          <p style="font-size:13px;color:var(--text-muted);margin-top:4px;margin-bottom:0">
+            Students whose ordering was locked can send a request here asking you to unlock them.
+            Approve to immediately restore their ability to order meals.
+          </p>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="loadOrderingUnlockRequests()">
+          <i class="fas fa-sync-alt"></i> Refresh
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div id="ordering-unlock-body" style="padding:20px 24px">
+        <div style="text-align:center;color:var(--text-muted);padding:40px 0">
+          <i class="fas fa-spinner fa-spin" style="font-size:24px;margin-bottom:12px;display:block"></i>
+          Loading…
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <!-- END ORDERING UNLOCK REQUESTS TAB -->
+
+
+<!-- ── JS FOR ORDERING UNLOCK REQUESTS ─────────────────────────────── -->
+<!-- Paste this block just before the final </script> tag (~line 3324) -->
+<script>
+// ── Ordering Unlock Requests Panel ───────────────────────────────────────────
+
+async function loadOrderingUnlockRequests() {
+  const body = document.getElementById('ordering-unlock-body');
+  const dot  = document.getElementById('unlock-req-dot');
+  if (!body) return;
+
+  body.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:40px 0">
+    <i class="fas fa-spinner fa-spin" style="font-size:24px;margin-bottom:12px;display:block"></i>Loading…</div>`;
+
+  let data;
+  try {
+    const res = await fetch('/manager/ordering_unlock_requests');
+    data = await res.json();
+  } catch(e) {
+    body.innerHTML = `<div style="text-align:center;color:var(--danger);padding:32px 0">
+      <i class="fas fa-exclamation-triangle"></i> Failed to load. Please try again.</div>`;
+    return;
+  }
+
+  const requests = data.requests || [];
+
+  // Update notification dot on tab
+  if (dot) {
+    dot.style.display = requests.length > 0 ? 'inline-block' : 'none';
+    dot.textContent   = requests.length;
+  }
+
+  if (!requests.length) {
+    body.innerHTML = `
+      <div style="text-align:center;color:var(--text-muted);padding:48px 0">
+        <div style="font-size:44px;margin-bottom:12px">🔓</div>
+        <div style="font-weight:700;font-size:15px;margin-bottom:4px">No pending unlock requests</div>
+        <div style="font-size:13px">Students with locked ordering can send a request from their dashboard.</div>
+      </div>`;
+    return;
+  }
+
+  const rows = requests.map(r => {
+    const genderIcon = r.gender === 'female' ? '👩' : '👨';
+    const floorLabel = r.gender === 'male' && r.floor ? `Floor ${r.floor}` : (r.gender === 'female' && r.floor
+      ? (['Campus','Sentu House','Chairman House'][r.floor - 1] || `Hostel ${r.floor}`) : '—');
+    const submittedAt = r.created_at ? r.created_at.slice(0, 16).replace('T', ' ') : '';
+    const reasonHtml  = r.reason
+      ? `<div style="margin-top:6px;font-size:12px;color:#7a5c00;background:#fff8e6;border:1px solid #fcd97d;border-radius:6px;padding:5px 10px;display:inline-block">
+           <i class="fas fa-comment"></i> ${_esc(r.reason)}
+         </div>`
+      : `<div style="margin-top:4px;font-size:12px;color:var(--text-muted);font-style:italic">No reason provided</div>`;
+
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;
+                  padding:14px 18px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
+                  margin-bottom:10px;background:var(--primary-pale)" id="ulreq-${r.id}">
+        <div style="min-width:0;flex:1">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:2px">
+            <span style="font-size:16px">${genderIcon}</span>
+            <strong style="font-size:15px">${_esc(r.name)}</strong>
+            <span class="badge badge-green">Batch ${r.batch}</span>
+            <span style="font-size:12px;color:var(--text-muted)">Roll ${_esc(r.roll_number)} · ${floorLabel}</span>
+          </div>
+          ${reasonHtml}
+          <div style="font-size:11px;color:var(--text-muted);margin-top:6px">
+            <i class="fas fa-clock"></i> Submitted: ${submittedAt}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap">
+          <button class="btn btn-sm" style="background:var(--primary);color:#fff"
+            onclick="decideOrderingUnlock(${r.id},'approved',this)">
+            <i class="fas fa-unlock"></i> Approve & Unlock
+          </button>
+          <button class="btn btn-sm" style="background:transparent;color:var(--danger);border:1.5px solid var(--danger)"
+            onclick="decideOrderingUnlock(${r.id},'rejected',this)">
+            <i class="fas fa-times"></i> Reject
+          </button>
+        </div>
+      </div>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px">
+      <i class="fas fa-info-circle"></i>
+      ${requests.length} pending request${requests.length !== 1 ? 's' : ''}.
+      Approving will immediately remove the ordering lock so the student can place meal orders again.
+    </div>
+    ${rows}`;
+}
+
+async function decideOrderingUnlock(reqId, verdict, btn) {
+  const label = verdict === 'approved' ? 'APPROVE & UNLOCK' : 'REJECT';
+  if (!confirm(`${label} this ordering unlock request?`)) return;
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+  try {
+    const res  = await fetch('/manager/decide_ordering_unlock', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ request_id: reqId, verdict })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast(data.msg, verdict === 'approved' ? 'success' : 'secondary');
+      const card = document.getElementById('ulreq-' + reqId);
+      if (card) {
+        card.style.transition = 'opacity .3s';
+        card.style.opacity    = '0';
+        setTimeout(() => { card.remove(); }, 320);
+      }
+      // Refresh badge counts
+      setTimeout(loadOrderingUnlockRequests, 400);
+      // Also refresh the locked-students list if it's visible
+      if (document.getElementById('tab-weekly_orders').classList.contains('active')) {
+        loadNonOrderers();
+      }
+    } else {
+      btn.disabled = false;
+      btn.innerHTML = verdict === 'approved'
+        ? '<i class="fas fa-unlock"></i> Approve & Unlock'
+        : '<i class="fas fa-times"></i> Reject';
+      toast(data.msg || 'Error. Please try again.', 'error');
+    }
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = verdict === 'approved'
+      ? '<i class="fas fa-unlock"></i> Approve & Unlock'
+      : '<i class="fas fa-times"></i> Reject';
+    toast('Network error. Please try again.', 'error');
+  }
+}
+
+// Escape HTML helper (used in this panel)
+function _esc(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Auto-load badge count on page open
+(async function initUnlockRequestBadge() {
+  try {
+    const res  = await fetch('/manager/ordering_unlock_requests');
+    const data = await res.json();
+    const cnt  = (data.requests || []).length;
+    const dot  = document.getElementById('unlock-req-dot');
+    if (dot) { dot.style.display = cnt > 0 ? 'inline-block' : 'none'; dot.textContent = cnt; }
+  } catch(e) {}
+})();
+
+// Poll for new requests every 90 seconds
+setInterval(async () => {
+  try {
+    const res  = await fetch('/manager/ordering_unlock_requests');
+    const data = await res.json();
+    const cnt  = (data.requests || []).length;
+    const dot  = document.getElementById('unlock-req-dot');
+    if (dot) { dot.style.display = cnt > 0 ? 'inline-block' : 'none'; dot.textContent = cnt; }
+  } catch(e) {}
+}, 90000);
+</script>

@@ -1,0 +1,384 @@
+<!--
+  ══════════════════════════════════════════════════════════════════════════════
+  MANAGER DASHBOARD PATCHES
+  Two independent patches — apply both.
+
+  PATCH A: Cook Sheet network-error fix (replace loadCookSheet function)
+  PATCH B: Debt-Block student panel (paste into the Overview tab)
+  ══════════════════════════════════════════════════════════════════════════════
+
+
+  ────────────────────────────────────────────────────────────────────────────
+  PATCH A — Cook Sheet: replace the entire loadCookSheet() function
+  ────────────────────────────────────────────────────────────────────────────
+  Find this line in manager_dashboard.html:
+      async function loadCookSheet() {
+  ...and replace the whole function (up to its closing  }  ) with the version
+  below. The fix adds:
+    • A 3-second timeout so it doesn't hang forever on network issues
+    • A Retry button shown on failure (no reload needed)
+    • Better error messages (distinguishes timeout vs generic network error)
+    • Auto-sets today's date on first load if the picker is empty
+-->
+
+<script>
+// ── Cook Sheet — robust loader ────────────────────────────────────────────────
+
+// Set today's date on page ready if picker is blank
+(function initCookDatePicker() {
+  const el = document.getElementById('cook-date-input');
+  if (!el) return;
+  if (!el.value) {
+    const today = new Date();
+    const yyyy  = today.getFullYear();
+    const mm    = String(today.getMonth() + 1).padStart(2, '0');
+    const dd    = String(today.getDate()).padStart(2, '0');
+    el.value    = `${yyyy}-${mm}-${dd}`;
+  }
+})();
+
+let _cookData = null;
+
+async function loadCookSheet() {
+  const dateInput = document.getElementById('cook-date-input');
+  if (!dateInput) return;
+  const dateVal = dateInput.value;
+  if (!dateVal) {
+    toast('Please select a date first.', 'error');
+    return;
+  }
+
+  const body     = document.getElementById('cook-sheet-body');
+  const subtitle = document.getElementById('cook-header-subtitle');
+  if (!body) return;
+
+  body.innerHTML = `
+    <div style="text-align:center;color:var(--text-muted);padding:40px 0">
+      <i class="fas fa-spinner fa-spin" style="font-size:24px;margin-bottom:12px;display:block"></i>
+      Loading cook sheet…
+    </div>`;
+
+  // ── Fetch with 10-second timeout ──────────────────────────────────────────
+  let data;
+  try {
+    const controller = new AbortController();
+    const timeoutId  = setTimeout(() => controller.abort(), 10000);
+
+    const res = await fetch(
+      '/manager/cook_sheet?date=' + encodeURIComponent(dateVal),
+      { signal: controller.signal }
+    );
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      // HTTP error (404, 500 …)
+      throw new Error(`Server returned ${res.status}`);
+    }
+    data = await res.json();
+
+  } catch(err) {
+    const isTimeout = err.name === 'AbortError';
+    body.innerHTML = `
+      <div style="text-align:center;padding:36px 20px">
+        <div style="font-size:36px;margin-bottom:10px">${isTimeout ? '⏱️' : '⚠️'}</div>
+        <div style="font-size:15px;font-weight:700;color:var(--danger);margin-bottom:6px">
+          ${isTimeout ? 'Request Timed Out' : 'Network Error'}
+        </div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:18px">
+          ${isTimeout
+            ? 'The server took too long to respond. Check your connection and try again.'
+            : 'Could not reach the server. Make sure you are connected to the internet.'}
+        </div>
+        <button onclick="loadCookSheet()"
+          style="display:inline-flex;align-items:center;gap:8px;padding:10px 22px;
+                 background:var(--primary);color:#fff;border:none;border-radius:8px;
+                 font-family:var(--font-body);font-size:14px;font-weight:700;cursor:pointer">
+          <i class="fas fa-sync-alt"></i> Try Again
+        </button>
+      </div>`;
+    return;
+  }
+
+  // ── API returned ok:false ─────────────────────────────────────────────────
+  if (!data.ok) {
+    body.innerHTML = `
+      <div style="text-align:center;padding:32px 20px">
+        <div style="font-size:14px;color:var(--danger);margin-bottom:14px">
+          <i class="fas fa-exclamation-triangle"></i>
+          ${data.msg || 'Failed to load cook sheet.'}
+        </div>
+        <button onclick="loadCookSheet()"
+          style="display:inline-flex;align-items:center;gap:8px;padding:9px 20px;
+                 background:var(--primary);color:#fff;border:none;border-radius:8px;
+                 font-family:var(--font-body);font-size:13px;font-weight:700;cursor:pointer">
+          <i class="fas fa-sync-alt"></i> Retry
+        </button>
+      </div>`;
+    return;
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  _cookData = data;
+  if (subtitle) subtitle.textContent = _cookFmtDate(dateVal);
+
+  const { lunch, dinner, floor_lunch, floor_dinner } = data;
+  const grandTotal = (lunch.total || 0) + (dinner.total || 0);
+
+  function mealBlock(label, emoji, mealData, floorData) {
+    const floorRows = (floorData || [])
+      .filter(f => f.floor != null)
+      .map(f => `
+        <div style="display:flex;align-items:center;justify-content:space-between;
+                    padding:9px 14px;border-radius:8px;margin-bottom:5px;
+                    background:#e6f0ff;border:1px solid #b3d1f5">
+          <span style="display:flex;align-items:center;gap:8px;color:#3b5fe2;font-size:13px;font-weight:600">
+            <i class="fas fa-layer-group" style="font-size:11px"></i> Floor ${f.floor}
+          </span>
+          <span style="font-size:18px;font-weight:800;color:#3b5fe2">${f.count}</span>
+        </div>`).join('');
+
+    return `
+      <div style="margin-bottom:22px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;
+                    padding-bottom:10px;border-bottom:2px solid var(--border)">
+          <span style="font-size:22px">${emoji}</span>
+          <span style="font-size:15px;font-weight:700;color:var(--text)">${label}</span>
+          <span style="margin-left:auto;font-size:24px;font-weight:800;color:var(--primary)">${mealData.total}</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;
+                    border-radius:8px;margin-bottom:5px;background:var(--primary-pale);border:1.5px solid #b7e4c7">
+          <span style="display:flex;align-items:center;gap:8px;color:var(--primary);font-size:14px;font-weight:700">
+            <i class="fas fa-users"></i> Total ${label}
+          </span>
+          <span style="font-size:22px;font-weight:800;color:var(--primary)">${mealData.total}</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;
+                    border-radius:8px;margin-bottom:5px;background:#fce4ec;border:1.5px solid #f48fb1">
+          <span style="display:flex;align-items:center;gap:8px;color:#c2185b;font-size:13px;font-weight:600">
+            <i class="fas fa-venus"></i> Female
+          </span>
+          <span style="font-size:20px;font-weight:800;color:#c2185b">${mealData.female}</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;
+                    border-radius:8px;margin-bottom:5px;background:#e6f0ff;border:1px solid #b3d1f5">
+          <span style="display:flex;align-items:center;gap:8px;color:#3b5fe2;font-size:13px;font-weight:600">
+            <i class="fas fa-mars"></i> Male (all floors)
+          </span>
+          <span style="font-size:20px;font-weight:800;color:#3b5fe2">${mealData.male}</span>
+        </div>
+        ${floorRows}
+      </div>`;
+  }
+
+  body.innerHTML = `
+    ${mealBlock('Lunch',  '🌤️', lunch,  floor_lunch)}
+    ${mealBlock('Dinner', '🌙', dinner, floor_dinner)}
+    <div style="display:flex;align-items:center;justify-content:space-between;
+                background:linear-gradient(135deg,var(--primary),var(--primary-light));
+                color:#fff;border-radius:var(--radius-sm);padding:16px 20px;margin-top:4px">
+      <span style="font-size:15px;font-weight:700;opacity:.95">🍽️ Grand Total Meals</span>
+      <span style="font-size:34px;font-weight:800">${grandTotal}</span>
+    </div>
+    <div style="margin-top:12px;font-size:12px;color:var(--text-muted);
+                display:flex;align-items:center;gap:6px">
+      <i class="fas fa-clock"></i>
+      Refreshed: ${new Date().toLocaleTimeString()}
+      &nbsp;·&nbsp; Click <strong>Print for Cook</strong> to hand to the kitchen.
+    </div>`;
+}
+
+// Also auto-load when the cook tab is clicked (keep this if showTab calls loadCookSheet):
+// The existing  if (name === 'cook') loadCookSheet();  in showTab() is fine as-is.
+</script>
+
+
+<!--
+  ────────────────────────────────────────────────────────────────────────────
+  PATCH B — Debt-Block Panel
+  ────────────────────────────────────────────────────────────────────────────
+  Paste this entire block into the Overview tab of manager_dashboard.html.
+  Suggested location: right below the "Students Who Forgot to Pay" card,
+  before the Pending Verification card.
+-->
+
+<!-- ── Debt-Block Management Card ─────────────────────────────────────────── -->
+<div class="card section-card" style="overflow:hidden;border-left:4px solid #e53e3e;margin-bottom:20px" id="debtBlockCard">
+  <div style="padding:16px 24px;border-bottom:1px solid var(--border);
+              display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:20px">🚫</span>
+      <div>
+        <div style="font-weight:700;font-size:15px;color:var(--text)">Debt-Block Student Ordering</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+          Block a student from placing new meals until they pay an old unpaid bill.
+        </div>
+      </div>
+      <span id="debt-block-count-badge"
+            style="display:none;background:#e53e3e;color:#fff;font-size:11px;
+                   font-weight:700;padding:2px 8px;border-radius:20px;margin-left:4px"></span>
+    </div>
+    <button onclick="loadDebtBlockPanel()"
+      style="background:transparent;border:1px solid var(--border);border-radius:8px;
+             padding:6px 14px;font-family:var(--font-body);font-size:13px;cursor:pointer;
+             color:var(--text-muted);display:inline-flex;align-items:center;gap:6px">
+      <i class="fas fa-sync-alt"></i> Refresh
+    </button>
+  </div>
+
+  <!-- Quick-block form -->
+  <div style="padding:16px 24px;border-bottom:1px solid var(--border);
+              background:#fff5f5;display:flex;align-items:center;flex-wrap:wrap;gap:10px">
+    <input type="text" id="debtBlockRollInput" placeholder="Roll number (e.g. 3-12)"
+      style="flex:1;min-width:140px;padding:9px 14px;border:1.5px solid var(--border);
+             border-radius:8px;font-family:var(--font-body);font-size:14px">
+    <button onclick="quickDebtBlock()"
+      style="display:inline-flex;align-items:center;gap:7px;padding:9px 18px;
+             background:#e53e3e;color:#fff;border:none;border-radius:8px;
+             font-family:var(--font-body);font-size:13px;font-weight:700;cursor:pointer">
+      <i class="fas fa-ban"></i> Block Student
+    </button>
+    <span style="font-size:12px;color:var(--text-muted)">
+      Student will see a "Pay old bill first" banner and cannot place new meals.
+    </span>
+  </div>
+
+  <!-- Currently blocked list -->
+  <div style="padding:16px 24px" id="debt-block-panel-body">
+    <div style="text-align:center;color:var(--text-muted);font-size:13px;padding:12px 0">
+      <i class="fas fa-spinner fa-spin"></i> Loading…
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Debt-Block Panel Logic ────────────────────────────────────────────────────
+
+async function loadDebtBlockPanel() {
+  const body  = document.getElementById('debt-block-panel-body');
+  const badge = document.getElementById('debt-block-count-badge');
+  body.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:12px 0"><i class="fas fa-spinner fa-spin"></i> Loading…</div>';
+
+  let data;
+  try {
+    const res = await fetch('/manager/debt_blocked_students');
+    data = await res.json();
+  } catch(_) {
+    body.innerHTML = '<div style="color:var(--danger);font-size:13px;padding:8px 0">⚠️ Could not load. Check your connection.</div>';
+    return;
+  }
+
+  const list = data.students || [];
+
+  if (badge) {
+    if (list.length > 0) {
+      badge.textContent   = list.length;
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  if (!list.length) {
+    body.innerHTML = '<div style="text-align:center;padding:16px 0;color:var(--text-muted);font-size:13px">✅ No students are currently debt-blocked.</div>';
+    return;
+  }
+
+  const rows = list.map(s => `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;
+                padding:11px 14px;border-radius:8px;background:#fff5f5;border:1px solid #fc818133;margin-bottom:7px">
+      <div style="min-width:0;flex:1">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:2px">
+          <strong style="font-size:14px">${s.name}</strong>
+          <span style="background:var(--primary-pale);color:var(--primary);font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px">Batch ${s.batch}</span>
+          <span style="color:var(--text-muted);font-size:12px">Roll ${s.roll_number}</span>
+          ${s.floor ? `<span style="color:var(--text-muted);font-size:12px">· Floor ${s.floor}</span>` : ''}
+          <span style="background:#fff5f5;color:#e53e3e;border:1px solid #fc8181;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px">🚫 Blocked</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted)">
+          bKash: <span style="font-family:monospace">${s.bkash_number}</span>
+        </div>
+      </div>
+      <button onclick="unblockStudent(${s.id}, this)"
+        style="background:var(--primary);color:#fff;border:none;border-radius:8px;
+               padding:7px 14px;font-family:var(--font-body);font-size:12px;font-weight:700;
+               cursor:pointer;display:inline-flex;align-items:center;gap:6px;flex-shrink:0">
+        <i class="fas fa-unlock"></i> Unblock
+      </button>
+    </div>`).join('');
+
+  body.innerHTML = `
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">
+      ${list.length} student${list.length>1?'s are':' is'} currently blocked from placing new meal orders.
+      Unblock them once their old balance is cleared.
+    </div>
+    ${rows}`;
+}
+
+async function unblockStudent(studentId, btn) {
+  if (!confirm('Unblock this student? They will be able to order meals again.')) return;
+  btn.disabled      = true;
+  btn.style.opacity = '0.5';
+
+  try {
+    const res  = await fetch('/manager/set_debt_block', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ student_id: studentId, blocked: false })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast('✅ ' + data.msg, 'success');
+      loadDebtBlockPanel();
+    } else {
+      toast(data.msg || 'Error', 'error');
+      btn.disabled = false; btn.style.opacity = '1';
+    }
+  } catch(_) {
+    toast('Network error. Please try again.', 'error');
+    btn.disabled = false; btn.style.opacity = '1';
+  }
+}
+
+// Quick block by roll number
+async function quickDebtBlock() {
+  const roll = document.getElementById('debtBlockRollInput').value.trim();
+  if (!roll) { toast('Enter a roll number first.', 'error'); return; }
+
+  // Look up student ID from overdue list (or do a dedicated search)
+  try {
+    const res  = await fetch('/manager/overdue_students');
+    const data = await res.json();
+    const list = data.students || [];
+    const s    = list.find(x => String(x.roll_number).toLowerCase() === roll.toLowerCase());
+
+    if (!s) {
+      toast(`No student found with roll "${roll}" in the overdue list. Block only overdue students.`, 'error');
+      return;
+    }
+
+    if (!confirm(`Block meal ordering for ${s.name} (${s.roll_number}) until old balance is paid?`)) return;
+
+    const res2  = await fetch('/manager/set_debt_block', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ student_id: s.id, blocked: true })
+    });
+    const data2 = await res2.json();
+    if (data2.ok) {
+      toast(`🚫 ${s.name} is now blocked from new meal orders.`, 'success');
+      document.getElementById('debtBlockRollInput').value = '';
+      loadDebtBlockPanel();
+      loadOverdueStudents(); // refresh the overdue panel too
+    } else {
+      toast(data2.msg || 'Error', 'error');
+    }
+  } catch(_) {
+    toast('Network error. Please try again.', 'error');
+  }
+}
+
+// Auto-load on page open
+document.addEventListener('DOMContentLoaded', function() {
+  loadDebtBlockPanel();
+});
+</script>

@@ -1,0 +1,187 @@
+<!--
+  ══════════════════════════════════════════════════════════════════════════════
+  STUDENT DASHBOARD — Compact green/pink summary boxes
+  
+  In student_dashboard.html, REPLACE the existing .due-box and .bkash-box
+  CSS rules (around lines 232–238) with the ones below.
+  
+  ALSO replace the two <div class="due-box"…> and <div class="bkash-box"…>
+  wrappers (around lines 308 and 343) with the compacted versions below.
+  ══════════════════════════════════════════════════════════════════════════════
+-->
+
+<!-- ── 1. REPLACE THESE EXISTING CSS RULES ──────────────────────────────── -->
+<!--
+OLD (remove these):
+  .bkash-box { background: linear-gradient(135deg, #e51c6d, #c2185b); border-radius: var(--radius); padding: 24px; color: #fff; }
+  .bkash-box h3 { font-size: 15px; opacity: .9; margin-bottom: 6px; }
+  .bkash-num { font-size: 26px; font-weight: 700; letter-spacing: 2px; }
+  .bkash-note { font-size: 12px; opacity: .8; margin-top: 8px; }
+  .due-box { background: linear-gradient(135deg, var(--primary), var(--primary-light)); border-radius: var(--radius); padding: 24px; color: #fff; }
+  .due-box h3 { font-size: 15px; opacity: .9; margin-bottom: 4px; }
+  .due-amount { font-size: 34px; font-weight: 700; }
+-->
+
+<style>
+/* ── COMPACT SUMMARY BOXES ─────────────────────────────────────────────── */
+
+/* Green box (Total Due) */
+.due-box {
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  border-radius: var(--radius);
+  padding: 12px 14px;   /* was 24px — now compact */
+  color: #fff;
+}
+.due-box h3 {
+  font-size: 11px;      /* was 15px */
+  opacity: .85;
+  margin-bottom: 1px;
+  font-weight: 700;
+  letter-spacing: .2px;
+}
+.due-amount {
+  font-size: 24px;      /* was 34px */
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+/* Pink box (bKash Payment) */
+.bkash-box {
+  background: linear-gradient(135deg, #e51c6d, #c2185b);
+  border-radius: var(--radius);
+  padding: 12px 14px;   /* was 24px */
+  color: #fff;
+}
+.bkash-box h3 {
+  font-size: 11px;      /* was 15px */
+  opacity: .85;
+  margin-bottom: 4px;
+  font-weight: 700;
+}
+.bkash-num {
+  font-size: 18px;      /* was 26px */
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.bkash-note {
+  font-size: 10px;
+  opacity: .75;
+  margin-top: 4px;
+}
+
+/* Grid: give boxes equal but shorter height */
+.summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+@media(max-width:500px) {
+  .summary-grid { grid-template-columns: 1fr; }
+}
+</style>
+
+
+<!-- ── 2. REPLACE THE GRID WRAPPER ──────────────────────────────────────── -->
+<!--
+In student_dashboard.html find this line (around line 305):
+  <div class="grid-2" style="margin-bottom:16px">
+
+Replace it with:
+  <div class="summary-grid">
+
+(That closes with the same </div> — just change the opening div.)
+-->
+
+
+<!-- ── 3. REPLACE DUE-BOX INNER CONTENT ─────────────────────────────────── -->
+<!--
+Find the <div class="due-box" style="display:flex;flex-direction:column;gap:0;padding:16px 18px">
+and replace the entire block (up to its closing </div> before the bkash-box) with:
+-->
+
+<div class="due-box" style="display:flex;flex-direction:column;gap:0">
+  <h3><i class="fas fa-receipt"></i> Total Due</h3>
+  <div class="due-amount">৳{{ "%.0f"|format(due) }}</div>
+  <div style="font-size:10px;opacity:.8;margin-top:1px">Pending payments</div>
+
+  <!-- Manager identity strip — compact -->
+  {% if mgr_name %}
+  <div style="margin-top:8px;background:rgba(255,255,255,.12);border-radius:7px;padding:5px 8px;display:flex;align-items:center;gap:7px">
+    <span style="background:rgba(255,255,255,.25);border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0">
+      <i class="fas fa-user-tie"></i>
+    </span>
+    <div style="min-width:0;flex:1">
+      <div style="font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ mgr_name }}</div>
+      <div style="font-size:9px;opacity:.75;margin-top:1px">{{ mgr_login_id }}{% if mgr_batch %} · Batch {{ mgr_batch }}{% endif %}{% if mgr_roll %} · Roll {{ mgr_roll }}{% endif %}</div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if due > 0 %}
+  <div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap">
+    <button class="btn btn-sm" style="background:rgba(255,255,255,.25);color:#fff;border:1px solid rgba(255,255,255,.5);padding:4px 10px;font-size:11px" onclick="openPayModal()">
+      <i class="fas fa-mobile-alt"></i> bKash
+    </button>
+    <button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.4);padding:4px 10px;font-size:11px" onclick="openCashModal()">
+      <i class="fas fa-money-bill-wave"></i> Cash
+    </button>
+  </div>
+  {% endif %}
+</div>
+
+
+<!-- ── 4. REPLACE BKASH-BOX INNER CONTENT ───────────────────────────────── -->
+<!--
+Find <div class="bkash-box" style="display:flex;flex-direction:column;padding:16px 18px">
+and replace that whole block with:
+-->
+
+<div class="bkash-box" style="display:flex;flex-direction:column">
+  <h3><i class="fas fa-mobile-alt"></i> Send Payment To</h3>
+
+  <!-- Manager identity strip — compact -->
+  {% if mgr_name %}
+  <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;background:rgba(255,255,255,.1);border-radius:7px;padding:5px 8px">
+    <span style="background:rgba(255,255,255,.25);border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0">
+      <i class="fas fa-user-tie"></i>
+    </span>
+    <div style="min-width:0;flex:1">
+      <div style="font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ mgr_name }}</div>
+      <div style="font-size:9px;opacity:.75">{{ mgr_login_id }}{% if mgr_batch %} · B{{ mgr_batch }}{% endif %}{% if mgr_roll %} · R{{ mgr_roll }}{% endif %}</div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="bkash-num" id="mgr-bkash-num">{{ mgr_bkash }}</div>
+
+  {% if bkash_approved %}
+  <div style="font-size:9px;opacity:.8;margin-top:3px">
+    <span style="background:rgba(255,255,255,.2);padding:1px 6px;border-radius:6px">✓ Approved · {{ bkash_week }}</span>
+  </div>
+  {% else %}
+  <div style="font-size:9px;opacity:.8;margin-top:3px">
+    <span style="background:rgba(255,255,255,.15);padding:1px 6px;border-radius:6px">⏳ Pending approval</span>
+  </div>
+  {% endif %}
+
+  <div class="bkash-note">Send exact amount · Use your roll as reference.</div>
+
+  <!-- bKash Send Charge Calculator — compact -->
+  <div style="margin-top:7px;background:rgba(255,255,255,.12);border-radius:7px;padding:6px 8px">
+    <div style="font-size:9px;font-weight:700;opacity:.9;margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px">
+      <i class="fas fa-calculator" style="font-size:8px"></i> Send Charge
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:3px" id="cashout-pills"></div>
+    <div style="font-size:8px;opacity:.55;margin-top:4px">Free under ৳100 · Above ৳100: 1.85%</div>
+  </div>
+
+  <div style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap">
+    <button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.4);padding:4px 9px;font-size:11px" onclick="copyBkash()">
+      <i class="fas fa-copy"></i> Copy
+    </button>
+    <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);padding:4px 9px;font-size:11px" onclick="refreshBkash()" id="refresh-bkash-btn">
+      <i class="fas fa-sync-alt"></i>
+    </button>
+  </div>
+</div>

@@ -1,0 +1,2533 @@
+{% extends 'base.html' %}
+{% block title %}My Meals{% endblock %}
+{% block extra_head %}
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ── DARK / LIGHT THEME SYSTEM ─────────────────────────────────────────── */
+:root {
+  --primary: #1a6b3a; --primary-light: #2d9e5a; --primary-pale: #e8f5ee;
+  --accent: #f0a500; --accent-light: #fff8e6;
+  --danger: #e53e3e; --danger-light: #fff5f5;
+  --bg: #f7f9fc; --card: #ffffff; --border: #e2e8f0;
+  --text: #1a202c; --text-muted: #718096;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+  --nav-bg: #ffffff; --nav-border: #e2e8f0;
+  --input-bg: #ffffff; --table-hover: #f8fafc;
+  --stat-card-bg: #ffffff; --modal-bg: #ffffff;
+  --proof-card-bg: #ffffff; --proof-unverified-bg: #ffffff;
+  --tabs-bg: #e2e8f0; --tab-active-bg: #ffffff;
+  --floor-card-bg: #f8f9fb; --floor-card-border: #e5e7eb;
+  --floor-modal-bg: #ffffff;
+  --due-banner-bg: linear-gradient(135deg,#fff8e6,#fef3c7);
+  --search-bg: #ffffff;
+  --txn-badge-bg: #1a1a2e; --txn-badge-color: #4ade80;
+}
+
+[data-theme="dark"] {
+  --primary: #2d9e5a; --primary-light: #3dbc70; --primary-pale: rgba(45,158,90,0.15);
+  --accent: #f0a500; --accent-light: rgba(240,165,0,0.12);
+  --danger: #fc4f4f; --danger-light: rgba(229,62,62,0.12);
+  --bg: #0f1117; --card: #1a1f2e; --border: #2d3548;
+  --text: #e8eaf0; --text-muted: #8895b3;
+  --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 16px rgba(0,0,0,0.2);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.4);
+  --nav-bg: #12161f; --nav-border: #2d3548;
+  --input-bg: #1e2436; --table-hover: #1e2436;
+  --stat-card-bg: #1a1f2e; --modal-bg: #1a1f2e;
+  --proof-card-bg: #1a1f2e; --proof-unverified-bg: #1a1f2e;
+  --tabs-bg: #12161f; --tab-active-bg: #252d42;
+  --floor-card-bg: #1e2436; --floor-card-border: #2d3548;
+  --floor-modal-bg: #1a1f2e;
+  --due-banner-bg: linear-gradient(135deg,rgba(240,165,0,0.1),rgba(240,165,0,0.06));
+  --search-bg: #1e2436;
+  --txn-badge-bg: #0a0f1a; --txn-badge-color: #4ade80;
+}
+
+/* Apply dark theme everywhere */
+[data-theme="dark"] body { background: var(--bg); color: var(--text); }
+[data-theme="dark"] nav { background: var(--nav-bg) !important; border-bottom-color: var(--nav-border) !important; }
+[data-theme="dark"] .card { background: var(--card) !important; border-color: var(--border) !important; }
+[data-theme="dark"] .stat-card { background: var(--stat-card-bg) !important; border-color: var(--border) !important; }
+[data-theme="dark"] .modal { background: var(--modal-bg) !important; }
+[data-theme="dark"] .proof-card { background: var(--proof-card-bg) !important; border-color: var(--border) !important; }
+[data-theme="dark"] .proof-card.unverified { border-color: var(--border); background: var(--proof-unverified-bg) !important; }
+[data-theme="dark"] td, [data-theme="dark"] th { border-color: var(--border) !important; color: var(--text) !important; }
+[data-theme="dark"] th { background: #12161f !important; color: var(--text-muted) !important; }
+[data-theme="dark"] tr:hover td { background: var(--table-hover) !important; }
+[data-theme="dark"] .tabs { background: var(--tabs-bg) !important; }
+[data-theme="dark"] .tab { color: var(--text-muted) !important; }
+[data-theme="dark"] .tab.active { background: var(--tab-active-bg) !important; color: var(--primary) !important; }
+[data-theme="dark"] .day-card { background: var(--card) !important; border-color: var(--border) !important; }
+[data-theme="dark"] .day-card .day-name { color: var(--text-muted) !important; }
+[data-theme="dark"] .day-card .day-num { color: var(--text) !important; }
+[data-theme="dark"] .meal-btn { background: var(--card) !important; border-color: var(--border) !important; color: var(--text-muted) !important; }
+[data-theme="dark"] .meal-btn:hover { border-color: var(--primary) !important; color: var(--primary) !important; background: var(--primary-pale) !important; }
+[data-theme="dark"] .meal-btn.ordered { background: var(--primary) !important; color: #fff !important; border-color: var(--primary) !important; }
+[data-theme="dark"] .meal-btn.paid { background: var(--primary-pale) !important; color: var(--primary) !important; border-color: var(--primary) !important; }
+[data-theme="dark"] .meal-btn.due-status { background: var(--accent-light) !important; color: var(--accent) !important; border-color: var(--accent) !important; }
+[data-theme="dark"] .meal-btn.cancel-pending { background: rgba(255,193,7,0.15) !important; color: #ffc107 !important; border-color: #ffc107 !important; }
+[data-theme="dark"] input, [data-theme="dark"] select {
+  background: var(--input-bg) !important; border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+[data-theme="dark"] input::placeholder { color: var(--text-muted) !important; opacity: 0.7; }
+[data-theme="dark"] input:focus, [data-theme="dark"] select:focus { border-color: var(--primary) !important; }
+[data-theme="dark"] .btn-outline { color: var(--text-muted) !important; border-color: var(--border) !important; }
+[data-theme="dark"] .btn-outline:hover { border-color: var(--primary) !important; color: var(--primary) !important; background: var(--primary-pale) !important; }
+[data-theme="dark"] .badge-green { background: var(--primary-pale) !important; color: var(--primary) !important; }
+[data-theme="dark"] .badge-yellow { background: var(--accent-light) !important; color: var(--accent) !important; }
+[data-theme="dark"] .badge-red { background: var(--danger-light) !important; color: var(--danger) !important; }
+[data-theme="dark"] .progress-bar { background: #2d3548 !important; }
+[data-theme="dark"] .txn-badge { background: var(--txn-badge-bg) !important; color: var(--txn-badge-color) !important; }
+[data-theme="dark"] .nav-brand { color: var(--primary) !important; }
+[data-theme="dark"] .nav-brand .logo { background: var(--primary) !important; }
+[data-theme="dark"] .modal-overlay { background: rgba(0,0,0,0.65) !important; }
+[data-theme="dark"] .bill-date-bar input[type=date] { background: var(--input-bg) !important; color: var(--text) !important; border-color: var(--border) !important; }
+[data-theme="dark"] .proof-card.verified-card { background: rgba(45,158,90,0.06) !important; }
+[data-theme="dark"] .proof-card.rejected-card { background: rgba(229,62,62,0.06) !important; }
+[data-theme="dark"] .search-box input { background: var(--input-bg) !important; color: var(--text) !important; }
+[data-theme="dark"] #floor-students-modal { background: var(--floor-modal-bg) !important; }
+[data-theme="dark"] .floor-modal-header { background: var(--floor-modal-bg) !important; border-color: var(--border) !important; }
+[data-theme="dark"] .floor-student-card { background: var(--floor-card-bg) !important; border-color: var(--floor-card-border) !important; }
+[data-theme="dark"] .floor-student-name { color: var(--text) !important; }
+[data-theme="dark"] .floor-modal-tabs { background: #12161f !important; }
+[data-theme="dark"] .floor-modal-tabs .tab.active { background: var(--card) !important; }
+[data-theme="dark"] .floor-modal-back-btn { background: #2d3548 !important; color: var(--text-muted) !important; }
+[data-theme="dark"] .due-banner { background: var(--due-banner-bg) !important; border-color: rgba(240,165,0,0.3) !important; }
+[data-theme="dark"] .due-banner .due-info h4 { color: var(--accent) !important; }
+[data-theme="dark"] .due-banner .due-info p { color: rgba(240,165,0,0.7) !important; }
+[data-theme="dark"] #bulk-action-bar { background: linear-gradient(135deg, rgba(45,158,90,0.1), rgba(240,165,0,0.05)) !important; border-color: var(--border) !important; }
+[data-theme="dark"] .edit-day-box { background: var(--card) !important; }
+[data-theme="dark"] .edit-meal-row { background: var(--input-bg) !important; border-color: var(--border) !important; }
+[data-theme="dark"] .not-ordered-row { border-color: var(--border) !important; color: var(--text-muted) !important; }
+[data-theme="dark"] .edit-day-btn { background: rgba(26,107,58,0.15) !important; border-color: rgba(26,107,58,0.3) !important; }
+[data-theme="dark"] .edit-close-btn { border-color: var(--border) !important; color: var(--text-muted) !important; }
+[data-theme="dark"] .day-card.has-editable { border-color: rgba(26,107,58,0.4) !important; }
+[data-theme="dark"] .mgr-bkash { background: linear-gradient(135deg, #6d0a35, #8b0f42) !important; }
+[data-theme="dark"] .bkash-box { background: linear-gradient(135deg, #6d0a35, #8b0f42) !important; }
+[data-theme="dark"] [style*="background:#f8fafc"], [data-theme="dark"] [style*="background: #f8fafc"] { background: var(--input-bg) !important; }
+[data-theme="dark"] [style*="background:#fff"], [data-theme="dark"] [style*="background: #fff"] { background: var(--card) !important; }
+[data-theme="dark"] [style*="color:var(--text)"], [data-theme="dark"] [style*="color: var(--text)"] { color: var(--text) !important; }
+[data-theme="dark"] .section-title { color: var(--text) !important; }
+[data-theme="dark"] h1, [data-theme="dark"] h2, [data-theme="dark"] h3, [data-theme="dark"] h4 { color: var(--text) !important; }
+[data-theme="dark"] strong { color: var(--text) !important; }
+[data-theme="dark"] .stat-value { color: var(--text) !important; }
+[data-theme="dark"] .bill-grand { background: linear-gradient(135deg, var(--primary), var(--primary-light)) !important; }
+[data-theme="dark"] .bill-row[style*="#f0f7f2"] { background: rgba(45,158,90,0.08) !important; }
+[data-theme="dark"] .bill-row[style*="#fff8e6"] { background: rgba(240,165,0,0.08) !important; }
+[data-theme="dark"] .bill-row[style*="#e6f0ff"] { background: rgba(59,95,226,0.1) !important; }
+[data-theme="dark"] .bill-row[style*="#fce4ec"] { background: rgba(194,24,91,0.08) !important; }
+[data-theme="dark"] .bill-floor-table th { background: #12161f !important; }
+[data-theme="dark"] .warn-alt, [data-theme="dark"] [style*="background:var(--danger-light)"] { background: var(--danger-light) !important; }
+[data-theme="dark"] [style*="background:var(--primary-pale)"] { background: var(--primary-pale) !important; }
+[data-theme="dark"] [style*="background:var(--accent-light)"] { background: var(--accent-light) !important; }
+[data-theme="dark"] [style*="background:#e6f0ff"] { background: rgba(59,95,226,0.12) !important; }
+[data-theme="dark"] [style*="background:#fce4ec"] { background: rgba(194,24,91,0.1) !important; }
+[data-theme="dark"] [style*="background:#fff3e0"] { background: rgba(230,81,0,0.1) !important; }
+[data-theme="dark"] [style*="background:#f0f7f2"] { background: rgba(45,158,90,0.08) !important; }
+[data-theme="dark"] [style*="background:#fff8e6"] { background: rgba(240,165,0,0.08) !important; }
+[data-theme="dark"] [style*="background:#1a1a2e"] { background: #0a0f1a !important; }
+[data-theme="dark"] .demo-box, [data-theme="dark"] .info-box, [data-theme="dark"] .warn-box { background: var(--input-bg) !important; border-color: var(--border) !important; }
+[data-theme="dark"] [style*="border-left:4px solid"] { border-color: inherit; }
+
+/* ── THEME TOGGLE BUTTON ───────────────────────────────────────────────── */
+#nmms-theme-btn {
+  position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--card); border: 2px solid var(--border);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  display: grid; place-items: center;
+  cursor: pointer; font-size: 22px;
+  transition: all 0.3s cubic-bezier(0.34,1.3,0.64,1);
+}
+#nmms-theme-btn:hover { transform: scale(1.15) rotate(15deg); box-shadow: 0 8px 28px rgba(0,0,0,0.2); }
+@media(max-width:480px) {
+  #nmms-theme-btn { width: 44px; height: 44px; font-size: 18px; bottom: 16px; right: 16px; }
+  @supports(bottom: env(safe-area-inset-bottom)) {
+    #nmms-theme-btn { bottom: calc(16px + env(safe-area-inset-bottom)); }
+  }
+}
+</style>
+
+<style>
+  .week-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 10px; margin-bottom: 24px; }
+  .day-card { background: #fff; border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 14px 10px; text-align: center; position: relative; }
+  .day-card.has-editable { border-color: rgba(26,107,58,0.3); }
+  .day-card .day-name { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+  .day-card .day-num { font-size: 20px; font-weight: 700; margin: 4px 0; }
+  .edit-day-btn {
+    position: absolute; top: 6px; right: 6px;
+    width: 24px; height: 24px; border-radius: 6px;
+    background: var(--primary-pale); border: 1px solid rgba(26,107,58,0.25);
+    color: var(--primary); font-size: 10px;
+    display: grid; place-items: center;
+    cursor: pointer; transition: all .2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .edit-day-btn:hover { background: var(--primary); color: #fff; transform: scale(1.1); }
+  .meal-btn { width: 100%; padding: 8px 6px; border-radius: 6px; border: 1.5px solid var(--border); background: #fff; font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .2s; margin-top: 6px; display: flex; align-items: center; justify-content: center; gap: 4px; }
+  .meal-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .meal-btn.ordered { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .meal-btn.ordered:hover { background: #c53030; border-color: #c53030; }
+
+  /* Edit Day Modal */
+  .edit-day-modal { display:none; position:fixed; inset:0; z-index:1100; align-items:center; justify-content:center; padding:16px; }
+  .edit-day-modal.open { display:flex; }
+  .edit-day-overlay { position:absolute; inset:0; background:rgba(0,0,0,.45); }
+  .edit-day-box {
+    position:relative; z-index:1; background:var(--card);
+    border-radius: var(--radius); box-shadow: var(--shadow-lg);
+    padding: 28px 24px; width:100%; max-width:340px;
+    animation: editBoxIn .25s cubic-bezier(0.34,1.3,0.64,1) both;
+  }
+  @keyframes editBoxIn { from{transform:translateY(20px) scale(.95);opacity:0} to{transform:translateY(0) scale(1);opacity:1} }
+  .edit-day-box h3 { font-size:16px; font-weight:700; margin-bottom:4px; }
+  .edit-day-box p  { font-size:13px; color:var(--text-muted); margin-bottom:18px; }
+  .edit-meal-row {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 14px; border-radius: var(--radius-sm);
+    border:1.5px solid var(--border); margin-bottom:10px;
+    background:#f8fafc;
+  }
+  .edit-meal-row .meal-info { display:flex; align-items:center; gap:10px; }
+  .edit-meal-row .meal-icon { font-size:20px; }
+  .edit-meal-row .meal-label { font-size:14px; font-weight:600; }
+  .edit-meal-row .meal-status { font-size:11px; color:var(--text-muted); margin-top:2px; }
+  .cancel-meal-btn {
+    padding:7px 13px; border-radius:7px; border:none;
+    background:var(--danger-light); color:var(--danger);
+    font-family:inherit; font-size:12px; font-weight:700;
+    cursor:pointer; display:inline-flex; align-items:center; gap:5px;
+    transition:all .18s;
+  }
+  .cancel-meal-btn:hover { background:var(--danger); color:#fff; }
+  .not-ordered-row {
+    padding:12px 14px; border-radius: var(--radius-sm);
+    border:1.5px dashed var(--border); margin-bottom:10px;
+    display:flex; align-items:center; gap:10px; color:var(--text-muted);
+    font-size:13px;
+  }
+  .add-meal-btn {
+    margin-left:auto; padding:7px 13px; border-radius:7px;
+    border:1.5px solid var(--primary); background:transparent;
+    color:var(--primary); font-family:inherit; font-size:12px; font-weight:700;
+    cursor:pointer; display:inline-flex; align-items:center; gap:5px;
+    transition:all .18s;
+  }
+  .add-meal-btn:hover { background:var(--primary); color:#fff; }
+  .edit-close-btn {
+    width:100%; margin-top:6px; padding:11px;
+    border-radius: var(--radius-sm); border:1.5px solid var(--border);
+    background:transparent; font-family:inherit; font-size:14px; font-weight:600;
+    color:var(--text-muted); cursor:pointer; transition:all .18s;
+  }
+  .edit-close-btn:hover { border-color:var(--text-muted); color:var(--text); }
+  .meal-btn.paid { background: #e8f5ee; color: var(--primary); border-color: var(--primary); cursor: default; opacity: .7; }
+  .meal-btn.due-status { background: #fff8e6; color: #b07800; border-color: var(--accent); cursor: default; opacity: .85; }
+  .meal-btn.cancel-pending { background: #fff3cd; color: #856404; border-color: #ffc107; cursor: default; opacity: .9; font-size: 11px; }
+  /* ── Summary boxes ── */
+  .summary-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; align-items: stretch; }
+  .due-box {
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    border-radius: var(--radius); color: #fff;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 16px 16px;
+  }
+  .due-box h3 { font-size: 10px; opacity: .8; margin-bottom: 4px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; }
+  .due-amount { font-size: 32px; font-weight: 800; line-height: 1.1; margin-bottom: 2px; }
+  .bkash-box {
+    background: linear-gradient(135deg, #e51c6d, #c2185b);
+    border-radius: var(--radius); color: #fff;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 16px 16px;
+  }
+  .bkash-box h3 { font-size: 10px; opacity: .8; margin-bottom: 6px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; }
+  .bkash-num { font-size: 22px; font-weight: 800; letter-spacing: 1.5px; margin: 2px 0 4px; }
+  .bkash-note { font-size: 9px; opacity: .75; margin-top: 3px; }
+  /* ══════════════════════════════════════════════════════════
+     MOBILE-FRIENDLY OVERRIDES
+     ══════════════════════════════════════════════════════════ */
+
+  /* ── Tablet: 4-column meal grid ── */
+  @media(max-width:700px) {
+    .week-grid { grid-template-columns: repeat(4,1fr); gap: 8px; }
+  }
+  @media(max-width:520px) {
+    .week-grid { grid-template-columns: repeat(3,1fr); gap: 7px; }
+  }
+
+  /* ── Phone landscape / large phone ── */
+  @media(max-width:600px) {
+    /* Nav */
+    nav .nav-brand span { font-size: 13px; }
+
+    /* Page header tighter */
+    .page-header { padding: 14px 0 10px; }
+    .page-header h1 { font-size: 20px; }
+    .page-header p  { font-size: 12px; }
+
+    /* Container padding */
+    .container { padding: 0 10px; }
+
+    /* Summary boxes side by side but more compact */
+    .summary-row { gap: 8px; margin-bottom: 10px; }
+    .due-box, .bkash-box { padding: 12px 12px; border-radius: 12px; }
+    .due-amount { font-size: 26px; }
+    .bkash-num  { font-size: 18px; letter-spacing: 1px; }
+
+    /* Tabs: bigger tap targets */
+    .tabs { gap: 3px; padding: 3px; }
+    .tab  { padding: 10px 6px; font-size: 12px; border-radius: 6px; }
+
+    /* Section card inner padding */
+    .section-card > div[style*="padding"] { padding: 14px 14px !important; }
+
+    /* Meal grid: 4 columns on landscape phone */
+    .week-grid { grid-template-columns: repeat(4,1fr); gap: 6px; margin-bottom: 16px; }
+
+    /* Day card: tighter */
+    .day-card { padding: 10px 6px; border-radius: 8px; }
+    .day-card .day-name { font-size: 10px; letter-spacing: 0; }
+    .day-card .day-num  { font-size: 17px; margin: 2px 0; }
+
+    /* Meal buttons: larger tap area */
+    .meal-btn { padding: 9px 4px; font-size: 11px; border-radius: 5px; margin-top: 5px; min-height: 36px; }
+
+    /* Modal: full-width bottom sheet style */
+    .modal-overlay { align-items: flex-end; padding: 0; }
+    .modal {
+      border-radius: 18px 18px 0 0;
+      padding: 24px 18px 32px;
+      max-width: 100%;
+      width: 100%;
+    }
+    .modal-actions { flex-direction: column; gap: 8px; }
+    .modal-actions .btn { width: 100%; justify-content: center; min-height: 48px; font-size: 15px; }
+
+    /* Edit day modal: bottom sheet too */
+    .edit-day-modal { align-items: flex-end; padding: 0; }
+    .edit-day-box {
+      border-radius: 18px 18px 0 0;
+      padding: 24px 18px 32px;
+      max-width: 100%;
+      width: 100%;
+    }
+
+    /* Due/payment banners */
+    #due-banner { padding: 12px 14px; gap: 10px; }
+
+    /* Quick select bar: stack on mobile */
+    #select-all-bar { flex-direction: column; align-items: stretch; gap: 6px; padding: 10px 12px; }
+    #select-all-bar > span { text-align: center; }
+    #select-all-bar .btn { width: 100%; justify-content: center; min-height: 44px; font-size: 13px; }
+
+    /* Deadline info bar */
+    .deadline-info-bar { font-size: 12px; padding: 9px 12px; }
+
+    /* Payment history proof cards */
+    .proof-card { padding: 12px 12px; }
+  }
+
+  /* ── Small phone: 2-column grid ── */
+  @media(max-width:420px) {
+    .week-grid { grid-template-columns: repeat(2,1fr); gap: 6px; }
+
+    /* Tabs wrap into 2×2 grid */
+    .tabs { flex-wrap: wrap; }
+    .tab  { flex: unset; width: calc(50% - 3px); font-size: 11px; padding: 9px 4px; }
+
+    /* Summary: stack vertically so boxes are full width */
+    .summary-row { grid-template-columns: 1fr; }
+    .due-amount { font-size: 30px; }
+    .bkash-num  { font-size: 22px; }
+
+    /* Grid-2 stacks */
+    .grid-2 { grid-template-columns: 1fr; }
+
+    /* Day card even smaller */
+    .day-card { padding: 8px 4px; }
+    .day-card .day-name { font-size: 9px; }
+    .day-card .day-num  { font-size: 15px; }
+    .meal-btn { font-size: 10px; padding: 8px 2px; min-height: 34px; }
+
+    /* Nav brand hide long text */
+    nav .nav-brand span { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  }
+  /* ── Mobile hamburger nav ── */
+  @media(max-width:600px) {
+    #student-nav-hamburger { display:flex !important; align-items:center; justify-content:center; }
+    #student-nav-menu {
+      display: none;
+      flex-direction: column;
+      position: absolute;
+      top: 60px; left: 0; right: 0;
+      background: var(--nav-bg, #fff);
+      border-bottom: 1px solid var(--nav-border, #e2e8f0);
+      padding: 10px 16px 14px;
+      gap: 8px;
+      z-index: 200;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+    }
+    #student-nav-menu.open { display: flex; }
+    #student-nav-menu .btn { width: 100%; justify-content: flex-start; font-size: 14px; padding: 11px 16px; }
+    #student-nav-menu .badge { align-self: flex-start; font-size: 13px; padding: 6px 12px; }
+  }
+  .tabs { display: flex; gap: 4px; background: var(--border); border-radius: 10px; padding: 4px; margin-bottom: 20px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: 1; padding: 9px; border-radius: 7px; border: none; background: transparent; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer; color: var(--text-muted); transition: all .2s; }
+  .tab.active { background: #fff; color: var(--primary); box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  /* Payment modal */
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:200; display:none; align-items:center; justify-content:center; padding:20px; }
+  .modal-overlay.open { display:flex; }
+  .modal { background:#fff; border-radius:var(--radius); padding:32px 28px; max-width:440px; width:100%; box-shadow:var(--shadow-lg); }
+  .modal h3 { font-size:18px; font-weight:700; margin-bottom:6px; }
+  .modal p { font-size:14px; color:var(--text-muted); margin-bottom:20px; }
+  .modal .form-group input { width:100%; }
+  .modal-actions { display:flex; gap:10px; margin-top:20px; }
+  /* Proof badge */
+  .proof-card { background:#f8fafc; border:1px solid var(--border); border-radius:var(--radius-sm); padding:14px 16px; margin-bottom:10px; }
+  .proof-card .txn-id { font-size:13px; font-family:monospace; background:#e8f5ee; color:var(--primary); padding:4px 10px; border-radius:20px; font-weight:700; }
+  .proof-card .status-pill { font-size:12px; font-weight:700; padding:3px 10px; border-radius:20px; }
+  .s-pending { background:#fff8e6; color:#b07800; }
+  .s-verified { background:#e8f5ee; color:var(--primary); }
+  .s-rejected { background:var(--danger-light); color:var(--danger); }
+  /* Due alert banner */
+  .due-banner { background:linear-gradient(135deg,#fff8e6,#fef3c7); border:1.5px solid #fcd97d; border-radius:var(--radius-sm); padding:16px 20px; display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
+  .due-banner .due-info { flex:1; }
+  .due-banner .due-info h4 { font-size:15px; font-weight:700; color:#7c5f00; margin-bottom:2px; }
+  .due-banner .due-info p { font-size:13px; color:#a07020; }
+
+  /* ── Midnight-locked day card ───────────────────────────────────────────── */
+  .day-card.deadline-locked { background: #f8fafc; opacity: 0.72; }
+  .day-card.deadline-locked .day-name,
+  .day-card.deadline-locked .day-num { color: #a0aec0; }
+  .meal-btn.deadline-locked-btn {
+    background: #f1f5f9 !important; color: #a0aec0 !important;
+    border-color: #e2e8f0 !important; cursor: not-allowed !important;
+    pointer-events: none; font-size: 11px !important;
+  }
+  .deadline-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 9px; font-weight: 700; padding: 2px 7px;
+    border-radius: 20px; margin-top: 3px; white-space: nowrap;
+  }
+  .deadline-chip.urgent  { background:#fff5f5; color:#e53e3e; border:1px solid #fc8181; }
+  .deadline-chip.warning { background:#fff8e6; color:#b07800; border:1px solid #fcd97d; }
+  .deadline-chip.ok      { background:#e8f5ee; color:#1a6b3a; border:1px solid #b7e4c7; }
+  .deadline-info-bar {
+    display:flex; align-items:center; gap:10px;
+    background:linear-gradient(135deg,#fff8e6,#fffdf5);
+    border:1.5px solid #fcd97d; border-radius:var(--radius-sm);
+    padding:11px 16px; margin-bottom:14px; font-size:13px; color:#7a5c00;
+  }
+  .deadline-info-bar i { color:#f0a500; flex-shrink:0; }
+  .deadline-info-bar strong { color:#5a4000; }
+  @keyframes pulseRed {
+    0%,100% { box-shadow: 0 0 0 0 rgba(229,62,62,0); }
+    50%      { box-shadow: 0 0 0 6px rgba(229,62,62,0.12); }
+  }
+</style>
+{% endblock %}
+{% block body %}
+<script>
+(function() {
+  var saved = localStorage.getItem('nmms-theme') || 'light';
+  document.documentElement.setAttribute('data-theme', saved);
+})();
+</script>
+<nav>
+  <div class="nav-inner">
+    <div class="nav-brand">
+      <div class="logo">🍽️</div>
+      <span>NMMS — <strong>{{ session.name }}</strong></span>
+    </div>
+    <div class="nav-links" id="student-nav-menu">
+      <span class="badge badge-green"><i class="fas fa-id-card"></i>&nbsp;{{ session.roll }}</span>
+      <a href="{{ url_for('student_logout') }}" class="btn btn-outline btn-sm"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </div>
+    <button id="student-nav-hamburger" onclick="document.getElementById('student-nav-menu').classList.toggle('open')" aria-label="Menu" style="display:none;background:none;border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;cursor:pointer;color:var(--text-muted);font-size:18px;margin-left:auto;">
+      <i class="fas fa-bars"></i>
+    </button>
+  </div>
+</nav>
+<button id="nmms-theme-btn" onclick="(function(){var h=document.documentElement,isDark=h.getAttribute('data-theme')==='dark';h.setAttribute('data-theme',isDark?'light':'dark');document.getElementById('nmms-theme-btn').textContent=isDark?'🌙':'☀️';localStorage.setItem('nmms-theme',isDark?'light':'dark');})()" title="Toggle dark/light mode">🌙</button>
+<script>
+(function(){
+  var saved=localStorage.getItem('nmms-theme')||'light';
+  document.documentElement.setAttribute('data-theme',saved);
+  var btn=document.getElementById('nmms-theme-btn');
+  if(btn)btn.textContent=saved==='dark'?'☀️':'🌙';
+  // observe for late init
+  var obs=new MutationObserver(function(){
+    var b=document.getElementById('nmms-theme-btn');
+    if(b){b.textContent=document.documentElement.getAttribute('data-theme')==='dark'?'☀️':'🌙';obs.disconnect();}
+  });
+  obs.observe(document.body,{childList:true,subtree:true});
+})();
+</script>
+
+<div class="container">
+  <div class="page-header">
+    <h1>My Meal Dashboard</h1>
+    <p>Order meals for today and the next 6 days. Pay before the meal time.</p>
+  </div>
+
+  {% if due > 0 %}
+    {% if has_pending_payment %}
+    <!-- ── bKash payment submitted, awaiting manager verification ── -->
+    <div id="due-banner"
+         style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1.5px solid #86efac;border-radius:var(--radius);
+                padding:14px 18px;margin-bottom:16px;display:flex;align-items:flex-start;gap:12px">
+      <div style="width:36px;height:36px;border-radius:10px;background:#dcfce7;display:grid;place-items:center;
+                  flex-shrink:0;font-size:18px">
+        ✅
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:14px;color:#15803d;margin-bottom:2px">
+          bKash payment submitted — waiting for manager to verify
+        </div>
+        <div style="font-size:13px;color:#166534;line-height:1.5">
+          Your payment of <strong>৳{{ "%.0f"|format(due) }}</strong>
+          {% if pending_payment_txn %}(TxnID: <code style="font-size:12px;background:rgba(0,0,0,.06);padding:1px 5px;border-radius:4px">{{ pending_payment_txn }}</code>){% endif %}
+          is pending manager review. Your due balance will clear once they verify it.
+          <span style="display:inline-flex;align-items:center;gap:4px;background:#bbf7d0;color:#166534;
+                       border-radius:6px;padding:1px 8px;font-size:12px;font-weight:700;margin-left:4px">
+            <i class="fas fa-hourglass-half" style="font-size:10px"></i> Pending Verification
+          </span>
+        </div>
+      </div>
+    </div>
+
+    {% elif has_pending_cash %}
+    <!-- ── Cash payment request submitted, awaiting manager approval ── -->
+    <div id="due-banner"
+         style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1.5px solid #86efac;border-radius:var(--radius);
+                padding:14px 18px;margin-bottom:16px;display:flex;align-items:flex-start;gap:12px">
+      <div style="width:36px;height:36px;border-radius:10px;background:#dcfce7;display:grid;place-items:center;
+                  flex-shrink:0;font-size:18px">
+        💵
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:14px;color:#15803d;margin-bottom:2px">
+          Cash payment request submitted — waiting for manager to collect
+        </div>
+        <div style="font-size:13px;color:#166534;line-height:1.5">
+          Your cash payment request of <strong>৳{{ "%.0f"|format(pending_cash_amount) }}</strong>
+          is pending manager approval. Your due balance will clear once they confirm receipt.
+          <span style="display:inline-flex;align-items:center;gap:4px;background:#bbf7d0;color:#166534;
+                       border-radius:6px;padding:1px 8px;font-size:12px;font-weight:700;margin-left:4px">
+            <i class="fas fa-hourglass-half" style="font-size:10px"></i> Pending Collection
+          </span>
+        </div>
+      </div>
+    </div>
+
+    {% else %}
+    <!-- ── Unpaid due warning banner (no payment submitted yet) ── -->
+    <div id="due-banner"
+         style="background:linear-gradient(135deg,#fff5f5,#fff);border:1.5px solid #fc8181;border-radius:var(--radius);
+                padding:14px 18px;margin-bottom:16px;display:flex;align-items:flex-start;gap:12px">
+      <div style="width:36px;height:36px;border-radius:10px;background:#fff5f5;display:grid;place-items:center;
+                  flex-shrink:0;font-size:18px;color:var(--danger)">
+        <i class="fas fa-triangle-exclamation"></i>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:14px;color:var(--danger);margin-bottom:2px">
+          You have ৳{{ "%.0f"|format(due) }} in unpaid meals
+        </div>
+        <div style="font-size:13px;color:#718096;line-height:1.5">
+          Please send payment via bKash to your Meal Manager and tap
+          <strong>Mark as Paid</strong> below — or ask the manager to record your cash payment.
+          {% if meal_locked %}
+            <span style="display:inline-flex;align-items:center;gap:4px;background:#fff5f5;color:var(--danger);
+                         border:1px solid #fc8181;border-radius:6px;padding:1px 8px;font-size:12px;font-weight:700;margin-left:4px">
+              <i class="fas fa-lock" style="font-size:10px"></i> Ordering locked
+            </span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  {% endif %}
+
+  <!-- Summary cards -->
+  <div class="summary-row">
+
+    <!-- ── Total Due card ─────────────────────────────────────────────────── -->
+    <div class="due-box">
+      <h3><i class="fas fa-receipt"></i> Total Due</h3>
+      <div class="due-amount">৳{{ "%.0f"|format(due) }}</div>
+      <div style="font-size:10px;opacity:.75;margin-top:1px">Pending meal payments</div>
+
+      {% if mgr_name %}
+      <div style="margin-top:8px;background:rgba(255,255,255,.12);border-radius:7px;padding:5px 8px;display:flex;align-items:center;gap:7px">
+        <span style="background:rgba(255,255,255,.25);border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0">
+          <i class="fas fa-user-tie"></i>
+        </span>
+        <div style="min-width:0;flex:1">
+          <div style="font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ mgr_name }}</div>
+          <div style="font-size:9px;opacity:.75;margin-top:1px">
+            <i class="fas fa-id-badge" style="font-size:8px"></i> {{ mgr_login_id }}{% if mgr_batch %} · Batch {{ mgr_batch }}{% endif %}{% if mgr_roll %} · Roll {{ mgr_roll }}{% endif %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if due > 0 %}
+      <div style="display:flex;gap:5px;margin-top:8px">
+        <button class="btn btn-sm" style="background:rgba(255,255,255,.25);color:#fff;border:1.5px solid rgba(255,255,255,.5);padding:4px 10px;font-size:11px;flex:1;justify-content:center" onclick="openPayModal()">
+          <i class="fas fa-mobile-alt"></i> bKash
+        </button>
+        <button class="btn btn-sm" style="background:rgba(255,255,255,.18);color:#fff;border:1.5px solid rgba(255,255,255,.4);padding:4px 10px;font-size:11px;flex:1;justify-content:center" onclick="openCashModal()">
+          <i class="fas fa-money-bill-wave"></i> Cash
+        </button>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- ── bKash Payment card ─────────────────────────────────────────────── -->
+    <div class="bkash-box">
+      <h3><i class="fas fa-mobile-alt"></i> Send Payment To</h3>
+
+      {% if mgr_name %}
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;background:rgba(255,255,255,.1);border-radius:7px;padding:5px 8px">
+        <span style="background:rgba(255,255,255,.25);border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0">
+          <i class="fas fa-user-tie"></i>
+        </span>
+        <div style="min-width:0;flex:1">
+          <div style="font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ mgr_name }}</div>
+          <div style="font-size:9px;opacity:.75">
+            <i class="fas fa-id-badge" style="font-size:8px"></i> {{ mgr_login_id }}{% if mgr_batch %} · B{{ mgr_batch }}{% endif %}{% if mgr_roll %} · R{{ mgr_roll }}{% endif %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="bkash-num" id="mgr-bkash-num">{{ mgr_bkash }}</div>
+
+      {% if bkash_approved %}
+      <div style="font-size:9px;margin-top:2px;margin-bottom:8px;opacity:.9">
+        <span style="background:rgba(255,255,255,.22);padding:2px 8px;border-radius:20px;font-weight:600">✓ Approved · Week of {{ bkash_week }}</span>
+      </div>
+      {% else %}
+      <div style="font-size:9px;margin-top:2px;margin-bottom:8px;opacity:.9">
+        <span style="background:rgba(255,255,255,.15);padding:2px 8px;border-radius:20px;font-weight:600">⏳ Pending approval</span>
+      </div>
+      {% endif %}
+
+      <div style="font-size:10px;opacity:.7;margin-bottom:10px">Use your roll number as reference when sending.</div>
+
+      <div style="display:flex;gap:6px;margin-top:auto">
+        <button class="btn btn-sm" style="background:rgba(255,255,255,.22);color:#fff;border:1.5px solid rgba(255,255,255,.5);padding:6px 12px;font-size:12px;font-weight:600;flex:1;justify-content:center;border-radius:8px" onclick="copyBkash()">
+          <i class="fas fa-copy"></i> Copy Number
+        </button>
+        <button class="btn btn-sm" style="background:rgba(255,255,255,.12);color:#fff;border:1.5px solid rgba(255,255,255,.3);padding:6px 10px;font-size:12px;border-radius:8px" onclick="refreshBkash()" id="refresh-bkash-btn" title="Refresh">
+          <i class="fas fa-sync-alt"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('order')"><i class="fas fa-calendar-check"></i> Order Meals</button>
+    <button class="tab" onclick="showTab('history')"><i class="fas fa-receipt"></i> Payment Proofs</button>
+    <button class="tab" id="tab-invite-btn" onclick="showTab('invite')"><i class="fas fa-user-tie"></i> Manager Invite <span id="invite-badge" style="display:none;background:#e53e3e;color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:4px">!</span></button>
+    <button class="tab" onclick="showTab('account')"><i class="fas fa-user-cog"></i> My Account <span id="floor-badge" style="display:none;background:#e53e3e;color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:4px">!</span></button>
+  </div>
+
+  <!-- ORDER TAB -->
+  <div id="tab-order" class="tab-panel active">
+    <div class="card" style="overflow:hidden;margin-bottom:20px">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border)">
+        <div class="section-title"><i class="fas fa-calendar-week" style="color:var(--primary)"></i> This Week's Meals</div>
+        <p style="font-size:13px;color:var(--text-muted)">Click <strong>Lunch</strong> or <strong>Dinner</strong> to order. Each meal is ৳50. The week runs <strong>Sunday → Saturday</strong>. You must order <em>and</em> pay within the first 3 days (<strong>Sun–Tue</strong>) — ordering locks on Wednesday.</p>
+      </div>
+      <div style="padding:20px 24px">
+        {% if ordering_locked %}
+        <div id="mgr-lock-banner" style="display:flex;align-items:flex-start;gap:12px;background:#fff5f5;border:1.5px solid #feb2b2;border-radius:10px;padding:14px 18px;margin-bottom:16px">
+          <span style="font-size:22px;flex-shrink:0">🔒</span>
+          <div>
+            <div style="font-weight:700;color:#e53e3e;font-size:14px;margin-bottom:3px">Weekly Meal Ordering Locked by Manager</div>
+            <div style="font-size:13px;color:#c53030;line-height:1.5">The Meal Manager has locked your meal ordering for this week. Contact the Meal Manager to have it unlocked. This page will refresh automatically when your access is restored.</div>
+          </div>
+        </div>
+        {% endif %}
+        <!-- Payment-window lock banner (shown when past Tue and due > 0 and ordering_locked_by_deadline) -->
+        <div id="payment-window-banner" style="display:none;align-items:flex-start;gap:12px;background:#fff5f5;border:2px solid #fc8181;border-radius:10px;padding:14px 18px;margin-bottom:16px;animation:pulseRed 2.5s ease-in-out infinite">
+          <span style="font-size:22px;flex-shrink:0">⏳</span>
+          <div>
+            <div style="font-weight:700;color:#e53e3e;font-size:14px;margin-bottom:3px">Ordering Window Closed — 3-Day Deadline Passed</div>
+            <div style="font-size:13px;color:#c53030;line-height:1.5">
+              New meal orders are only accepted during the first 3 days of the week (Sunday–Tuesday).
+              Please pay any outstanding balance and ask the <strong>Meal Manager</strong> to unlock ordering if needed.
+            </div>
+          </div>
+        </div>
+        <!-- Midnight deadline info bar -->
+        <div class="deadline-info-bar" id="deadlineInfoBar">
+          <i class="fas fa-clock"></i>
+          <span>
+            <strong>Ordering deadline: midnight (12:00 AM).</strong>
+            Book a meal before midnight the night before. Today's meals are open until midnight tonight.
+            <span id="deadlineCountdownText" style="margin-left:4px;font-weight:700"></span>
+            <span id="payWindowText" style="margin-left:8px;font-weight:700"></span>
+          </span>
+        </div>
+        <div class="week-grid">
+          {% for d in week_dates %}
+          {% set dt = d.split('-') %}
+          {% set lunch_data = order_map.get((d, 'lunch')) %}
+          {% set dinner_data = order_map.get((d, 'dinner')) %}
+          {% set lunch_ordered = lunch_data is not none %}
+          {% set dinner_ordered = dinner_data is not none %}
+          {% set lunch_paid = lunch_ordered and lunch_data['payment_status'] == 'paid' %}
+          {% set dinner_paid = dinner_ordered and dinner_data['payment_status'] == 'paid' %}
+          {% set lunch_due = lunch_ordered and lunch_data['payment_status'] == 'due' %}
+          {% set dinner_due = dinner_ordered and dinner_data['payment_status'] == 'due' %}
+          {% set is_locked = ordering_locked %}
+          {% set has_editable = (lunch_ordered and not lunch_paid and not lunch_due) or (dinner_ordered and not dinner_paid and not dinner_due) %}
+          <div class="day-card{% if has_editable and not is_locked %} has-editable{% endif %}" data-date="{{ d }}"{% if is_locked %} style="opacity:0.55;background:#f8fafc"{% endif %}>
+            {% if has_editable and not is_locked %}
+            <button class="edit-day-btn" onclick="openEditDay('{{ d }}',{% if lunch_ordered and not lunch_paid and not lunch_due %}true{% else %}false{% endif %},{% if dinner_ordered and not dinner_paid and not dinner_due %}true{% else %}false{% endif %})" title="Edit this day's orders">
+              <i class="fas fa-pen"></i>
+            </button>
+            {% endif %}
+            <div class="day-name" id="dayname-{{ loop.index0 }}">—</div>
+            <div class="day-num">{{ dt[2]|int }}</div>
+            <div style="font-size:10px;color:var(--text-muted);margin-bottom:6px">{{ dt[2]|int }}/{{ dt[1]|int }}</div>
+            {% if is_locked %}
+              {# Ordering blocked by manager #}
+              <button class="meal-btn" disabled style="background:#f1f5f9;color:#a0aec0;border-color:#e2e8f0;cursor:not-allowed">
+                <i class="fas fa-lock" style="font-size:10px"></i> Lunch
+              </button>
+              <button class="meal-btn" disabled style="background:#f1f5f9;color:#a0aec0;border-color:#e2e8f0;cursor:not-allowed">
+                <i class="fas fa-lock" style="font-size:10px"></i> Dinner
+              </button>
+              <div style="font-size:9px;color:#a0aec0;text-align:center;margin-top:4px">mgr locked</div>
+            {% else %}
+              {% if lunch_paid %}
+                <button class="meal-btn paid" disabled data-meal-date="{{ d }}" data-meal-type="lunch"><i class="fas fa-check"></i> Lunch</button>
+              {% elif lunch_due %}
+                <button class="meal-btn due-status" disabled data-meal-date="{{ d }}" data-meal-type="lunch"><i class="fas fa-clock"></i> Lunch</button>
+              {% else %}
+                <button class="meal-btn {% if lunch_ordered %}ordered{% endif %}"
+                  data-meal-date="{{ d }}" data-meal-type="lunch"
+                  onclick="toggleMeal('{{ d }}','lunch',this)">
+                  {% if lunch_ordered %}<i class="fas fa-check"></i>{% else %}<i class="fas fa-plus"></i>{% endif %} Lunch
+                </button>
+              {% endif %}
+              {% if dinner_paid %}
+                <button class="meal-btn paid" disabled data-meal-date="{{ d }}" data-meal-type="dinner"><i class="fas fa-check"></i> Dinner</button>
+              {% elif dinner_due %}
+                <button class="meal-btn due-status" disabled data-meal-date="{{ d }}" data-meal-type="dinner"><i class="fas fa-clock"></i> Dinner</button>
+              {% else %}
+                <button class="meal-btn {% if dinner_ordered %}ordered{% endif %}"
+                  data-meal-date="{{ d }}" data-meal-type="dinner"
+                  onclick="toggleMeal('{{ d }}','dinner',this)">
+                  {% if dinner_ordered %}<i class="fas fa-check"></i>{% else %}<i class="fas fa-plus"></i>{% endif %} Dinner
+                </button>
+              {% endif %}
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:8px;display:flex;gap:16px;flex-wrap:wrap">
+          <span><span style="background:var(--primary);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px">✓</span> Ordered (pending)</span>
+          <span><span style="background:#e8f5ee;color:var(--primary);padding:2px 8px;border-radius:4px;font-size:11px">✓</span> Paid</span>
+          <span><span style="background:#fff3cd;color:#856404;padding:2px 8px;border-radius:4px;font-size:11px">⏳</span> Cancel pending</span>
+          <span><span style="background:#f1f5f9;color:#a0aec0;padding:2px 8px;border-radius:4px;font-size:11px">🔒</span> Manager locked</span>
+          <span><span style="background:#f1f5f9;color:#a0aec0;padding:2px 8px;border-radius:4px;font-size:11px">⏰</span> Deadline passed</span>
+        </div>
+        <div style="margin-top:10px;padding:10px 14px;background:#e8f5ee;border:1px solid #b7e4c7;border-radius:8px;font-size:12px;color:#1a6b3a;display:flex;align-items:flex-start;gap:8px">
+          <i class="fas fa-info-circle" style="margin-top:1px;flex-shrink:0"></i>
+          <span>
+            The week runs <strong>Sunday–Saturday</strong>.
+            Order &amp; pay within the first 3 days (<strong>Sun, Mon, Tue</strong>).
+            After Tuesday, new orders are locked until the manager re-opens them.
+            <strong>Per-meal deadline: midnight</strong> the night before each meal.
+            <span id="payWindowInfoText"></span>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORY / PROOF TAB -->
+  <div id="tab-history" class="tab-panel">
+    <div class="card" style="overflow:hidden;margin-bottom:32px">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div class="section-title" style="margin:0"><i class="fas fa-receipt" style="color:var(--primary)"></i> Payment Proofs Submitted</div>
+        <button class="btn btn-primary btn-sm" onclick="openPayModal()">
+          <i class="fas fa-plus"></i> Submit New Payment
+        </button>
+      </div>
+      <div style="padding:20px 24px">
+        {% if payments %}
+          {% for p in payments %}
+          <div class="proof-card">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
+              <div>
+                <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px">
+                  ৳{{ "%.0f"|format(p.amount) }}
+                  <span class="proof-card" style="padding:0">
+                    &nbsp;–&nbsp;
+                    <span class="txn-id">{{ p.bkash_txn }}</span>
+                  </span>
+                </div>
+                <div style="font-size:12px;color:var(--text-muted)">
+                  <i class="fas fa-calendar"></i> {{ p.payment_date }}
+                  {% if p.screenshot_note %}
+                  &nbsp;·&nbsp;<i class="fas fa-comment"></i> {{ p.screenshot_note }}
+                  {% endif %}
+                </div>
+                {% if p.verified_at %}
+                <div style="font-size:12px;color:var(--text-muted);margin-top:4px">
+                  {% if p.status == 'verified' %}
+                  <i class="fas fa-check-circle" style="color:var(--primary)"></i> Verified by {{ p.verified_by }} on {{ p.verified_at[:10] }}
+                  {% elif p.status == 'rejected' %}
+                  <i class="fas fa-times-circle" style="color:var(--danger)"></i> Rejected by {{ p.verified_by }}
+                  {% endif %}
+                </div>
+                {% endif %}
+              </div>
+              <div>
+                {% if p.status == 'pending_verification' %}
+                <span class="status-pill s-pending"><i class="fas fa-clock"></i> Awaiting Verification</span>
+                {% elif p.status == 'verified' %}
+                <span class="status-pill s-verified"><i class="fas fa-check-circle"></i> Verified</span>
+                {% elif p.status == 'rejected' %}
+                <span class="status-pill s-rejected"><i class="fas fa-times-circle"></i> Rejected</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div style="text-align:center;color:var(--text-muted);padding:40px 0">
+            <div style="font-size:40px;margin-bottom:12px">📭</div>
+            <div>No payment proofs submitted yet.</div>
+            <button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="openPayModal()">Submit Your First Payment</button>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <!-- MANAGER INVITE TAB -->
+  <div id="tab-invite" class="tab-panel">
+
+    <!-- ── DUTY ROTATION SECTION ─────────────────────────────────────────── -->
+    <div class="card" style="overflow:hidden;margin-bottom:20px">
+      <div style="padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div>
+          <div class="section-title" style="margin-bottom:2px"><i class="fas fa-rotate" style="color:var(--accent)"></i> Weekly Duty Notifications</div>
+          <p style="font-size:13px;color:var(--text-muted)">When the manager assigns you to the weekly duty roster, you will get a notification here.</p>
+        </div>
+      </div>
+
+      <!-- Pending duty invites -->
+      <div id="duty-pending-area" style="padding:0"></div>
+
+      <!-- Accepted duty credentials (permanent) -->
+      <div id="duty-creds-area" style="padding:0"></div>
+
+      <!-- Empty state -->
+      <div id="duty-empty" style="text-align:center;padding:36px 20px;display:none">
+        <div style="font-size:38px;margin-bottom:10px">📋</div>
+        <div style="font-weight:700;color:var(--text);margin-bottom:6px">No Duty Assignments Yet</div>
+        <div style="font-size:13px;color:var(--text-muted);max-width:300px;margin:0 auto;line-height:1.6">
+          When the meal manager adds you to the weekly duty roster, your notification and login credentials will appear here.
+        </div>
+      </div>
+    </div>
+
+    <!-- ── MANAGER TRANSFER SECTION ──────────────────────────────────────── -->
+    <div class="card" style="overflow:hidden;margin-bottom:32px">
+      <div style="padding:18px 24px;border-bottom:1px solid var(--border)">
+        <div class="section-title" style="margin-bottom:2px"><i class="fas fa-user-tie" style="color:var(--primary)"></i> Manager Role Transfer</div>
+        <p style="font-size:13px;color:var(--text-muted)">If the admin or current manager transfers the full manager role to you, you will be notified here.</p>
+      </div>
+      <div style="padding:20px 24px" id="invite-list-area">
+        <div style="text-align:center;padding:30px 0" id="invite-empty">
+          <div style="font-size:36px;margin-bottom:10px">🔒</div>
+          <div style="font-weight:700;color:var(--text);margin-bottom:6px">No Pending Role Transfers</div>
+          <div style="font-size:13px;color:var(--text-muted);max-width:300px;margin:0 auto;line-height:1.6">Manager role transfers are made by the system admin. You will be notified if selected.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ACCOUNT TAB -->
+  <div id="tab-account" class="tab-panel">
+    <!-- Floor Info Card -->
+    <div class="card" style="overflow:hidden;margin-bottom:20px" id="floor-card">
+      <div style="padding:18px 24px;border-bottom:1px solid var(--border)">
+        <div class="section-title"><i class="fas fa-building" style="color:var(--primary)"></i> My Floor</div>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:4px">Your current floor assignment. Request a change below — the admin will review and update it.</p>
+      </div>
+      <div style="padding:20px 24px">
+        <div id="floor-status-area">
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+            <div style="background:var(--primary-pale);border-radius:12px;padding:18px 28px;text-align:center;min-width:100px">
+              <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:4px">Current Floor</div>
+              <div id="current-floor-display" style="font-size:36px;font-weight:800;color:var(--primary)">—</div>
+            </div>
+            <div style="flex:1;min-width:180px">
+              <div id="floor-request-status" style="margin-bottom:12px"></div>
+              <button class="btn btn-primary" id="floor-change-btn" onclick="openFloorChangeModal()" style="gap:8px">
+                <i class="fas fa-exchange-alt"></i> Request Floor Change
+              </button>
+            </div>
+          </div>
+        </div>
+        <div id="floor-female-msg" style="display:none;padding:18px;background:var(--primary-pale);border-radius:10px;color:var(--text-muted);font-size:14px">
+          <i class="fas fa-info-circle" style="color:var(--primary)"></i>
+          <span id="floor-female-text">Your hostel assignment is shown above.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── bKash / Phone Number Change Card ──────────────────────────────── -->
+    <div class="card" style="overflow:hidden;margin-bottom:20px" id="bkash-change-card">
+      <div style="padding:18px 24px;border-bottom:1px solid var(--border)">
+        <div class="section-title"><i class="fas fa-mobile-alt" style="color:#e51c6d"></i> My bKash Number</div>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:4px">Want to update your bKash number? Submit a request below — admin will review and approve it.</p>
+      </div>
+      <div style="padding:20px 24px">
+
+        <!-- Current number display -->
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+          <div style="background:#fce4ec;border-radius:12px;padding:14px 22px;text-align:center;min-width:120px">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#ad1457;margin-bottom:4px">Current bKash</div>
+            <div style="font-size:22px;font-weight:800;color:#e51c6d;letter-spacing:1.5px;font-family:monospace">{{ student_bkash }}</div>
+          </div>
+          <div style="flex:1;min-width:180px">
+            <div id="bkash-pending-notice" style="display:none;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:10px 14px;font-size:13px;color:#856404;margin-bottom:10px">
+              <i class="fas fa-hourglass-half" style="margin-right:6px"></i>
+              You have a <strong>pending</strong> request. Waiting for admin approval.
+            </div>
+            <button class="btn btn-primary" id="bkash-change-btn" onclick="openBkashChangeModal()" style="background:#e51c6d;border:none;gap:8px">
+              <i class="fas fa-exchange-alt"></i> Request Number Change
+            </button>
+          </div>
+        </div>
+
+        <!-- Request history toggle -->
+        <button onclick="loadBkashHistory()" style="background:none;border:none;color:var(--text-muted);font-size:13px;cursor:pointer;padding:0;display:flex;align-items:center;gap:6px">
+          <i class="fas fa-history"></i> View request history
+        </button>
+        <div id="bkash-history-area" style="margin-top:10px"></div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── bKash Change Modal ─────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="bkash-change-modal">
+  <div class="modal" style="max-width:420px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <h3><i class="fas fa-mobile-alt" style="color:#e51c6d"></i> Request bKash Change</h3>
+      <button onclick="closeBkashModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted)">×</button>
+    </div>
+    <p style="font-size:14px;color:var(--text-muted);margin-bottom:18px">Enter your new bKash number and confirm with your password. Admin will review and apply the change.</p>
+
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);display:block;margin-bottom:8px">New bKash Number</label>
+      <input type="text" id="new-bkash-input" placeholder="01XXXXXXXXX" maxlength="11"
+        style="width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:monospace;font-size:16px;background:var(--card);color:var(--text);box-sizing:border-box">
+    </div>
+
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);display:block;margin-bottom:8px">Your Password</label>
+      <input type="password" id="bkash-change-pwd" placeholder="Enter your current password"
+        style="width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:15px;background:var(--card);color:var(--text);box-sizing:border-box">
+    </div>
+
+    <div style="margin-bottom:18px">
+      <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);display:block;margin-bottom:8px">Reason <span style="font-weight:400;text-transform:none;font-size:11px">(optional)</span></label>
+      <textarea id="bkash-change-reason" placeholder="e.g. Lost previous SIM, switched to new number…"
+        style="width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;resize:vertical;min-height:60px;background:var(--card);color:var(--text);box-sizing:border-box"></textarea>
+    </div>
+
+    <div id="bkash-modal-result" style="margin-bottom:12px"></div>
+
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-primary" id="bkash-submit-btn" style="flex:1;justify-content:center;background:#e51c6d;border:none" onclick="submitBkashChangeRequest()">
+        <i class="fas fa-paper-plane"></i> Submit Request
+      </button>
+      <button class="btn btn-outline" onclick="closeBkashModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── bKash Change Logic ────────────────────────────────────────────────────────
+
+(function checkPendingBkashRequest() {
+  fetch('/student/phone_change_status')
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) return;
+      const pending = (data.requests || []).find(r => r.status === 'pending');
+      if (pending) {
+        document.getElementById('bkash-pending-notice').style.display = '';
+        const btn = document.getElementById('bkash-change-btn');
+        if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
+      }
+    }).catch(() => {});
+})();
+
+function openBkashChangeModal() {
+  document.getElementById('new-bkash-input').value = '';
+  document.getElementById('bkash-change-pwd').value = '';
+  document.getElementById('bkash-change-reason').value = '';
+  document.getElementById('bkash-modal-result').innerHTML = '';
+  document.getElementById('bkash-change-modal').style.display = 'flex';
+}
+function closeBkashModal() {
+  document.getElementById('bkash-change-modal').style.display = 'none';
+}
+
+async function submitBkashChangeRequest() {
+  const newBkash = document.getElementById('new-bkash-input').value.trim();
+  const pwd      = document.getElementById('bkash-change-pwd').value.trim();
+  const reason   = document.getElementById('bkash-change-reason').value.trim();
+  const resultEl = document.getElementById('bkash-modal-result');
+  const btn      = document.getElementById('bkash-submit-btn');
+
+  if (!newBkash || !pwd) {
+    resultEl.innerHTML = `<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:10px 14px;font-size:13px;color:#856404"><i class="fas fa-exclamation-triangle" style="margin-right:6px"></i>Please fill in all required fields.</div>`;
+    return;
+  }
+  if (!/^01[3-9]\d{8}$/.test(newBkash)) {
+    resultEl.innerHTML = `<div style="background:#fce4ec;border:1px solid #e51c6d;border-radius:8px;padding:10px 14px;font-size:13px;color:#c62828"><i class="fas fa-times-circle" style="margin-right:6px"></i>Invalid bKash number. Must be 11 digits starting with 013–019.</div>`;
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting…';
+
+  try {
+    const r    = await fetch('/student/request_phone_change', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ new_bkash: newBkash, password: pwd, reason: reason })
+    });
+    const data = await r.json();
+
+    if (data.ok) {
+      resultEl.innerHTML = `<div style="background:#e8f5ee;border:1px solid #b7e4c7;border-radius:8px;padding:10px 14px;font-size:13px;color:#2d6a4f"><i class="fas fa-check-circle" style="margin-right:6px"></i>${data.msg}</div>`;
+      document.getElementById('bkash-pending-notice').style.display = '';
+      const mainBtn = document.getElementById('bkash-change-btn');
+      if (mainBtn) { mainBtn.disabled = true; mainBtn.style.opacity = '0.5'; }
+      setTimeout(closeBkashModal, 1800);
+    } else {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Request';
+      resultEl.innerHTML = `<div style="background:#fce4ec;border:1px solid #e51c6d;border-radius:8px;padding:10px 14px;font-size:13px;color:#c62828"><i class="fas fa-times-circle" style="margin-right:6px"></i>${data.msg}</div>`;
+    }
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Request';
+    resultEl.innerHTML = `<div style="background:#fce4ec;border:1px solid #e51c6d;border-radius:8px;padding:10px 14px;font-size:13px;color:#c62828">Network error. Please try again.</div>`;
+  }
+}
+
+async function loadBkashHistory() {
+  const el = document.getElementById('bkash-history-area');
+  el.innerHTML = '<span style="font-size:13px;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading…</span>';
+  try {
+    const r    = await fetch('/student/phone_change_status');
+    const data = await r.json();
+    if (!data.ok || !data.requests.length) {
+      el.innerHTML = '<p style="font-size:13px;color:var(--text-muted);margin-top:6px">No requests yet.</p>';
+      return;
+    }
+    const badge = { pending: '#ffc107', approved: '#28a745', rejected: '#dc3545' };
+    const rows = data.requests.map(r => `
+      <tr style="font-size:13px">
+        <td style="font-family:monospace;padding:8px 10px">${r.old_bkash}</td>
+        <td style="font-family:monospace;font-weight:700;color:#e51c6d;padding:8px 10px">→ ${r.new_bkash}</td>
+        <td style="padding:8px 10px"><span style="background:${badge[r.status]||'#6c757d'};color:#fff;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700">${r.status}</span></td>
+        <td style="color:var(--text-muted);padding:8px 10px">${r.reason || '—'}</td>
+        <td style="color:var(--text-muted);padding:8px 10px">${r.created_at.slice(0,10)}</td>
+      </tr>`).join('');
+    el.innerHTML = `
+      <div style="overflow-x:auto;margin-top:8px">
+        <table style="width:100%;border-collapse:collapse;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+          <thead>
+            <tr style="background:var(--primary-pale);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted)">
+              <th style="padding:8px 10px;text-align:left">Old bKash</th>
+              <th style="padding:8px 10px;text-align:left">New bKash</th>
+              <th style="padding:8px 10px;text-align:left">Status</th>
+              <th style="padding:8px 10px;text-align:left">Reason</th>
+              <th style="padding:8px 10px;text-align:left">Date</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  } catch(e) {
+    el.innerHTML = '<p style="font-size:13px;color:#dc3545">Failed to load history.</p>';
+  }
+}
+</script>
+
+<!-- Floor Change Modal -->
+<div class="modal-overlay" id="floor-change-modal">
+  <div class="modal" style="max-width:420px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <h3 id="floor-modal-title"><i class="fas fa-building" style="color:var(--primary)"></i> Request Floor Change</h3>
+      <button onclick="closeFloorModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted)">×</button>
+    </div>
+    <p style="font-size:14px;color:var(--text-muted);margin-bottom:18px">Select your desired floor / hostel and provide a reason. The admin will be notified and will update it after review.</p>
+    <div style="margin-bottom:14px">
+      <label id="floor-select-label" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);display:block;margin-bottom:8px">Desired Floor</label>
+      <select id="floor-select" style="width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:15px;background:var(--card);color:var(--text)">
+        <option value="">Select…</option>
+      </select>
+    </div>
+    <div style="margin-bottom:18px">
+      <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);display:block;margin-bottom:8px">Reason <span style="font-weight:400;text-transform:none;font-size:11px">(optional)</span></label>
+      <textarea id="floor-reason" placeholder="e.g. Moving rooms, need to be closer to a friend…" style="width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;resize:vertical;min-height:70px;background:var(--card);color:var(--text)"></textarea>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="submitFloorChange()">
+        <i class="fas fa-paper-plane"></i> Submit Request
+      </button>
+      <button class="btn btn-outline" onclick="closeFloorModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="accept-modal">
+  <div class="modal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <h3><i class="fas fa-user-tie" style="color:var(--primary)"></i> You're the New Manager!</h3>
+      <button onclick="closeAcceptModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted)">×</button>
+    </div>
+    <p>Save these credentials — you'll use them to log in as meal manager.</p>
+    <div id="accept-creds" style="background:#e8f5ee;border:1.5px solid #b7e4c7;border-radius:10px;padding:20px;margin-bottom:18px">
+      <div style="margin-bottom:10px"><span style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase">Manager ID</span><br><span id="cred-mgr-id" style="font-size:22px;font-weight:700;color:var(--primary);font-family:monospace"></span></div>
+      <div><span style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase">Temporary Password</span><br><span id="cred-temp-pass" style="font-size:22px;font-weight:700;color:var(--primary);font-family:monospace"></span></div>
+      <div style="margin-top:12px;font-size:12px;color:#2d7a4a"><i class="fas fa-info-circle"></i> You must change this password on first login. Valid for 7 days.</div>
+    </div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="copyCredsAndClose()">
+      <i class="fas fa-copy"></i> Copy Credentials & Close
+    </button>
+  </div>
+</div>
+
+<!-- Edit Day Modal (Permission-based) -->
+<div class="edit-day-modal" id="edit-day-modal">
+  <div class="edit-day-overlay" onclick="closeEditDay()"></div>
+  <div class="edit-day-box">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <span style="font-size:22px">✏️</span>
+      <h3 id="edit-day-title" style="margin:0">Edit Orders</h3>
+    </div>
+    <p id="edit-day-subtitle" style="margin-bottom:18px">Manage your meal orders for this day</p>
+    <div id="edit-day-lunch-row"></div>
+    <div id="edit-day-dinner-row"></div>
+    <button class="edit-close-btn" onclick="closeEditDay()">Close</button>
+  </div>
+</div>
+
+<!-- Request Edit Reason Modal -->
+<div class="edit-day-modal" id="request-edit-modal">
+  <div class="edit-day-overlay" onclick="closeRequestModal()"></div>
+  <div class="edit-day-box">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <span style="font-size:22px" id="req-modal-icon">📋</span>
+      <h3 id="req-modal-title" style="margin:0">Request Edit</h3>
+    </div>
+    <p id="req-modal-subtitle" style="margin-bottom:16px;font-size:13px;color:var(--text-muted)">The manager will be notified and must approve before you can make this change.</p>
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Reason <span style="font-weight:400;text-transform:none;font-size:11px">(optional)</span></label>
+      <textarea id="req-reason" placeholder="e.g. I made a mistake, I can't attend dinner that day…" style="width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;resize:vertical;min-height:72px;color:var(--text);background:var(--card);transition:border .2s" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button id="req-submit-btn" class="cancel-meal-btn" style="flex:1;justify-content:center;padding:12px;font-size:14px;background:var(--primary);color:#fff;border-radius:var(--radius-sm)" onclick="submitEditRequest()">
+        <i class="fas fa-paper-plane"></i> Send Request
+      </button>
+      <button onclick="closeRequestModal()" style="padding:12px 16px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:transparent;font-family:inherit;font-size:14px;font-weight:600;color:var(--text-muted);cursor:pointer">Cancel</button>
+    </div>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:10px;text-align:center"><i class="fas fa-clock"></i> Approved requests expire after 2 hours.</p>
+  </div>
+</div>
+
+<!-- Meal Confirm Modal -->
+<div class="modal-overlay" id="meal-confirm-modal">
+  <div class="modal" style="max-width:380px;text-align:center;padding:36px 28px">
+    <div style="font-size:52px;margin-bottom:12px" id="meal-confirm-icon">🍛</div>
+    <h3 id="meal-confirm-title" style="margin-bottom:10px;font-size:20px"></h3>
+    <p id="meal-confirm-body" style="font-size:14px;color:var(--text-muted);margin-bottom:24px;line-height:1.6"></p>
+    <div class="modal-actions">
+      <button id="meal-confirm-ok" class="btn btn-primary" onclick="this.disabled=true;confirmMealAction()">Confirm</button>
+      <button class="btn btn-outline" onclick="closeMealConfirm()" style="flex:1;justify-content:center">
+        <i class="fas fa-times"></i> Cancel
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- bKash Payment Modal -->
+<div class="modal-overlay" id="pay-modal">
+  <div class="modal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <h3><i class="fas fa-mobile-alt" style="color:#e51c6d"></i> Submit bKash Payment</h3>
+      <button onclick="closePayModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted)">×</button>
+    </div>
+    <!-- Send to info -->
+    <div style="display:flex;align-items:center;gap:10px;background:#fce4ec;border:1.5px solid #e91e63;border-radius:10px;padding:11px 14px;margin-bottom:14px">
+      <i class="fas fa-mobile-alt" style="color:#c2185b;font-size:18px;flex-shrink:0"></i>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:10px;color:#880e4f;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:1px">Send bKash to</div>
+        <div style="font-size:18px;font-weight:800;color:#880e4f;letter-spacing:1px" id="modal-bkash-num">{{ mgr_bkash }}</div>
+      </div>
+    </div>
+
+    <!-- Auto-calculated amount breakdown -->
+    <div style="background:#f8fafc;border:1.5px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:var(--text-muted);margin-bottom:10px"><i class="fas fa-calculator"></i> Amount to Send</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:13px;color:var(--text-muted)">Your total due</span>
+        <span style="font-size:15px;font-weight:700;color:var(--text)">৳<span id="modal-due-amount">{{ "%.0f"|format(due) }}</span></span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px" id="fee-row">
+        <span style="font-size:13px;color:var(--text-muted)">bKash fee <span id="fee-note" style="font-size:11px;opacity:.7"></span></span>
+        <span style="font-size:14px;font-weight:600;color:#e53e3e" id="fee-display"></span>
+      </div>
+      <div style="border-top:1.5px dashed var(--border);padding-top:10px;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:13px;font-weight:700;color:var(--text)">Total to send</span>
+        <div style="text-align:right">
+          <div style="font-size:22px;font-weight:800;color:#e51c6d" id="total-display"></div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:1px">Type this exact amount in bKash</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:#fff8e6;border:1px solid #fcd97d;border-radius:8px;padding:10px 14px;font-size:13px;color:#7c5f00;margin-bottom:16px">
+      <i class="fas fa-info-circle"></i> Use roll number <strong>{{ session.roll }}</strong> as bKash reference/note.
+    </div>
+    <div class="form-group">
+      <label>bKash Transaction ID</label>
+      <input type="text" id="txn-input" placeholder="e.g. 8JA7KL2M3N" style="text-transform:uppercase">
+    </div>
+    <div class="form-group" style="display:none">
+      <input type="hidden" id="amount-input" value="{{ "%.0f"|format(due) }}">
+      <div id="amount-display" style="display:none">{{ "%.0f"|format(due) }}</div>
+    </div>
+    <div class="form-group">
+      <label>Note (optional)</label>
+      <input type="text" id="note-input" placeholder="e.g. Payment for this week's meals">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="submitPayment()">
+        <i class="fas fa-paper-plane"></i> Submit Proof
+      </button>
+      <button class="btn btn-outline" onclick="closePayModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Cash Payment Modal -->
+<div class="modal-overlay" id="cash-modal">
+  <div class="modal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <h3><i class="fas fa-money-bill-wave" style="color:#2d9e5a"></i> Pay with Cash</h3>
+      <button onclick="closeCashModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted)">×</button>
+    </div>
+    <p>Send a cash payment request to the manager. Once they accept, your meals will be marked as paid.</p>
+    <div id="cash-status-area"></div>
+    <div id="cash-form-area">
+      <!-- Manager identity in cash modal -->
+      {% if mgr_name %}
+      <div style="display:flex;align-items:center;gap:10px;background:#f0f7f2;border:1px solid #b7e4c7;border-radius:8px;padding:10px 13px;margin-bottom:12px">
+        <span style="background:#b7e4c7;border-radius:50%;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;color:#1a6b3a">
+          <i class="fas fa-user-tie"></i>
+        </span>
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:700;color:#1a4731">{{ mgr_name }}</div>
+          <div style="font-size:11px;color:#2d6a4f;margin-top:1px;display:flex;flex-wrap:wrap;gap:6px">
+            <span><i class="fas fa-id-badge" style="font-size:9px"></i> {{ mgr_login_id }}</span>
+            {% if mgr_batch %}<span>· Batch {{ mgr_batch }}</span>{% endif %}
+            {% if mgr_roll %}<span>· Roll {{ mgr_roll }}</span>{% endif %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+      <div style="background:#e8f5ee;border:1px solid #b7e4c7;border-radius:8px;padding:12px 14px;font-size:13px;color:#1a6b3a;margin-bottom:18px">
+        <i class="fas fa-info-circle"></i> Hand the cash directly to the meal manager above. Your request will appear on their dashboard for approval.
+      </div>
+      <div class="form-group">
+        <label>Amount (৳)</label>
+        <div style="display:flex;align-items:center;gap:10px;background:#e8f5ee;border:2px solid var(--primary);border-radius:var(--radius-sm);padding:12px 16px">
+          <i class="fas fa-lock" style="color:var(--primary);font-size:14px"></i>
+          <span style="font-size:20px;font-weight:700;color:var(--primary)" id="cash-amount-display">৳{{ '%.0f'|format(due) }}</span>
+          <span style="font-size:12px;color:var(--text-muted);margin-left:auto">Fixed · cannot be changed</span>
+        </div>
+        <input type="hidden" id="cash-amount-input" value="{{ '%.0f'|format(due) }}">
+      </div>
+      <div class="form-group">
+        <label>Note (optional)</label>
+        <input type="text" id="cash-note-input" placeholder="e.g. Paying for this week's meals">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" style="flex:1;justify-content:center;background:var(--primary)" onclick="submitCashRequest()">
+          <i class="fas fa-paper-plane"></i> Send Cash Request
+        </button>
+        <button class="btn btn-outline" onclick="closeCashModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── bKash Add Money Charge Table ─────────────────────────────────────────────
+// bKash Add Money (bank/card → bKash): FREE for any amount
+// ── bKash fee auto-calculator for pay modal ─────────────────────────────────
+// bKash Send Money: free ≤৳100, 1.85% (min ৳2) above ৳100
+function calcBkashFee(amount) {
+  if (amount <= 100) return 0;
+  return Math.max(2, Math.ceil(amount * 0.0185 * 100) / 100);
+}
+
+function updatePayModalAmounts() {
+  const dueEl = document.getElementById('modal-due-amount');
+  if (!dueEl) return;
+  const due = parseFloat(dueEl.textContent) || 0;
+  const fee = calcBkashFee(due);
+  const total = due + fee;
+
+  const feeRow = document.getElementById('fee-row');
+  const feeDisplay = document.getElementById('fee-display');
+  const feeNote = document.getElementById('fee-note');
+  const totalDisplay = document.getElementById('total-display');
+
+  if (fee > 0) {
+    if (feeRow) feeRow.style.display = 'flex';
+    if (feeDisplay) feeDisplay.textContent = '+৳' + (fee % 1 === 0 ? fee : fee.toFixed(2));
+    if (feeNote) feeNote.textContent = '(1.85% bKash charge)';
+  } else {
+    if (feeRow) feeRow.style.display = 'flex';
+    if (feeDisplay) feeDisplay.textContent = 'Free';
+    if (feeDisplay) feeDisplay.style.color = '#2d9e5a';
+    if (feeNote) feeNote.textContent = '(no charge ≤৳100)';
+  }
+  if (totalDisplay) totalDisplay.textContent = '৳' + (total % 1 === 0 ? total : total.toFixed(2));
+
+  // Keep hidden amount-input in sync (used by submitPayment)
+  const amtInput = document.getElementById('amount-input');
+  if (amtInput) amtInput.value = due;
+}
+
+// Run on page load
+updatePayModalAmounts();
+
+// Real-time day names and today highlight
+(function() {
+  const DAY_ABBR = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  // Use Bangladesh Standard Time (UTC+6) to match server-side date
+  const nowBD = new Date(new Date().getTime() + 6 * 60 * 60 * 1000);
+  const todayStr = nowBD.toISOString().slice(0,10);
+  document.querySelectorAll('.day-card[data-date]').forEach((card, i) => {
+    const dateStr = card.dataset.date;
+    const d = new Date(dateStr + 'T00:00:00');
+    const nameEl = document.getElementById('dayname-' + i);
+    if (nameEl) nameEl.textContent = DAY_ABBR[d.getDay()];
+    if (dateStr === todayStr) {
+      card.style.borderColor = 'var(--primary)';
+      card.style.background = '#f0f7f2';
+    }
+  });
+})();
+
+function showTab(name) {
+  const names = ['order','history','invite','account'];
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', names[i]===name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  if (name === 'invite') loadInvites();
+  if (name === 'account') loadFloorStatus();
+}
+
+// ── FLOOR CHANGE ──────────────────────────────────────────────────────────────
+const HOSTEL_NAMES = { 1: 'Campus', 2: 'Sentu House', 3: 'Chairman House' };
+
+async function loadFloorStatus() {
+  try {
+    const r = await fetch('/student/floor_change_status');
+    const d = await r.json();
+    const isFemale = d.gender === 'female';
+
+    // Both genders see the status area; hide the old female-only message
+    document.getElementById('floor-status-area').style.display = '';
+    document.getElementById('floor-female-msg').style.display = 'none';
+
+    // Show/restore the change button for everyone
+    const changeBtn = document.getElementById('floor-change-btn');
+    if (changeBtn) {
+      changeBtn.style.display = '';
+      changeBtn.innerHTML = `<i class="fas fa-exchange-alt"></i> Request ${isFemale ? 'Hostel' : 'Floor'} Change`;
+    }
+
+    // Update card title
+    const cardTitle = document.querySelector('#floor-card .section-title');
+    if (cardTitle) cardTitle.innerHTML = `<i class="fas fa-building" style="color:var(--primary)"></i> My ${isFemale ? 'Hostel' : 'Floor'}`;
+
+    // Current floor display
+    const floorEl = document.getElementById('current-floor-display');
+    if (floorEl) {
+      if (isFemale) {
+        floorEl.style.fontSize = '22px';
+        floorEl.textContent = HOSTEL_NAMES[d.current_floor] || (d.current_floor ? `Hostel ${d.current_floor}` : '?');
+      } else {
+        floorEl.style.fontSize = '36px';
+        floorEl.textContent = d.current_floor || '?';
+      }
+    }
+
+    // Populate modal select with the right options
+    const sel = document.getElementById('floor-select');
+    const selLabel = document.getElementById('floor-select-label');
+    const modalTitle = document.getElementById('floor-modal-title');
+    if (sel) {
+      if (isFemale) {
+        sel.innerHTML = `<option value="">Select hostel…</option>
+          <option value="1">1 — Campus</option>
+          <option value="2">2 — Sentu House</option>
+          <option value="3">3 — Chairman House</option>`;
+        if (selLabel) selLabel.textContent = 'Desired Hostel';
+        if (modalTitle) modalTitle.innerHTML = '<i class="fas fa-home" style="color:var(--primary)"></i> Request Hostel Change';
+      } else {
+        sel.innerHTML = `<option value="">Select floor…</option>
+          <option value="1">Floor 1</option><option value="2">Floor 2</option>
+          <option value="3">Floor 3</option><option value="4">Floor 4</option>
+          <option value="5">Floor 5</option><option value="6">Floor 6</option>
+          <option value="7">Floor 7</option>`;
+        if (selLabel) selLabel.textContent = 'Desired Floor';
+        if (modalTitle) modalTitle.innerHTML = '<i class="fas fa-building" style="color:var(--primary)"></i> Request Floor Change';
+      }
+    }
+
+    // Request status
+    const statusEl = document.getElementById('floor-request-status');
+    const req = d.request;
+    if (req && req.status === 'pending') {
+      const reqLabel = isFemale
+        ? (HOSTEL_NAMES[req.requested_floor] || `Hostel ${req.requested_floor}`)
+        : `Floor ${req.requested_floor}`;
+      statusEl.innerHTML = `<div style="background:var(--accent-light);border:1.5px solid var(--accent);border-radius:8px;padding:10px 14px;font-size:13px;color:#7c5f00">
+        <i class="fas fa-clock"></i> <strong>Request Pending</strong> — You've requested ${reqLabel}. Waiting for admin.
+      </div>`;
+      if (changeBtn) { changeBtn.disabled = true; changeBtn.style.opacity = '0.5'; }
+      document.getElementById('floor-badge').style.display = '';
+    } else if (req && req.status === 'approved') {
+      statusEl.innerHTML = `<div style="background:var(--primary-pale);border:1.5px solid var(--primary);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--primary)">
+        <i class="fas fa-check-circle"></i> <strong>Last request approved!</strong> Your ${isFemale ? 'hostel' : 'floor'} has been updated.
+      </div>`;
+      document.getElementById('floor-badge').style.display = 'none';
+    } else if (req && req.status === 'rejected') {
+      statusEl.innerHTML = `<div style="background:var(--danger-light);border:1.5px solid var(--danger);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--danger)">
+        <i class="fas fa-times-circle"></i> <strong>Last request rejected.</strong> You can submit a new request.
+      </div>`;
+      document.getElementById('floor-badge').style.display = 'none';
+    } else {
+      statusEl.innerHTML = '';
+      document.getElementById('floor-badge').style.display = 'none';
+    }
+  } catch(e) { console.error('loadFloorStatus:', e); }
+}
+
+function openFloorChangeModal() {
+  document.getElementById('floor-change-modal').style.display = 'flex';
+}
+function closeFloorModal() {
+  document.getElementById('floor-change-modal').style.display = 'none';
+  document.getElementById('floor-select').value = '';
+  document.getElementById('floor-reason').value = '';
+}
+async function submitFloorChange() {
+  const fl = document.getElementById('floor-select').value;
+  const reason = document.getElementById('floor-reason').value.trim();
+  if (!fl) { toast('Please select a floor / hostel', 'error'); return; }
+  const r = await fetch('/student/request_floor_change', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({requested_floor: parseInt(fl), reason})
+  });
+  const d = await r.json();
+  if (d.ok) {
+    toast(d.msg, 'success');
+    closeFloorModal();
+    loadFloorStatus();
+  } else {
+    toast(d.msg, 'error');
+  }
+}
+
+// ── MIDNIGHT DEADLINE HELPERS ─────────────────────────────────────────────────
+
+function isMidnightLocked(mealDateStr) {
+  // Returns true if now (local time) is past midnight of mealDateStr.
+  // e.g. for "2026-05-19": locked once the clock ticks past 00:00 on May 19.
+  const now      = new Date();
+  const deadline = new Date(mealDateStr + 'T00:00:00');
+  return now >= deadline;
+}
+
+function midnightCountdown() {
+  const now      = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(0, 0, 0, 0);
+  const diff  = tomorrow - now;
+  const hours = Math.floor(diff / 3600000);
+  const mins  = Math.floor((diff % 3600000) / 60000);
+  return { hours, mins, diff };
+}
+
+// ── 3-DAY PAYMENT WINDOW HELPERS ─────────────────────────────────────────────
+// Week starts SUNDAY. Ordering is open only on Sun (0), Mon (1), Tue (2).
+// Wed–Sat ordering is locked by the system (not the manager).
+// WEEK_START_DAY = 0 (Sunday).
+
+function getWeekBounds() {
+  // Returns { weekStart: Date, weekEnd: Date, payWindowEnd: Date }
+  // using Bangladesh Standard Time (UTC+6) to match server.
+  const nowBD = new Date(new Date().getTime() + 6 * 60 * 60 * 1000);
+  const dayOfWeek = nowBD.getUTCDay(); // 0=Sun … 6=Sat
+  const daysSinceSun = dayOfWeek; // Sun=0 days back, Mon=1, etc.
+
+  // Clone to avoid mutation
+  const weekStart = new Date(nowBD);
+  weekStart.setUTCDate(weekStart.getUTCDate() - daysSinceSun);
+  weekStart.setUTCHours(0, 0, 0, 0);
+
+  const weekEnd = new Date(weekStart);
+  weekEnd.setUTCDate(weekEnd.getUTCDate() + 6); // Saturday
+
+  // Pay window end = end of Tuesday (Wednesday 00:00 BDT)
+  const payWindowEnd = new Date(weekStart);
+  payWindowEnd.setUTCDate(payWindowEnd.getUTCDate() + 3); // Wed 00:00 BDT = Tue end
+
+  return { weekStart, weekEnd, payWindowEnd };
+}
+
+function isPayWindowOpen() {
+  const { payWindowEnd } = getWeekBounds();
+  const nowBD = new Date(new Date().getTime() + 6 * 60 * 60 * 1000);
+  return nowBD < payWindowEnd;
+}
+
+function payWindowCountdown() {
+  const { payWindowEnd } = getWeekBounds();
+  const nowBD = new Date(new Date().getTime() + 6 * 60 * 60 * 1000);
+  const diff = payWindowEnd - nowBD;
+  if (diff <= 0) return null;
+  const days  = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const mins  = Math.floor((diff % 3600000) / 60000);
+  return { days, hours, mins };
+}
+
+function applyDeadlineLocks() {
+  const { hours, mins } = midnightCountdown();
+  const payOpen = isPayWindowOpen();
+  const pwCountdown = payWindowCountdown();
+
+  // ── Update midnight countdown text ──────────────────────────────────────
+  const countdownEl = document.getElementById('deadlineCountdownText');
+  if (countdownEl) {
+    if (hours < 1) {
+      countdownEl.innerHTML = `<span style="color:#e53e3e">⚠️ Only ${mins}m left to book tomorrow's meals!</span>`;
+    } else if (hours < 3) {
+      countdownEl.innerHTML = `<span style="color:#b07800">⏳ ${hours}h ${mins}m left to book tomorrow's meals.</span>`;
+    } else {
+      countdownEl.innerHTML = `<span style="color:#1a6b3a">${hours}h ${mins}m until tomorrow's deadline.</span>`;
+    }
+  }
+
+  // ── Update pay-window countdown text in info bar ─────────────────────────
+  const pwEl = document.getElementById('payWindowText');
+  if (pwEl) {
+    if (payOpen && pwCountdown) {
+      const timeLeft = pwCountdown.days > 0
+        ? `${pwCountdown.days}d ${pwCountdown.hours}h`
+        : `${pwCountdown.hours}h ${pwCountdown.mins}m`;
+      const color = (pwCountdown.days === 0 && pwCountdown.hours < 6) ? '#e53e3e' : '#b07800';
+      pwEl.innerHTML = `<span style="color:${color}">📅 Pay window closes in ${timeLeft} (end of Tue).</span>`;
+    } else if (!payOpen) {
+      pwEl.innerHTML = `<span style="color:#e53e3e">🔒 3-day ordering window closed (Wed–Sat).</span>`;
+    }
+  }
+
+  // ── Update bottom info text ──────────────────────────────────────────────
+  const infoEl = document.getElementById('payWindowInfoText');
+  if (infoEl) {
+    if (payOpen && pwCountdown) {
+      const timeLeft = pwCountdown.days > 0
+        ? `${pwCountdown.days}d ${pwCountdown.hours}h left`
+        : `${pwCountdown.hours}h ${pwCountdown.mins}m left`;
+      infoEl.innerHTML = ` <span style="font-weight:700;color:#b07800">⏳ Pay window: ${timeLeft}.</span>`;
+    } else if (!payOpen) {
+      infoEl.innerHTML = ` <span style="font-weight:700;color:#e53e3e">🔒 Pay window closed this week.</span>`;
+    }
+  }
+
+  // ── Show/hide payment-window-closed banner ───────────────────────────────
+  const pwBanner = document.getElementById('payment-window-banner');
+  if (pwBanner) {
+    pwBanner.style.display = !payOpen ? 'flex' : 'none';
+  }
+
+  // ── Lock new orders if pay window is closed (client-side guard) ──────────
+  // Only locks UN-ordered buttons. Ordered/paid/due stay as-is.
+  document.querySelectorAll('.meal-btn[data-meal-date]').forEach(btn => {
+    const mealDate = btn.getAttribute('data-meal-date');
+    if (!mealDate) return;
+    if (btn.classList.contains('paid') ||
+        btn.classList.contains('due-status') ||
+        btn.classList.contains('cancel-pending') ||
+        btn.classList.contains('deadline-locked-btn') ||
+        btn.classList.contains('paywindow-locked-btn')) return;
+    if (btn.disabled && !btn.classList.contains('ordered')) return;
+
+    // 3-day window lock: only lock UN-ordered buttons when window is closed
+    if (!payOpen && !btn.classList.contains('ordered')) {
+      btn.disabled = true;
+      btn.classList.add('paywindow-locked-btn', 'deadline-locked-btn');
+      btn.removeAttribute('onclick');
+      const mealType = btn.getAttribute('data-meal-type') || '';
+      btn.innerHTML = `<i class="fas fa-calendar-times" style="font-size:10px"></i> ${capitalize(mealType)}`;
+      btn.title = 'Ordering window closed (Wed–Sat). New orders reopen next Sunday.';
+      const dayCard = btn.closest('.day-card');
+      if (dayCard) dayCard.classList.add('deadline-locked');
+      return;
+    }
+
+    // Midnight lock (per-meal deadline)
+    if (isMidnightLocked(mealDate) && !btn.classList.contains('ordered')) {
+      btn.disabled = true;
+      btn.classList.add('deadline-locked-btn');
+      btn.removeAttribute('onclick');
+      const mealType = btn.getAttribute('data-meal-type') || '';
+      btn.innerHTML  = `<i class="fas fa-clock" style="font-size:10px"></i> ${capitalize(mealType)}`;
+      btn.title      = 'Ordering deadline passed (midnight). This meal can no longer be booked.';
+      const dayCard  = btn.closest('.day-card');
+      if (dayCard) dayCard.classList.add('deadline-locked');
+    }
+  });
+
+  // ── Highlight Sun/Mon/Tue cards as "pay window" days ────────────────────
+  document.querySelectorAll('.day-card[data-date]').forEach(card => {
+    const dateStr = card.dataset.date;
+    if (!dateStr) return;
+    const d = new Date(dateStr + 'T00:00:00');
+    const dow = d.getDay(); // 0=Sun,1=Mon,2=Tue
+    if ([0, 1, 2].includes(dow) && !card.querySelector('.pay-window-badge')) {
+      const badge = document.createElement('div');
+      badge.className = 'pay-window-badge';
+      badge.style.cssText = 'font-size:8px;font-weight:700;color:#1a6b3a;background:#d1fae5;border-radius:4px;padding:1px 5px;margin-top:2px;display:inline-block';
+      badge.textContent = '✓ Pay day';
+      const dateDiv = card.querySelector('[style*="color:var(--text-muted)"]');
+      if (dateDiv) dateDiv.after(badge);
+    }
+  });
+
+  // ── Show countdown chip on today's card ─────────────────────────────────
+  const now   = new Date();
+  const pad   = n => String(n).padStart(2, '0');
+  const today = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  document.querySelectorAll(`.day-card[data-date="${today}"]`).forEach(card => {
+    let chip = card.querySelector('.deadline-chip');
+    if (!chip) {
+      chip = document.createElement('div');
+      chip.className = 'deadline-chip';
+      const dayNum = card.querySelector('.day-num');
+      if (dayNum) dayNum.after(chip);
+      else card.prepend(chip);
+    }
+    chip.className = 'deadline-chip ' + (hours < 1 ? 'urgent' : hours < 3 ? 'warning' : 'ok');
+    chip.innerHTML = `<i class="fas fa-clock" style="font-size:8px"></i> ${hours}h ${mins}m`;
+    chip.title     = `${hours}h ${mins}m left to book tomorrow's meals before midnight`;
+  });
+}
+
+// Run on load and every 60 seconds
+document.addEventListener('DOMContentLoaded', function() {
+  applyDeadlineLocks();
+  setInterval(applyDeadlineLocks, 60000);
+});
+
+// ── MEAL CONFIRM MODAL ────────────────────────────────────────────────────────
+let _pendingMeal = null;
+let _mealRequestInFlight = false;  // prevents double-submit
+
+function toggleMeal(date, type, btn) {
+  if (_mealRequestInFlight) return;  // block if a request is already processing
+  const isOrdered = btn.classList.contains('ordered');
+
+  // ── 3-DAY PAY WINDOW GUARD (new orders only) ──────────────────────────────
+  if (!isOrdered && !isPayWindowOpen()) {
+    toast('🔒 Ordering window closed — new meals can only be ordered Sun, Mon, Tue. Come back next Sunday!', 'error');
+    applyDeadlineLocks();
+    return;
+  }
+
+  // ── MIDNIGHT DEADLINE GUARD (new orders only, not cancellations) ──────────
+  if (!isOrdered && isMidnightLocked(date)) {
+    const dObj      = new Date(date + 'T00:00:00');
+    const dayNames  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const monthNames= ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    toast(`⏰ Deadline passed — ${capitalize(type)} for ${dayNames[dObj.getDay()]}, ${dObj.getDate()} ${monthNames[dObj.getMonth()]} can no longer be booked. Orders must be placed before midnight.`, 'error');
+    applyDeadlineLocks();
+    return;
+  }
+
+  // Format date nicely
+  const d = new Date(date + 'T00:00:00');
+  const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const niceDateStr = `${dayNames[d.getDay()]}, ${d.getDate()} ${monthNames[d.getMonth()]}`;
+
+  _pendingMeal = { date, type, btn, isOrdered };
+
+  if (isOrdered) {
+    // Cancel confirmation
+    document.getElementById('meal-confirm-icon').textContent = '🗑️';
+    document.getElementById('meal-confirm-title').textContent = 'Cancel ' + capitalize(type) + '?';
+    document.getElementById('meal-confirm-body').innerHTML =
+      `Are you sure you want to <strong>cancel your ${capitalize(type)}</strong> order for <strong>${niceDateStr}</strong>?`;
+    document.getElementById('meal-confirm-ok').className = 'btn btn-danger';
+    document.getElementById('meal-confirm-ok').innerHTML = '<i class="fas fa-times"></i> Yes, Cancel Order';
+    document.getElementById('meal-confirm-ok').style.flex = '1';
+    document.getElementById('meal-confirm-ok').style.justifyContent = 'center';
+  } else {
+    // Order confirmation — show deadline warning if time is short
+    const { hours, mins } = midnightCountdown();
+    const deadlineNote = hours < 3
+      ? `<div style="margin-top:10px;padding:8px 12px;background:#fff8e6;border:1px solid #fcd97d;border-radius:7px;font-size:12px;color:#7a5c00"><i class="fas fa-clock"></i> <strong>Only ${hours}h ${mins}m left</strong> — orders lock at midnight tonight.</div>`
+      : '';
+    document.getElementById('meal-confirm-icon').textContent = type === 'lunch' ? '🥗' : '🍛';
+    document.getElementById('meal-confirm-title').textContent = 'Confirm ' + capitalize(type) + ' Order';
+    document.getElementById('meal-confirm-body').innerHTML =
+      `Order <strong>${capitalize(type)}</strong> for <strong>${niceDateStr}</strong>? <br><span style="font-size:13px;color:var(--text-muted)">This will add <strong>৳50</strong> to your due amount.</span>${deadlineNote}`;
+    document.getElementById('meal-confirm-ok').className = 'btn btn-primary';
+    document.getElementById('meal-confirm-ok').innerHTML = '<i class="fas fa-check"></i> Yes, Order ' + capitalize(type);
+    document.getElementById('meal-confirm-ok').style.flex = '1';
+    document.getElementById('meal-confirm-ok').style.justifyContent = 'center';
+  }
+  document.getElementById('meal-confirm-modal').classList.add('open');
+  document.getElementById('meal-confirm-ok').disabled = false;  // re-enable for each new modal open
+}
+
+async function confirmMealAction() {
+  if (!_pendingMeal) return;
+  if (_mealRequestInFlight) return;  // extra guard against double-confirm
+  const { date, type, btn, isOrdered } = _pendingMeal;
+  closeMealConfirm();
+
+  _mealRequestInFlight = true;  // lock
+
+  // ── Lock the button immediately to prevent double-tap races ──────────────
+  const originalHTML  = btn.innerHTML;
+  const originalClass = btn.className;
+  btn.disabled        = true;
+  btn.style.opacity   = '0.65';
+  btn.innerHTML       = '<i class="fas fa-spinner fa-spin" style="font-size:10px"></i>';
+
+  const url = isOrdered ? '/student/cancel_order' : '/student/order';
+
+  let d;
+  try {
+    const r = await fetch(url, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ meal_date: date, meal_type: type })
+    });
+    d = await r.json();
+  } catch (err) {
+    // Network error — restore button
+    btn.innerHTML       = originalHTML;
+    btn.className       = originalClass;
+    btn.disabled        = false;
+    btn.style.opacity   = '1';
+    _mealRequestInFlight = false;
+    toast('Network error — please try again.', 'error');
+    _pendingMeal = null;
+    return;
+  }
+
+  if (!d.ok) {
+    // Server rejected — restore button to its previous state
+    btn.innerHTML     = originalHTML;
+    btn.className     = originalClass;
+    btn.disabled      = false;
+    btn.style.opacity = '1';
+    _mealRequestInFlight = false;
+
+    if (d.locked) {
+      toast(d.msg, 'error');
+      btn.innerHTML = '<i class="fas fa-lock" style="font-size:10px"></i> Locked';
+      btn.disabled  = true;
+    } else {
+      toast(d.msg || 'Something went wrong', 'error');
+    }
+    _pendingMeal = null;
+    return;
+  }
+
+  // ── Success path ──────────────────────────────────────────────────────────
+  if (d.via_request) {
+    // Cancel routed to manager for approval
+    btn.classList.remove('ordered');
+    btn.classList.add('cancel-pending');
+    btn.disabled      = true;
+    btn.style.opacity = '1';
+    btn.innerHTML     = '<i class="fas fa-hourglass-half" style="font-size:10px"></i> Pending';
+    btn.title         = 'Cancel request pending manager approval';
+
+    const paymentCancelled = d.cash_cancelled || d.bkash_cancelled;
+    if (paymentCancelled) {
+      const type = d.bkash_cancelled ? 'bKash' : 'cash';
+      toast(`📩 Cancel request sent. Your pending ${type} payment was automatically cancelled since the amount changed.`, 'success');
+      // Hide the pending payment banner immediately
+      const banner = document.getElementById('due-banner');
+      if (banner) banner.style.display = 'none';
+      // Disable both payment buttons in the due box
+      document.querySelectorAll('[onclick="openPayModal()"]').forEach(b => b.disabled = true);
+      document.querySelectorAll('[onclick="openCashModal()"]').forEach(b => b.disabled = true);
+    } else {
+      toast('📩 Cancel request sent to manager for approval.', 'success');
+    }
+
+    _mealRequestInFlight = false;
+    _pendingMeal = null;
+    return;
+  }
+
+  // Toggle ordered state
+  const nowOrdered = !isOrdered;
+  if (nowOrdered) {
+    btn.classList.add('ordered');
+    btn.innerHTML = '<i class="fas fa-check"></i> ' + capitalize(type);
+  } else {
+    btn.classList.remove('ordered');
+    btn.innerHTML = '<i class="fas fa-plus"></i> ' + capitalize(type);
+  }
+  btn.disabled      = false;
+  btn.style.opacity = '1';
+  toast(nowOrdered ? capitalize(type) + ' ordered!' : capitalize(type) + ' cancelled');
+
+  // Reload to refresh due amount and summary cards
+  setTimeout(() => location.reload(), 800);
+  _mealRequestInFlight = false;
+  _pendingMeal = null;
+}
+
+// ── Edit Day Modal (Permission-based) ─────────────────────────────────────
+let _editDate = null;
+let _editRequests = {};   // key: "date|type" → request object
+let _pendingReqTarget = null;  // {date, type, action} for the request modal
+
+// Load edit request statuses on page load
+(async function loadEditRequests() {
+  try {
+    const res  = await fetch('/student/edit_request_status');
+    const data = await res.json();
+    _editRequests = {};
+    (data.requests || []).forEach(r => {
+      _editRequests[r.meal_date + '|' + r.meal_type] = r;
+    });
+    // ── Mark meal buttons with pending-cancel state ────────────────────────
+    // When a cancel is pending (manager hasn't approved yet), show the meal
+    // button as "Pending" so student knows it's in review, not just ordered.
+    (data.requests || []).forEach(r => {
+      if (r.action === 'cancel' && r.status === 'pending') {
+        // Find meal buttons for this date+type in the week grid
+        document.querySelectorAll('.day-card[data-date="' + r.meal_date + '"] .meal-btn').forEach(btn => {
+          const label = btn.textContent.trim().toLowerCase();
+          if (label.includes(r.meal_type)) {
+            btn.classList.add('cancel-pending');
+            btn.innerHTML = '<i class="fas fa-hourglass-half" style="font-size:10px"></i> Pending';
+            btn.title = 'Cancel request pending manager approval';
+            btn.disabled = true;
+          }
+        });
+      }
+    });
+  } catch(e) {}
+})();
+
+function openEditDay(date, lunchOrdered, dinnerOrdered) {
+  _editDate = date;
+  const d = new Date(date + 'T00:00:00');
+  const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const nice = `${dayNames[d.getDay()]}, ${d.getDate()} ${monthNames[d.getMonth()]}`;
+  document.getElementById('edit-day-title').textContent = nice;
+  document.getElementById('edit-day-subtitle').textContent = 'Meal edits need manager approval. Tap a button to request.';
+
+  document.getElementById('edit-day-lunch-row').innerHTML  = buildEditRow(date, 'lunch',  lunchOrdered);
+  document.getElementById('edit-day-dinner-row').innerHTML = buildEditRow(date, 'dinner', dinnerOrdered);
+  document.getElementById('edit-day-modal').classList.add('open');
+}
+
+function buildEditRow(date, type, isOrdered) {
+  const icon   = type === 'lunch' ? '🥗' : '🍛';
+  const label  = type === 'lunch' ? 'Lunch' : 'Dinner';
+  const key    = date + '|' + type;
+  const req    = _editRequests[key];
+  const action = isOrdered ? 'cancel' : 'add';
+
+  let actionBtn = '';
+  if (req && req.status === 'approved') {
+    // Has approval — show execute button
+    const btnClass = action === 'cancel' ? 'cancel-meal-btn' : 'add-meal-btn';
+    const btnIcon  = action === 'cancel' ? 'fa-times' : 'fa-plus';
+    const btnLabel = action === 'cancel' ? 'Cancel Meal' : 'Add Meal';
+    actionBtn = `
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+        <span style="font-size:10px;color:var(--primary);font-weight:700;background:var(--primary-pale);padding:2px 8px;border-radius:10px"><i class="fas fa-check-circle"></i> Approved</span>
+        <button class="${btnClass}" onclick="executeEdit('${date}','${type}','${req.id}')">
+          <i class="fas ${btnIcon}"></i> ${btnLabel}
+        </button>
+      </div>`;
+  } else if (req && req.status === 'pending') {
+    actionBtn = `<span style="font-size:12px;color:#b07800;background:#fff8e6;border:1px solid #fcd97d;border-radius:8px;padding:6px 12px;font-weight:600;white-space:nowrap"><i class="fas fa-clock"></i> Awaiting manager</span>`;
+  } else {
+    // No request yet — show Request button
+    const btnClass = action === 'cancel' ? 'cancel-meal-btn' : 'add-meal-btn';
+    const btnIcon  = action === 'cancel' ? 'fa-times' : 'fa-plus';
+    const btnLabel = action === 'cancel' ? 'Request Cancel' : 'Request Add';
+    actionBtn = `
+      <button class="${btnClass}" style="${action==='add'?'':''}background:transparent;color:${action==='cancel'?'var(--danger)':'var(--primary)'};border:1.5px solid ${action==='cancel'?'var(--danger)':'var(--primary)'}" onclick="openRequestModal('${date}','${type}','${action}')">
+        <i class="fas ${btnIcon}"></i> ${btnLabel}
+      </button>`;
+  }
+
+  if (isOrdered) {
+    return `
+      <div class="edit-meal-row" id="edit-row-${type}">
+        <div class="meal-info">
+          <span class="meal-icon">${icon}</span>
+          <div>
+            <div class="meal-label">${label}</div>
+            <div class="meal-status">✓ Ordered · ৳50</div>
+          </div>
+        </div>
+        ${actionBtn}
+      </div>`;
+  } else {
+    return `
+      <div class="not-ordered-row" id="edit-row-${type}">
+        <span style="font-size:20px">${icon}</span>
+        <span style="flex:1">${label} — not ordered</span>
+        ${actionBtn}
+      </div>`;
+  }
+}
+
+function openRequestModal(date, type, action) {
+  _pendingReqTarget = { date, type, action };
+  const label = type === 'lunch' ? 'Lunch' : 'Dinner';
+  const d = new Date(date + 'T00:00:00');
+  const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const nice = `${dayNames[d.getDay()]}, ${d.getDate()} ${monthNames[d.getMonth()]}`;
+  document.getElementById('req-modal-icon').textContent = action === 'cancel' ? '🗑️' : '➕';
+  document.getElementById('req-modal-title').textContent = `Request to ${capitalize(action)} ${label}`;
+  document.getElementById('req-modal-subtitle').textContent = `${nice} · The manager will be notified and must approve before the change is made.`;
+  document.getElementById('req-reason').value = '';
+  document.getElementById('request-edit-modal').classList.add('open');
+}
+
+function closeRequestModal() {
+  document.getElementById('request-edit-modal').classList.remove('open');
+  _pendingReqTarget = null;
+}
+
+async function submitEditRequest() {
+  if (!_pendingReqTarget) return;
+  const { date, type, action } = _pendingReqTarget;
+  const reason = document.getElementById('req-reason').value.trim();
+  const btn = document.getElementById('req-submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending…';
+
+  try {
+    const res  = await fetch('/student/request_meal_edit', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ meal_date: date, meal_type: type, action, reason })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast('📩 Request sent! Waiting for manager approval.', 'success');
+      closeRequestModal();
+      // Refresh request statuses and rebuild rows
+      await loadEditRequests();
+      if (_editDate === date) {
+        const lunchOrdered  = document.getElementById('edit-row-lunch')  ? document.getElementById('edit-row-lunch').classList.contains('edit-meal-row')  : false;
+        const dinnerOrdered = document.getElementById('edit-row-dinner') ? document.getElementById('edit-row-dinner').classList.contains('edit-meal-row') : false;
+        document.getElementById('edit-day-lunch-row').innerHTML  = buildEditRow(date, 'lunch',  lunchOrdered);
+        document.getElementById('edit-day-dinner-row').innerHTML = buildEditRow(date, 'dinner', dinnerOrdered);
+      }
+    } else {
+      toast(data.msg || 'Could not send request.', 'error');
+    }
+  } catch(e) {
+    toast('Network error. Please try again.', 'error');
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Request';
+}
+
+async function executeEdit(date, type, reqId) {
+  const r    = await fetch('/student/execute_meal_edit', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ meal_date: date, meal_type: type, request_id: reqId })
+  });
+  const data = await r.json();
+  if (data.ok) {
+    toast('✅ Meal updated!', 'success');
+    setTimeout(() => location.reload(), 800);
+  } else {
+    toast(data.msg || 'Something went wrong.', 'error');
+  }
+}
+
+function closeEditDay() {
+  document.getElementById('edit-day-modal').classList.remove('open');
+  _editDate = null;
+}
+
+function closeMealConfirm() {
+  document.getElementById('meal-confirm-modal').classList.remove('open');
+  _pendingMeal = null;
+}
+
+// \u2500\u2500 PENDING BKASH CONFLICT CHECK \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+async function getPendingBkash() {
+  try {
+    const r = await fetch('/student/bkash_payment_status');
+    const d = await r.json();
+    return (d.ok && d.pending) ? d.payment : null;
+  } catch(e) { return null; }
+}
+
+async function cancelBkashThenRun(pendingPayment, actionLabel, callback) {
+  const txn = pendingPayment.bkash_txn || '\u2014';
+  const amt  = pendingPayment.amount ? '\u09f3' + pendingPayment.amount : '';
+  const confirmed = confirm(
+    `\u26a0\ufe0f You already submitted a bKash payment!\n\n` +
+    `Transaction ID: ${txn}\n` +
+    (amt ? `Amount: ${amt}\n` : '') +
+    `\nTo use ${actionLabel}, your pending bKash submission must be CANCELLED.\n` +
+    `(You can re-submit bKash later if needed.)\n\n` +
+    `Cancel bKash and switch to ${actionLabel}?`
+  );
+  if (!confirmed) return;
+  const r = await fetch('/student/cancel_bkash_payment', {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'
+  });
+  const d = await r.json();
+  if (!d.ok) { toast(d.msg || 'Could not cancel bKash payment.', 'error'); return; }
+  toast('bKash submission cancelled.', 'warning');
+  await callback();
+}
+
+async function markDue() {
+  const pending = await getPendingBkash();
+  if (pending) {
+    await cancelBkashThenRun(pending, '"Pay Later"', async () => {
+      if (!confirm('Mark all pending meals as "due"? The manager will collect payment from you later.')) return;
+      const r = await fetch('/student/mark_due', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+      const d = await r.json();
+      if (d.ok) { toast(d.msg); setTimeout(()=>location.reload(), 1000); }
+    });
+    return;
+  }
+  if (!confirm('Mark all pending meals as "due"? The manager will collect payment from you later.')) return;
+  const r = await fetch('/student/mark_due', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+  const d = await r.json();
+  if (d.ok) { toast(d.msg); setTimeout(()=>location.reload(), 1000); }
+}
+
+async function openPayModal() {
+  // ── Guard 1: block if a cash request is already pending ──────────────────
+  try {
+    const cr = await fetch('/student/cash_request_status');
+    const cd = await cr.json();
+    if (cd.request && cd.request.status === 'pending') {
+      toast('⚠️ You already have a pending cash payment request. Cancel it first before submitting a bKash payment.', 'error');
+      return;
+    }
+  } catch(_) { /* network hiccup — allow through, backend will catch */ }
+
+  // ── Guard 2: block if a bKash payment is already pending ─────────────────
+  const existingBkash = await getPendingBkash();
+  if (existingBkash) {
+    const txn = existingBkash.bkash_txn || '—';
+    const amt = existingBkash.amount ? '৳' + existingBkash.amount : '';
+    toast(`⚠️ You already submitted bKash TxnID ${txn}${amt ? ' (' + amt + ')' : ''} — it's pending manager verification. You cannot submit another payment until this one is reviewed.`, 'error');
+    return;
+  }
+
+  // ── Safe to open ──────────────────────────────────────────────────────────
+  const num = document.getElementById('mgr-bkash-num').textContent.trim();
+  const modalNum = document.getElementById('modal-bkash-num');
+  if (modalNum && num) modalNum.textContent = num;
+  updatePayModalAmounts();
+  // Clear any leftover TxnID from a previous open
+  const txnInput = document.getElementById('txn-input');
+  if (txnInput) txnInput.value = '';
+  document.getElementById('pay-modal').classList.add('open');
+}
+function closePayModal() {
+  document.getElementById('pay-modal').classList.remove('open');
+}
+
+// Track last submitted TxnID in-session to prevent same-tab double-submit
+let _lastSubmittedTxn = null;
+
+async function submitPayment() {
+  const txnInput = document.getElementById('txn-input');
+  const txn = txnInput.value.trim().toUpperCase();
+  const note = document.getElementById('note-input').value.trim();
+
+  if (!txn) { toast('Enter your bKash transaction ID', 'error'); return; }
+
+  // ── Duplicate TxnID guard ─────────────────────────────────────────────────
+  if (_lastSubmittedTxn && _lastSubmittedTxn === txn) {
+    toast('⚠️ You already submitted this Transaction ID. Do not re-submit the same TxnID.', 'error');
+    return;
+  }
+  if (txn.length < 6) {
+    toast('Transaction ID looks too short — please double-check.', 'error');
+    return;
+  }
+
+  // Disable button while in-flight to prevent double-tap
+  const submitBtn = document.querySelector('#pay-modal .btn-primary');
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting…'; }
+
+  const r = await fetch('/student/submit_payment', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({bkash_txn: txn, note})
+  });
+  const d = await r.json();
+
+  if (d.ok) {
+    _lastSubmittedTxn = txn;
+    toast(d.msg);
+    closePayModal();
+    setTimeout(()=>location.reload(), 1200);
+  } else {
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Proof'; }
+    toast(d.msg, 'error');
+  }
+}
+
+function copyBkash() {
+  const num = document.getElementById('mgr-bkash-num').textContent.trim();
+  navigator.clipboard.writeText(num).then(()=>toast('bKash number copied!')).catch(()=>toast('Copy: '+num));
+}
+
+async function refreshBkash() {
+  const btn = document.getElementById('refresh-bkash-btn');
+  if (btn) { btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; btn.disabled = true; }
+  try {
+    const r = await fetch('/api/current_bkash');
+    const d = await r.json();
+    if (d.bkash_number) {
+      document.getElementById('mgr-bkash-num').textContent = d.bkash_number;
+      const modalNum = document.getElementById('modal-bkash-num');
+      if (modalNum) modalNum.textContent = d.bkash_number;
+      toast('bKash number refreshed!');
+    }
+  } catch(e) { toast('Could not refresh', 'error'); }
+  finally {
+    if (btn) { btn.innerHTML = '<i class="fas fa-sync-alt"></i>'; btn.disabled = false; }
+  }
+}
+
+function capitalize(s) { return s.charAt(0).toUpperCase()+s.slice(1); }
+
+// Close modals on overlay click
+document.getElementById('meal-confirm-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeMealConfirm();
+});
+document.getElementById('pay-modal').addEventListener('click', function(e) {
+  if (e.target === this) closePayModal();
+});
+document.getElementById('cash-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeCashModal();
+});
+
+// --- Cash Payment ---
+async function openCashModal() {
+  // Check for conflicting pending bKash payment first
+  const pending = await getPendingBkash();
+  if (pending) {
+    await cancelBkashThenRun(pending, 'Cash Payment', () => {
+      document.getElementById('cash-modal').classList.add('open');
+      _loadCashStatus();
+    });
+    return;
+  }
+  document.getElementById('cash-modal').classList.add('open');
+  await _loadCashStatus();
+}
+
+async function _loadCashStatus() {
+  const statusArea = document.getElementById('cash-status-area');
+  const formArea   = document.getElementById('cash-form-area');
+
+  // Fetch the real current amount (ALL unpaid meals) to update the display
+  try {
+    const ar = await fetch('/student/unpaid_meal_count');
+    const ad = await ar.json();
+    const amountEl = document.getElementById('cash-amount-display');
+    if (amountEl) amountEl.textContent = '\u09f3' + (ad.amount || 0);
+  } catch(_) {}
+
+  // Check existing request status
+  const r = await fetch('/student/cash_request_status');
+  const d = await r.json();
+
+  if (d.request) {
+    const req = d.request;
+
+    if (req.status === 'pending') {
+      // Actively waiting — block form to prevent double-submission
+      statusArea.innerHTML = `
+        <div style="background:#fff8e6;border:1.5px solid #fcd97d;border-radius:8px;padding:16px;margin-bottom:16px;text-align:center">
+          <div style="font-size:28px;margin-bottom:8px">⏳</div>
+          <div style="font-weight:700;color:#7c5f00;font-size:15px">Request Pending</div>
+          <div style="font-size:13px;color:#a07020;margin-top:4px">Your cash payment request of <strong>৳${req.amount}</strong> is awaiting manager approval.</div>
+        </div>`;
+      formArea.style.display = 'none';
+      return;
+    }
+
+    if (req.status === 'accepted') {
+      // Previous payment done — show brief notice, keep form open for new meals
+      statusArea.innerHTML = `
+        <div style="background:#e8f5ee;border:1.5px solid #b7e4c7;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">✅</span>
+          <div>
+            <div style="font-weight:700;color:var(--primary);font-size:13px">Last payment accepted (৳${req.amount})</div>
+            <div style="font-size:12px;color:#2d7a4a;margin-top:2px">You can submit a new request for remaining meals below.</div>
+          </div>
+        </div>`;
+      formArea.style.display = '';
+      return;
+    }
+
+    if (req.status === 'declined') {
+      statusArea.innerHTML = `
+        <div style="background:var(--danger-light);border:1.5px solid #feb2b2;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">❌</span>
+          <div>
+            <div style="font-weight:700;color:var(--danger);font-size:13px">Last request was declined</div>
+            <div style="font-size:12px;color:#c53030;margin-top:2px">You can submit a new one below.</div>
+          </div>
+        </div>`;
+      formArea.style.display = '';
+      return;
+    }
+  }
+
+  // No previous request at all — clean slate
+  statusArea.innerHTML = '';
+  formArea.style.display = '';
+}
+
+function closeCashModal() {
+  document.getElementById('cash-modal').classList.remove('open');
+}
+
+async function submitCashRequest() {
+  const note = document.getElementById('cash-note-input').value.trim();
+
+  // Disable the submit button while in-flight to prevent double-tap
+  const submitBtn = document.querySelector('#cash-modal .btn-primary');
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending…'; }
+
+  const r = await fetch('/student/request_cash_payment', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({note})
+  });
+  const d = await r.json();
+  if (d.ok) {
+    toast(d.msg);
+    closeCashModal();
+    setTimeout(()=>location.reload(), 1200);
+  } else {
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="fas fa-money-bill-wave"></i> Send Request'; }
+    toast(d.msg, 'error');
+  }
+}
+// ── DUTY ROTATION INVITES ────────────────────────────────────────────────────
+
+const DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+function fmtWeek(ws) {
+  // ws = 'YYYY-MM-DD' (Monday)
+  const d = new Date(ws + 'T00:00:00');
+  const end = new Date(d); end.setDate(d.getDate() + 6);
+  const fmt = d2 => d2.toLocaleDateString('en-GB', {day:'numeric', month:'short'});
+  return `${fmt(d)} – ${fmt(end)}`;
+}
+
+async function loadDutyInvites() {
+  try {
+    const r = await fetch('/student/duty_invites');
+    const d = await r.json();
+    renderDutyInvites(d.invites || []);
+  } catch(e) { console.error(e); }
+}
+
+function renderDutyInvites(invites) {
+  const pendingArea = document.getElementById('duty-pending-area');
+  const credsArea   = document.getElementById('duty-creds-area');
+  const emptyState  = document.getElementById('duty-empty');
+
+  const pending  = invites.filter(i => i.status === 'pending');
+  const accepted = invites.filter(i => i.status === 'accepted');
+
+  // Pending invites
+  if (pending.length > 0) {
+    pendingArea.innerHTML = pending.map(inv => `
+      <div style="margin:0;padding:18px 24px;border-bottom:1px solid var(--border);background:#fffbeb">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+              <span style="background:#f59e0b;color:#fff;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700">
+                <i class="fas fa-bell"></i> DUTY ASSIGNED
+              </span>
+              <span style="font-size:12px;color:var(--text-muted)">Slot #${inv.slot}</span>
+            </div>
+            <div style="font-size:15px;font-weight:700;color:#92400e;margin-bottom:4px">
+              📅 Week of ${fmtWeek(inv.week_start)}
+            </div>
+            <div style="font-size:13px;color:#78350f;margin-bottom:10px">
+              You have been assigned to the weekly duty roster for this week. Accept to receive your shared duty login credentials.
+            </div>
+            <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:12px;color:#92400e">
+              <i class="fas fa-info-circle"></i> All 4 duty students share the same login ID & password for the week. Credentials are generated randomly each week.
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;min-width:120px">
+            <button class="btn btn-accent btn-sm" onclick="acceptDuty(${inv.id})" style="justify-content:center">
+              <i class="fas fa-check"></i> Accept Duty
+            </button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  } else {
+    pendingArea.innerHTML = '';
+  }
+
+  // Accepted credentials (permanent)
+  if (accepted.length > 0) {
+    credsArea.innerHTML = accepted.map(inv => `
+      <div style="margin:0;padding:18px 24px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+          <span style="background:var(--primary-pale);color:var(--primary);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700">
+            <i class="fas fa-shield-check"></i> DUTY CREDENTIALS
+          </span>
+          <span style="font-size:12px;color:var(--text-muted)">Week of ${fmtWeek(inv.week_start)} · Slot #${inv.slot}</span>
+          <span style="font-size:12px;color:var(--text-muted)">Accepted ${inv.accepted_at ? inv.accepted_at.slice(0,10) : ''}</span>
+        </div>
+        <div style="background:#e8f5ee;border:1.5px solid #b7e4c7;border-radius:12px;padding:18px 20px;margin-bottom:10px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div>
+              <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Duty ID</div>
+              <div style="font-size:18px;font-weight:800;color:var(--primary);font-family:monospace;letter-spacing:1px">${inv.duty_id}</div>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Password</div>
+              <div style="font-size:18px;font-weight:800;color:var(--primary);font-family:monospace;letter-spacing:1px" id="duty-pw-${inv.id}">••••••••</div>
+            </div>
+          </div>
+          <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm" onclick="toggleDutyPw(${inv.id}, '${inv.duty_password}')" style="font-size:12px">
+              <i class="fas fa-eye" id="eye-${inv.id}"></i> Show Password
+            </button>
+            <button class="btn btn-outline btn-sm" onclick="copyDutyCreds('${inv.duty_id}','${inv.duty_password}')" style="font-size:12px">
+              <i class="fas fa-copy"></i> Copy Credentials
+            </button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted)">
+          <i class="fas fa-info-circle"></i> These credentials are shared with all duty students assigned to the same week.
+          Keep them safe and do not share with non-duty students.
+        </div>
+      </div>
+    `).join('');
+  } else {
+    credsArea.innerHTML = '';
+  }
+
+  // Empty state
+  if (pending.length === 0 && accepted.length === 0) {
+    emptyState.style.display = '';
+  } else {
+    emptyState.style.display = 'none';
+  }
+}
+
+function toggleDutyPw(id, pw) {
+  const el  = document.getElementById(`duty-pw-${id}`);
+  const eye = document.getElementById(`eye-${id}`);
+  if (el.textContent === '••••••••') {
+    el.textContent = pw;
+    eye.className  = 'fas fa-eye-slash';
+  } else {
+    el.textContent = '••••••••';
+    eye.className  = 'fas fa-eye';
+  }
+}
+
+function copyDutyCreds(id, pw) {
+  navigator.clipboard.writeText(`Duty ID: ${id}\nPassword: ${pw}`)
+    .then(() => toast('Duty credentials copied!'))
+    .catch(() => toast(`ID: ${id} | PW: ${pw}`));
+}
+
+async function acceptDuty(inviteId) {
+  const r = await fetch('/student/accept_duty', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({invite_id: inviteId})
+  });
+  const d = await r.json();
+  if (d.ok) {
+    toast('✅ Duty accepted! Your credentials are saved below.');
+    loadDutyInvites();
+    // Hide badge if no more pending
+    checkInviteBadge();
+  } else {
+    toast(d.msg, 'error');
+  }
+}
+
+// ── MANAGER TRANSFER INVITES ────────────────────────────────────────────────
+async function loadInvites() {
+  loadDutyInvites();  // also reload duty invites when tab opens
+
+  const area = document.getElementById('invite-list-area');
+  const empty = document.getElementById('invite-empty');
+  const r = await fetch('/student/transfer_invites');
+  const d = await r.json();
+  if (!d.invites || d.invites.length === 0) {
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  area.innerHTML = d.invites.map(inv => `
+    <div style="background:#f0f7f2;border:1.5px solid #b7e4c7;border-radius:10px;padding:20px 24px;margin-bottom:14px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:15px;font-weight:700;color:var(--primary);margin-bottom:4px">
+            <i class="fas fa-envelope-open-text"></i> Manager Role Invitation
+          </div>
+          <div style="font-size:13px;color:var(--text-muted)">From: <strong>${inv.from_manager_id}</strong></div>
+          <div style="font-size:13px;color:var(--text-muted)">Received: ${inv.created_at ? inv.created_at.slice(0,10) : ''}</div>
+          <div style="margin-top:10px;font-size:13px;color:#1a6b3a;background:#e8f5ee;padding:8px 12px;border-radius:7px">
+            <i class="fas fa-info-circle"></i> If you accept, you will become the new meal manager. Your manager ID will be <strong>${inv.new_manager_id}</strong> and you will receive a temporary password.
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;min-width:130px">
+          <button class="btn btn-primary btn-sm" onclick="respondInvite(${inv.id}, 'accept')">
+            <i class="fas fa-check"></i> Accept
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="respondInvite(${inv.id}, 'decline')">
+            <i class="fas fa-times"></i> Decline
+          </button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function respondInvite(inviteId, action) {
+  if (action === 'accept' && !confirm('Are you sure you want to become the new Meal Manager? The current manager will be deactivated.')) return;
+  const r = await fetch('/student/respond_transfer', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({invite_id: inviteId, action})
+  });
+  const d = await r.json();
+  if (d.ok) {
+    if (action === 'accept') {
+      document.getElementById('cred-mgr-id').textContent   = d.manager_id;
+      document.getElementById('cred-temp-pass').textContent = d.temp_password;
+      document.getElementById('accept-modal').classList.add('open');
+    } else {
+      toast('Invite declined.');
+      loadInvites();
+    }
+  } else {
+    toast(d.msg, 'error');
+  }
+}
+
+function closeAcceptModal() {
+  document.getElementById('accept-modal').classList.remove('open');
+  loadInvites();
+}
+
+function copyCredsAndClose() {
+  const id   = document.getElementById('cred-mgr-id').textContent;
+  const pass = document.getElementById('cred-temp-pass').textContent;
+  navigator.clipboard.writeText(`Manager ID: ${id}\nTemp Password: ${pass}`)
+    .then(() => toast('Credentials copied!'))
+    .catch(() => toast(`ID: ${id} | Pass: ${pass}`));
+  closeAcceptModal();
+}
+
+// Check for pending invites on load and show badge
+async function checkInviteBadge() {
+  try {
+    let hasPending = false;
+    const r1 = await fetch('/student/transfer_invites');
+    const d1 = await r1.json();
+    if (d1.invites && d1.invites.length > 0) hasPending = true;
+
+    const r2 = await fetch('/student/duty_invites');
+    const d2 = await r2.json();
+    if (d2.invites && d2.invites.some(i => i.status === 'pending')) hasPending = true;
+
+    document.getElementById('invite-badge').style.display = hasPending ? 'inline' : 'none';
+  } catch(e) {}
+}
+checkInviteBadge();
+
+// ── Live ordering-lock polling ────────────────────────────────────────────────
+// Polls every 15 s. If the manager changes the lock state, page reloads.
+(function startLockPoll() {
+  const currentlyLocked = {{ 'true' if ordering_locked else 'false' }};
+  // ordering_open is always true now — only manager lock matters
+  async function checkLock() {
+    try {
+      const r = await fetch('/api/ordering_lock_status', { credentials: 'same-origin' });
+      if (!r.ok) return;
+      const d = await r.json();
+      if (d.ordering_locked !== currentlyLocked) {
+        location.reload();
+      }
+    } catch(e) {}
+  }
+  setInterval(checkLock, 15000);
+})();
+
+</script>
+{% endblock %}

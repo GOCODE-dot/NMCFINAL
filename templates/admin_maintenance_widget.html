@@ -1,0 +1,337 @@
+<!--
+  ══════════════════════════════════════════════════════════════════════════════
+  MAINTENANCE PANEL — paste this into admin_dashboard.html
+  Suggested location: near the top of the dashboard content, after page header
+  ══════════════════════════════════════════════════════════════════════════════
+-->
+
+<style>
+  /* ─── Maintenance Toggle Card ─────────────────────────────────────────── */
+  .maint-panel {
+    background: #fff;
+    border-radius: var(--radius);
+    border: 2px solid var(--border);
+    padding: 0;
+    overflow: hidden;
+    margin-bottom: 24px;
+    transition: border-color .25s;
+  }
+  .maint-panel.active {
+    border-color: #e53e3e;
+    box-shadow: 0 0 0 4px rgba(229,62,62,.08);
+  }
+
+  /* Header row */
+  .maint-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 24px;
+    background: #f8fafc;
+    border-bottom: 1px solid var(--border);
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .maint-header-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+  }
+  .maint-icon {
+    width: 46px; height: 46px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    font-size: 20px;
+    flex-shrink: 0;
+    transition: background .3s;
+  }
+  .maint-icon.off { background: #f1f5f9; }
+  .maint-icon.on  { background: #fff5f5; }
+
+  .maint-label h3 { font-size: 15px; font-weight: 700; color: var(--text); }
+  .maint-label p  { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+  /* Big toggle switch */
+  .toggle-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .toggle-text {
+    font-size: 13px;
+    font-weight: 700;
+    min-width: 60px;
+    text-align: right;
+    transition: color .2s;
+  }
+  .toggle-text.off { color: var(--text-muted); }
+  .toggle-text.on  { color: #e53e3e; }
+
+  .toggle-switch {
+    position: relative;
+    width: 56px;
+    height: 30px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .toggle-track {
+    position: absolute;
+    inset: 0;
+    border-radius: 30px;
+    background: #e2e8f0;
+    transition: background .25s;
+  }
+  .toggle-switch input:checked + .toggle-track { background: #e53e3e; }
+  .toggle-knob {
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+    transition: transform .25s cubic-bezier(0.34,1.4,0.64,1);
+  }
+  .toggle-switch input:checked ~ .toggle-knob { transform: translateX(26px); }
+
+  /* Body */
+  .maint-body {
+    padding: 20px 24px;
+  }
+
+  /* Status banner (shown when maintenance is ON) */
+  .maint-status-banner {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    background: #fff5f5;
+    border: 1px solid #feb2b2;
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    font-size: 13px;
+    color: #e53e3e;
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+  .maint-status-banner.visible { display: flex; }
+  .maint-status-dot {
+    width: 8px; height: 8px;
+    background: #e53e3e;
+    border-radius: 50%;
+    animation: statusPulse 1.4s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  @keyframes statusPulse {
+    0%,100% { opacity:1; box-shadow:0 0 0 0 rgba(229,62,62,.5); }
+    50%      { opacity:.8; box-shadow:0 0 0 5px rgba(229,62,62,0); }
+  }
+
+  /* Message textarea */
+  .maint-msg-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin-bottom: 8px;
+    display: block;
+  }
+  #maintMsg {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 14px;
+    color: var(--text);
+    resize: vertical;
+    min-height: 80px;
+    transition: border .2s;
+  }
+  #maintMsg:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,107,58,.1); }
+
+  /* Action buttons row */
+  .maint-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+  }
+  #maintSaveBtn {
+    padding: 10px 22px;
+    border-radius: var(--radius-sm);
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all .2s;
+  }
+  #maintSaveBtn:hover { background: var(--primary-light); transform: translateY(-1px); }
+  #maintSaveBtn:active { transform: scale(0.98); }
+  #maintSaveBtn.saving { opacity: .6; pointer-events: none; }
+
+  #maintPreviewBtn {
+    padding: 10px 18px;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    border: 1.5px solid var(--border);
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all .2s;
+    text-decoration: none;
+  }
+  #maintPreviewBtn:hover { border-color: var(--primary); color: var(--primary); }
+
+  .maint-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 10px;
+  }
+  .maint-hint a { color: var(--primary); text-decoration: none; }
+
+  @media(max-width:480px) {
+    .maint-header { padding: 14px 16px; }
+    .maint-body   { padding: 16px; }
+    .toggle-text  { display: none; }
+  }
+</style>
+
+<!-- ─── MAINTENANCE PANEL ─────────────────────────────────────────────────── -->
+<div class="maint-panel" id="maintPanel">
+  <div class="maint-header">
+    <div class="maint-header-left">
+      <div class="maint-icon off" id="maintIcon">🔧</div>
+      <div class="maint-label">
+        <h3>Site Maintenance Mode</h3>
+        <p id="maintSubtitle">Turn on to pause the site for all users (except admin)</p>
+      </div>
+    </div>
+    <div class="toggle-wrap">
+      <span class="toggle-text off" id="maintToggleText">OFF</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="maintToggle" onchange="onMaintToggle()">
+        <span class="toggle-track"></span>
+        <span class="toggle-knob"></span>
+      </label>
+    </div>
+  </div>
+  <div class="maint-body">
+    <div class="maint-status-banner" id="maintBanner">
+      <span class="maint-status-dot"></span>
+      Site is currently IN MAINTENANCE — students and managers cannot access NMMS
+    </div>
+    <label class="maint-msg-label" for="maintMsg">Custom Message <span style="font-weight:400;text-transform:none;font-size:11px">(optional — shown on maintenance page)</span></label>
+    <textarea id="maintMsg" placeholder="e.g. We are upgrading the payment system. Back in ~30 minutes."></textarea>
+    <div class="maint-actions">
+      <button id="maintSaveBtn" onclick="saveMaintenance()">
+        <i class="fas fa-save"></i> Save &amp; Apply
+      </button>
+      <a id="maintPreviewBtn" href="/maintenance_preview" target="_blank">
+        <i class="fas fa-eye"></i> Preview Page
+      </a>
+    </div>
+    <p class="maint-hint">
+      <i class="fas fa-info-circle"></i>
+      Admin panel at <code>/admin/dashboard</code> always stays accessible.
+      <a href="/maintenance_preview" target="_blank">Preview the maintenance page →</a>
+    </p>
+  </div>
+</div>
+
+<script>
+// ─── Maintenance Panel Logic ─────────────────────────────────────────────────
+
+// Load current status on page load
+(async function loadMaintStatus() {
+  try {
+    const res  = await fetch('/admin/maintenance_status');
+    const data = await res.json();
+    setMaintUI(data.maintenance, data.message);
+  } catch(e) { /* silently fail */ }
+})();
+
+function setMaintUI(enabled, message) {
+  const toggle   = document.getElementById('maintToggle');
+  const panel    = document.getElementById('maintPanel');
+  const icon     = document.getElementById('maintIcon');
+  const text     = document.getElementById('maintToggleText');
+  const banner   = document.getElementById('maintBanner');
+  const subtitle = document.getElementById('maintSubtitle');
+  const msg      = document.getElementById('maintMsg');
+
+  toggle.checked = enabled;
+  msg.value      = message || '';
+
+  if (enabled) {
+    panel.classList.add('active');
+    icon.classList.replace('off', 'on');
+    text.textContent = 'ON';
+    text.classList.replace('off', 'on');
+    banner.classList.add('visible');
+    subtitle.textContent = 'Maintenance is ACTIVE — users are blocked';
+  } else {
+    panel.classList.remove('active');
+    icon.classList.replace('on', 'off');
+    text.textContent = 'OFF';
+    text.classList.replace('on', 'off');
+    banner.classList.remove('visible');
+    subtitle.textContent = 'Turn on to pause the site for all users (except admin)';
+  }
+}
+
+function onMaintToggle() {
+  const enabled = document.getElementById('maintToggle').checked;
+  const message = document.getElementById('maintMsg').value;
+  setMaintUI(enabled, message);
+}
+
+async function saveMaintenance() {
+  const enabled = document.getElementById('maintToggle').checked;
+  const message = document.getElementById('maintMsg').value.trim();
+  const btn     = document.getElementById('maintSaveBtn');
+
+  btn.classList.add('saving');
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+  try {
+    const res  = await fetch('/admin/set_maintenance', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ enabled, message })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      setMaintUI(data.maintenance, data.message);
+      btn.innerHTML = '<i class="fas fa-check"></i> Saved!';
+      btn.style.background = 'var(--primary)';
+      toast(enabled ? '🔧 Maintenance mode is now ON' : '✅ Site is back online', enabled ? 'error' : 'success');
+      setTimeout(() => {
+        btn.classList.remove('saving');
+        btn.innerHTML = '<i class="fas fa-save"></i> Save & Apply';
+      }, 2000);
+    } else {
+      throw new Error(data.msg || 'Failed');
+    }
+  } catch(e) {
+    toast('Error: ' + e.message, 'error');
+    btn.classList.remove('saving');
+    btn.innerHTML = '<i class="fas fa-save"></i> Save & Apply';
+  }
+}
+</script>

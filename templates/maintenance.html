@@ -1,0 +1,376 @@
+{% extends 'base.html' %}
+{% block title %}Service Maintenance{% endblock %}
+{% block extra_head %}
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --m-bg: #0b0f19;
+    --m-card: #111827;
+    --m-border: rgba(99,102,241,0.2);
+    --m-primary: #6366f1;
+    --m-accent: #f59e0b;
+    --m-text: #f1f5f9;
+    --m-muted: #64748b;
+    --m-glow: rgba(99,102,241,0.15);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--m-bg);
+    font-family: 'Syne', 'Plus Jakarta Sans', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Animated background grid */
+  .bg-grid {
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(99,102,241,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(99,102,241,0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+    z-index: 0;
+    animation: gridDrift 20s linear infinite;
+  }
+  @keyframes gridDrift {
+    from { transform: translate(0, 0); }
+    to   { transform: translate(48px, 48px); }
+  }
+
+  /* Glowing orbs */
+  .orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(80px);
+    z-index: 0;
+    pointer-events: none;
+  }
+  .orb-1 {
+    width: 500px; height: 500px;
+    background: radial-gradient(circle, rgba(99,102,241,0.18) 0%, transparent 70%);
+    top: -100px; left: -100px;
+    animation: float1 8s ease-in-out infinite;
+  }
+  .orb-2 {
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(245,158,11,0.12) 0%, transparent 70%);
+    bottom: -80px; right: -80px;
+    animation: float2 10s ease-in-out infinite;
+  }
+  @keyframes float1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(40px,30px)} }
+  @keyframes float2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-30px,-20px)} }
+
+  /* Main card */
+  .card {
+    position: relative;
+    z-index: 1;
+    background: var(--m-card);
+    border: 1px solid var(--m-border);
+    border-radius: 24px;
+    padding: 56px 48px;
+    max-width: 560px;
+    width: calc(100% - 32px);
+    text-align: center;
+    box-shadow:
+      0 0 0 1px rgba(99,102,241,0.1),
+      0 32px 80px rgba(0,0,0,0.5),
+      0 0 100px var(--m-glow);
+    animation: cardIn 0.7s cubic-bezier(0.34,1.3,0.64,1) both;
+  }
+  @keyframes cardIn {
+    from { transform: translateY(40px) scale(0.95); opacity: 0; }
+    to   { transform: translateY(0) scale(1); opacity: 1; }
+  }
+
+  /* Gear icon cluster */
+  .icon-cluster {
+    position: relative;
+    width: 96px;
+    height: 96px;
+    margin: 0 auto 32px;
+  }
+  .icon-main {
+    width: 96px; height: 96px;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    border-radius: 26px;
+    display: grid;
+    place-items: center;
+    font-size: 42px;
+    box-shadow: 0 8px 32px rgba(99,102,241,0.4), 0 0 0 1px rgba(255,255,255,0.06);
+    animation: gearSpin 8s linear infinite;
+  }
+  @keyframes gearSpin {
+    0%   { transform: rotate(0deg);   }
+    100% { transform: rotate(360deg); }
+  }
+  .icon-pip {
+    position: absolute;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 13px;
+    border: 2px solid var(--m-card);
+    animation: pipPop 0.5s cubic-bezier(0.34,1.4,0.64,1) both;
+  }
+  .pip-1 { background: #f59e0b; bottom: -4px; right: -6px; animation-delay: 0.2s; }
+  .pip-2 { background: #10b981; top: -4px;    right: -6px; animation-delay: 0.35s; }
+  @keyframes pipPop { from{transform:scale(0)} to{transform:scale(1)} }
+
+  /* Title */
+  .title {
+    font-size: clamp(26px, 6vw, 36px);
+    font-weight: 800;
+    color: var(--m-text);
+    line-height: 1.15;
+    letter-spacing: -0.5px;
+    margin-bottom: 10px;
+  }
+  .title span {
+    background: linear-gradient(135deg, #a5b4fc, #818cf8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Subtitle */
+  .subtitle {
+    font-size: 15px;
+    color: var(--m-muted);
+    line-height: 1.65;
+    margin-bottom: 32px;
+    font-weight: 400;
+  }
+
+  /* Status bar */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: rgba(99,102,241,0.08);
+    border: 1px solid rgba(99,102,241,0.15);
+    border-radius: 50px;
+    padding: 10px 20px;
+    margin-bottom: 28px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: #a5b4fc;
+    letter-spacing: 0.5px;
+  }
+  .status-dot {
+    width: 8px; height: 8px;
+    background: #f59e0b;
+    border-radius: 50%;
+    flex-shrink: 0;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity:1; transform:scale(1); box-shadow: 0 0 0 0 rgba(245,158,11,0.5); }
+    50%      { opacity:0.7; transform:scale(1.2); box-shadow: 0 0 0 4px rgba(245,158,11,0); }
+  }
+
+  /* Info pills */
+  .info-pills {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 32px;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--m-muted);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 40px;
+    padding: 7px 14px;
+    font-weight: 500;
+  }
+  .pill i { color: #6366f1; font-size: 11px; }
+
+  /* Divider */
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(99,102,241,0.2), transparent);
+    margin: 28px 0;
+  }
+
+  /* Custom message */
+  .custom-message {
+    background: rgba(245,158,11,0.06);
+    border: 1px solid rgba(245,158,11,0.2);
+    border-radius: 12px;
+    padding: 16px 20px;
+    font-size: 14px;
+    color: #fcd34d;
+    line-height: 1.6;
+    text-align: left;
+    margin-bottom: 28px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .custom-message i { color: #f59e0b; margin-top: 2px; flex-shrink: 0; }
+
+  /* Footer / brand */
+  .brand-footer {
+    font-size: 12px;
+    color: #334155;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .brand-dot { width: 4px; height: 4px; background: #334155; border-radius: 50%; }
+
+  @media(max-width:480px) {
+    .card { padding: 40px 24px; }
+    .icon-main { width: 80px; height: 80px; font-size: 34px; }
+    .icon-cluster { width: 80px; height: 80px; }
+  }
+</style>
+{% endblock %}
+{% block body %}
+<div class="bg-grid"></div>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+
+{% if session.get('role') == 'admin' %}
+<style>
+  .admin-secret-trigger {
+    position: fixed;
+    top: 0; right: 0;
+    width: 52px; height: 52px;
+    z-index: 200;
+    cursor: default;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .admin-secret-menu {
+    display: none;
+    position: fixed;
+    top: 60px; right: 12px;
+    z-index: 300;
+    flex-direction: column;
+    gap: 8px;
+    animation: menuFadeIn .18s ease both;
+  }
+  .admin-secret-menu.open { display: flex; }
+  @keyframes menuFadeIn {
+    from { opacity:0; transform:translateY(-6px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+  .admin-secret-menu a {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 9px 16px;
+    border-radius: 10px;
+    font-size: 13px; font-weight: 600;
+    text-decoration: none;
+    font-family: 'Syne','Plus Jakarta Sans',sans-serif;
+    backdrop-filter: blur(8px);
+    transition: all .2s;
+    white-space: nowrap;
+  }
+  .admin-secret-menu .link-panel {
+    background: rgba(99,102,241,0.15);
+    border: 1px solid rgba(99,102,241,0.35);
+    color: #a5b4fc;
+  }
+  .admin-secret-menu .link-panel:hover { background: rgba(99,102,241,0.28); }
+  .admin-secret-menu .link-logout {
+    background: rgba(229,62,62,0.15);
+    border: 1px solid rgba(229,62,62,0.35);
+    color: #fca5a5;
+  }
+  .admin-secret-menu .link-logout:hover { background: rgba(229,62,62,0.28); }
+</style>
+
+<!-- Invisible corner zone — triple-click top-right corner to reveal menu -->
+<div class="admin-secret-trigger" id="secretTrigger"></div>
+
+<div class="admin-secret-menu" id="secretMenu">
+  <a href="{{ url_for('admin_dashboard') }}" class="link-panel">
+    <i class="fas fa-shield-halved"></i> Admin Panel
+  </a>
+  <a href="{{ url_for('admin_logout') }}" class="link-logout">
+    <i class="fas fa-right-from-bracket"></i> Logout
+  </a>
+</div>
+
+<script>
+(function(){
+  var trigger = document.getElementById('secretTrigger');
+  var menu    = document.getElementById('secretMenu');
+  var clicks  = 0, timer;
+
+  trigger.addEventListener('click', function(){
+    clicks++;
+    clearTimeout(timer);
+    timer = setTimeout(function(){ clicks = 0; }, 700);
+    if (clicks >= 3) {
+      clicks = 0;
+      menu.classList.toggle('open');
+    }
+  });
+
+  document.addEventListener('click', function(e){
+    if (!trigger.contains(e.target) && !menu.contains(e.target)) {
+      menu.classList.remove('open');
+    }
+  });
+})();
+</script>
+{% endif %}
+
+<div class="card">
+  <div class="icon-cluster">
+    <div class="icon-main">⚙️</div>
+    <div class="icon-pip pip-1">🔧</div>
+    <div class="icon-pip pip-2">✓</div>
+  </div>
+
+  <h1 class="title">Service <span>Under Maintenance</span></h1>
+  <p class="subtitle">
+    NMMS is temporarily offline while our team performs scheduled improvements.
+    We'll be back up shortly.
+  </p>
+
+  <div class="status-bar">
+    <span class="status-dot"></span>
+    MAINTENANCE IN PROGRESS · NMMS v2
+  </div>
+
+  {% if maintenance_message %}
+  <div class="custom-message">
+    <i class="fas fa-info-circle"></i>
+    <span>{{ maintenance_message }}</span>
+  </div>
+  {% endif %}
+
+  <div class="info-pills">
+    <div class="pill"><i class="fas fa-clock"></i> Temporary downtime</div>
+    <div class="pill"><i class="fas fa-shield-alt"></i> Data is safe</div>
+    <div class="pill"><i class="fas fa-wrench"></i> System upgrade</div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="brand-footer">
+    <span>Netrokona Medical</span>
+    <span class="brand-dot"></span>
+    <span>Meal Management System</span>
+    <span class="brand-dot"></span>
+    <span>NMMS</span>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,2166 @@
+{% extends 'base.html' %}
+{% block title %}Admin Dashboard{% endblock %}
+{% block extra_head %}
+<style>
+  body { background: #0d1117; }
+  nav { background: #161b22; border-bottom: 1px solid #30363d; }
+  .nav-brand { color: #e94560 !important; }
+  .nav-brand .logo { background: linear-gradient(135deg, #e94560, #c2185b) !important; }
+  .admin-hero { background: linear-gradient(135deg, #161b22, #0d1117); border-bottom: 1px solid #30363d; padding: 28px 0; margin-bottom: 32px; }
+  .admin-hero h1 { color: #e6edf3; font-size: 24px; }
+  .admin-hero p { color: #8b949e; font-size: 14px; margin-top: 4px; }
+  .dark-card { background: #161b22; border: 1px solid #30363d; border-radius: var(--radius); color: #e6edf3; }
+  .dark-stat { background: #161b22; border: 1px solid #30363d; border-radius: var(--radius); padding: 22px; }
+  .dark-stat .val { font-size: 30px; font-weight: 700; color: #e6edf3; }
+  .dark-stat .lbl { font-size: 13px; color: #8b949e; margin-top: 2px; }
+  .reset-zone { border: 1.5px dashed #30363d; border-radius: var(--radius); padding: 20px; margin-bottom: 16px; transition: border-color .2s; background: #161b22; }
+  .reset-zone:hover { border-color: #e94560; }
+  .reset-zone h4 { color: #e6edf3; font-size: 15px; margin-bottom: 6px; }
+  .reset-zone p { color: #8b949e; font-size: 13px; margin-bottom: 14px; }
+  .btn-admin-danger { background: #da3633; color: #fff; border: none; }
+  .btn-admin-danger:hover { background: #b91c1c; transform: none; }
+  .btn-admin-warn { background: #d97706; color: #fff; border: none; }
+  .btn-admin-warn:hover { background: #b45309; transform: none; }
+  .btn-admin-safe { background: #238636; color: #fff; border: none; }
+  .btn-admin-safe:hover { background: #196c2e; transform: none; }
+  .log-row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid #21262d; font-size: 13px; }
+  .log-row:last-child { border-bottom: none; }
+  .log-time { color: #8b949e; white-space: nowrap; font-family: monospace; font-size: 12px; }
+  .log-action { color: #e6edf3; flex: 1; }
+  .log-admin { color: #58a6ff; font-weight: 600; }
+  .pw-input { background: #0d1117; border: 1.5px solid #30363d; border-radius: var(--radius-sm); color: #e6edf3; padding: 10px 14px; font-family: inherit; font-size: 14px; width: 100%; margin-bottom: 10px; }
+  .pw-input:focus { outline: none; border-color: #238636; }
+  .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #8b949e; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #21262d; }
+  .badge-admin { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; background: rgba(233,69,96,.2); color: #e94560; border: 1px solid rgba(233,69,96,.3); }
+  @media(max-width:600px) {
+    .nav-links { gap: 4px; }
+    .nav-links .btn { padding: 6px 10px; font-size: 12px; }
+    .nav-links .badge-admin { display: none; }
+    .admin-hero h1 { font-size: 18px; }
+    .dark-stat .val { font-size: 22px; }
+    .pw-input { font-size: 16px; }
+  }
+  @media(max-width:720px) {
+    .admin-two-col { grid-template-columns: 1fr !important; }
+    .reset-zone { padding: 14px 12px; }
+    .reset-zone h4 { font-size: 13px; }
+    .reset-zone p { font-size: 12px; margin-bottom: 10px; }
+    .dark-card { padding: 16px !important; }
+    .admin-hero { padding: 16px 0; margin-bottom: 18px; }
+    .admin-hero p { font-size: 12px; }
+    .btn-admin-danger,.btn-admin-warn,.btn-admin-safe { font-size: 12px !important; padding: 8px 12px !important; }
+    #admin-bill-date { font-size: 16px !important; }
+    .abill-grand .amt { font-size: 28px; }
+    .log-time { font-size: 11px; }
+    .log-action { font-size: 12px; }
+  }
+</style>
+{% endblock %}
+{% block body %}
+<nav>
+  <div class="nav-inner">
+    <div class="nav-brand">
+      <div class="logo"><i class="fas fa-shield-halved"></i></div>
+      <span>NMMS — <strong>Admin Panel</strong></span>
+    </div>
+    <div class="nav-links">
+      <span class="badge-admin"><i class="fas fa-user-secret"></i> {{ session.admin_id }}</span>
+      <a href="{{ url_for('index') }}" class="btn btn-outline btn-sm" style="border-color:#30363d;color:#8b949e"><i class="fas fa-home"></i> Home</a>
+      <a href="{{ url_for('admin_logout') }}" class="btn btn-sm" style="background:#da3633;color:#fff"><i class="fas fa-right-from-bracket"></i> Logout</a>
+    </div>
+  </div>
+</nav>
+
+<div class="admin-hero">
+  <div class="container">
+    <h1><i class="fas fa-shield-halved" style="color:#e94560"></i> Developer Administration Panel</h1>
+    <p>System-level controls for NMMS. All actions are irreversible and logged.</p>
+  </div>
+</div>
+
+<div class="container" style="padding-bottom:60px">
+
+  <!-- ─── EMERGENCY ORDERING UNLOCK (Patch 2) ──────────────────────────────── -->
+  <style>
+  .emergency-unlock-panel {
+    background: #0d1117;
+    border: 2px solid #da3633;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 20px;
+    box-shadow: 0 0 0 4px rgba(218,54,51,.07);
+    animation: emergencyGlow 3s ease-in-out infinite;
+  }
+  @keyframes emergencyGlow {
+    0%,100% { box-shadow: 0 0 0 4px rgba(218,54,51,.07); }
+    50%      { box-shadow: 0 0 0 8px rgba(218,54,51,.15); }
+  }
+  .eu-header {
+    background: linear-gradient(135deg, #5a0e0e 0%, #7a1a1a 100%);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .eu-icon { width:42px;height:42px;background:rgba(218,54,51,.35);border-radius:10px;display:grid;place-items:center;font-size:18px;flex-shrink:0; }
+  .eu-title { color:#fff;font-size:15px;font-weight:800;line-height:1.2; }
+  .eu-sub   { color:rgba(255,180,180,.75);font-size:12px;margin-top:2px; }
+  .eu-body { padding: 18px 20px; }
+  .eu-status-strip { background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px 14px;font-size:12px;color:#8b949e;margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap; }
+  .eu-status-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
+  .eu-status-dot.green { background:#3fb950;box-shadow:0 0 6px #3fb950; }
+  .eu-status-dot.red   { background:#da3633;box-shadow:0 0 6px #da3633;animation:dotPulse 1.2s ease-in-out infinite; }
+  @keyframes dotPulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .eu-actions { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
+  @media(max-width:520px) { .eu-actions { grid-template-columns:1fr; } }
+  .eu-action-card { background:#161b22;border:1px solid #30363d;border-radius:10px;padding:16px; }
+  .eu-action-card h5 { font-size:13px;font-weight:700;color:#e6edf3;margin:0 0 6px;display:flex;align-items:center;gap:6px; }
+  .eu-action-card p  { font-size:12px;color:#8b949e;line-height:1.5;margin:0 0 12px; }
+  .eu-btn-unlock-all { width:100%;padding:12px;border-radius:8px;background:linear-gradient(135deg,#da3633,#b91c1c);color:#fff;border:none;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s;letter-spacing:.3px; }
+  .eu-btn-unlock-all:hover { background:linear-gradient(135deg,#ef4444,#da3633);transform:translateY(-1px);box-shadow:0 4px 14px rgba(218,54,51,.4); }
+  .eu-btn-unlock-all:active { transform:scale(0.98); }
+  .eu-btn-unlock-all:disabled { opacity:.5;pointer-events:none; }
+  .eu-roll-row { display:flex;gap:6px;margin-bottom:8px; }
+  .eu-roll-input { flex:1;padding:9px 12px;border-radius:8px;border:1.5px solid #30363d;background:#0d1117;color:#e6edf3;font-family:inherit;font-size:13px;transition:border .2s; }
+  .eu-roll-input:focus { outline:none;border-color:#da3633;box-shadow:0 0 0 3px rgba(218,54,51,.15); }
+  .eu-btn-unlock-one { padding:9px 14px;border-radius:8px;background:#da3633;color:#fff;border:none;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;transition:background .2s; }
+  .eu-btn-unlock-one:hover { background:#ef4444; }
+  .eu-btn-unlock-one:disabled { opacity:.5;pointer-events:none; }
+  .eu-result { font-size:12px;margin-top:6px;min-height:18px; }
+  .eu-countdown { display:flex;align-items:center;gap:8px;background:#1c2128;border:1px solid #30363d;border-radius:8px;padding:8px 14px;font-size:12px;color:#8b949e;margin-top:14px; }
+  .eu-countdown-time { font-size:15px;font-weight:800;font-family:monospace;color:#f0883e;letter-spacing:.5px; }
+  </style>
+
+  <div class="emergency-unlock-panel" id="euPanel">
+    <div class="eu-header">
+      <div class="eu-icon">🔓</div>
+      <div>
+        <div class="eu-title">Emergency Ordering Unlock</div>
+        <div class="eu-sub">Override the midnight deadline — use only when genuinely needed</div>
+      </div>
+    </div>
+    <div class="eu-body">
+      <div class="eu-status-strip" id="eu-status-strip">
+        <span class="eu-status-dot" id="eu-dot"></span>
+        <span id="eu-status-text">Checking ordering status…</span>
+        <span style="margin-left:auto;font-size:11px;color:#6e7681" id="eu-refresh-hint"><i class="fas fa-sync-alt"></i> Auto-refreshes</span>
+      </div>
+      <div class="eu-actions">
+        <div class="eu-action-card">
+          <h5><i class="fas fa-users" style="color:#da3633"></i> Unlock All Students</h5>
+          <p>Immediately re-enables ordering for every student in the system. Use when the midnight cutoff fired too early or during an emergency.</p>
+          <button class="eu-btn-unlock-all" id="eu-btn-all" onclick="euUnlockAll()">
+            <i class="fas fa-lock-open"></i> Unlock Everyone Now
+          </button>
+          <div class="eu-result" id="eu-result-all"></div>
+        </div>
+        <div class="eu-action-card">
+          <h5><i class="fas fa-user" style="color:#f0883e"></i> Unlock Single Student</h5>
+          <p>Unlock ordering for one specific student by their roll number. Useful when only one person needs an exception.</p>
+          <div class="eu-roll-row">
+            <input type="text" class="eu-roll-input" id="eu-roll-input"
+              placeholder="e.g. NMC2023001"
+              onkeydown="if(event.key==='Enter') euUnlockOne()">
+            <button class="eu-btn-unlock-one" id="eu-btn-one" onclick="euUnlockOne()">
+              <i class="fas fa-lock-open"></i> Unlock
+            </button>
+          </div>
+          <div class="eu-result" id="eu-result-one"></div>
+        </div>
+      </div>
+      <div class="eu-countdown">
+        <i class="fas fa-clock" style="color:#f0883e"></i>
+        <span style="color:#8b949e">Next midnight lock:</span>
+        <span class="eu-countdown-time" id="eu-countdown">—</span>
+        <span style="color:#6e7681;font-size:11px">(orders lock again at 12:00 AM)</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // ── Emergency Unlock Panel (Patch 2) ─────────────────────────────────────────
+  function euStartCountdown() {
+    function tick() {
+      const now  = new Date();
+      const next = new Date(now);
+      next.setHours(24, 0, 0, 0);
+      const diff = next - now;
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      const el = document.getElementById('eu-countdown');
+      if (el) el.textContent = String(h).padStart(2,'0')+'h '+String(m).padStart(2,'0')+'m '+String(s).padStart(2,'0')+'s';
+    }
+    tick();
+    setInterval(tick, 1000);
+  }
+
+  async function euLoadStatus() {
+    const dot  = document.getElementById('eu-dot');
+    const text = document.getElementById('eu-status-text');
+    try {
+      const r = await fetch('/api/non_orderers_summary');
+      const d = await r.json();
+      const locked = d.locked_count || 0;
+      if (locked > 0) {
+        dot.className  = 'eu-status-dot red';
+        text.innerHTML = `<strong style="color:#f85149">${locked} student${locked>1?'s':''}</strong> currently have ordering locked.`;
+      } else {
+        dot.className  = 'eu-status-dot green';
+        text.innerHTML = `<span style="color:#3fb950">✓ All students can currently order.</span>`;
+      }
+    } catch(e) {
+      dot.className = 'eu-status-dot';
+      dot.style.background = '#8b949e';
+      text.textContent = 'Could not check status.';
+    }
+  }
+
+  async function euUnlockAll() {
+    const btn = document.getElementById('eu-btn-all');
+    const res = document.getElementById('eu-result-all');
+    if (!confirm('⚠️ Unlock ordering for ALL students?\n\nThis overrides the midnight deadline and lets every student order meals until the next automatic lock at midnight.')) return;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Unlocking…';
+    res.textContent = '';
+    try {
+      const r = await fetch('/admin/emergency_unlock_ordering', {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({})
+      });
+      const d = await r.json();
+      if (d.ok) {
+        res.innerHTML = '<span style="color:#3fb950">✅ ' + (d.msg || 'All students unlocked.') + '</span>';
+        btn.innerHTML = '<i class="fas fa-check"></i> Done — Reload to re-arm';
+        euLoadStatus();
+      } else {
+        res.innerHTML = '<span style="color:#f85149">❌ ' + (d.msg || 'Error') + '</span>';
+        btn.disabled  = false;
+        btn.innerHTML = '<i class="fas fa-lock-open"></i> Unlock Everyone Now';
+      }
+    } catch(e) {
+      res.innerHTML = '<span style="color:#f85149">❌ Network error. Try again.</span>';
+      btn.disabled  = false;
+      btn.innerHTML = '<i class="fas fa-lock-open"></i> Unlock Everyone Now';
+    }
+  }
+
+  async function euUnlockOne() {
+    const btn  = document.getElementById('eu-btn-one');
+    const roll = document.getElementById('eu-roll-input').value.trim();
+    const res  = document.getElementById('eu-result-one');
+    if (!roll) { res.innerHTML = '<span style="color:#f0883e">⚠️ Enter a roll number first.</span>'; return; }
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    res.textContent = '';
+    try {
+      const r = await fetch('/admin/emergency_unlock_ordering', {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({roll_number: roll})
+      });
+      const d = await r.json();
+      if (d.ok) {
+        res.innerHTML = '<span style="color:#3fb950">✅ ' + (d.msg || 'Student unlocked.') + '</span>';
+        document.getElementById('eu-roll-input').value = '';
+        euLoadStatus();
+      } else {
+        res.innerHTML = '<span style="color:#f85149">❌ ' + (d.msg || 'Error') + '</span>';
+      }
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-lock-open"></i> Unlock';
+    } catch(e) {
+      res.innerHTML = '<span style="color:#f85149">❌ Network error. Try again.</span>';
+      btn.disabled  = false;
+      btn.innerHTML = '<i class="fas fa-lock-open"></i> Unlock';
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    euLoadStatus();
+    euStartCountdown();
+    setInterval(euLoadStatus, 60000);
+  });
+  </script>
+
+  <!-- ─── MAINTENANCE MODE PANEL ─────────────────────────────────────────── -->
+  <div id="maintPanel" style="border:2px solid #30363d;border-radius:var(--radius);overflow:hidden;margin-bottom:24px;transition:border-color .25s,box-shadow .25s">
+    <!-- Header row -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 22px;background:#161b22;border-bottom:1px solid #30363d;gap:16px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:14px;min-width:0">
+        <div id="maintIcon" style="width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:20px;background:#21262d;flex-shrink:0;transition:background .3s">🔧</div>
+        <div>
+          <div style="font-size:15px;font-weight:700;color:#e6edf3">Site Maintenance Mode</div>
+          <div id="maintSubtitle" style="font-size:13px;color:#8b949e;margin-top:2px">Turn on to pause the site for all users (admin stays accessible)</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+        <span id="maintToggleText" style="font-size:13px;font-weight:700;color:#8b949e;min-width:28px;text-align:right">OFF</span>
+        <label style="position:relative;width:56px;height:30px;flex-shrink:0;cursor:pointer;display:block">
+          <input type="checkbox" id="maintToggle" onchange="onMaintToggle()" style="opacity:0;width:0;height:0;position:absolute">
+          <span id="maintTrack" style="position:absolute;inset:0;border-radius:30px;background:#30363d;transition:background .25s"></span>
+          <span id="maintKnob" style="position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.4);transition:transform .25s cubic-bezier(0.34,1.4,0.64,1)"></span>
+        </label>
+      </div>
+    </div>
+    <!-- Body -->
+    <div style="padding:18px 22px;background:#0d1117">
+      <div id="maintBanner" style="display:none;align-items:center;gap:10px;background:rgba(218,54,51,.1);border:1px solid rgba(218,54,51,.35);border-radius:8px;padding:11px 14px;font-size:13px;color:#e94560;font-weight:600;margin-bottom:14px">
+        <span style="width:8px;height:8px;background:#e94560;border-radius:50%;flex-shrink:0;animation:sPulse 1.4s ease-in-out infinite"></span>
+        Site is IN MAINTENANCE — students &amp; managers cannot access NMMS
+      </div>
+      <label style="display:block;font-size:11px;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
+        Custom Message <span style="font-weight:400;text-transform:none;font-size:11px">(optional — shown on the maintenance page)</span>
+      </label>
+      <textarea id="maintMsg" placeholder="e.g. We are upgrading the payment system. Back in ~30 minutes." style="width:100%;padding:11px 14px;background:#161b22;border:1.5px solid #30363d;border-radius:8px;color:#e6edf3;font-family:inherit;font-size:14px;resize:vertical;min-height:74px;outline:none;transition:border .2s"></textarea>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap">
+        <button id="maintSaveBtn" onclick="saveMaintenance()" style="padding:9px 20px;border-radius:8px;background:#238636;color:#fff;border:none;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:7px;transition:all .2s">
+          <i class="fas fa-save"></i> Save &amp; Apply
+        </button>
+        <a href="/maintenance_preview" target="_blank" style="padding:9px 16px;border-radius:8px;background:transparent;color:#8b949e;border:1.5px solid #30363d;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:7px;text-decoration:none;transition:all .2s">
+          <i class="fas fa-eye"></i> Preview Page
+        </a>
+      </div>
+      <div style="font-size:12px;color:#484f58;margin-top:10px"><i class="fas fa-info-circle"></i> Admin panel always stays accessible regardless of maintenance state.</div>
+    </div>
+  </div>
+  <style>
+    @keyframes sPulse { 0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(233,69,96,.5)} 50%{opacity:.8;box-shadow:0 0 0 5px rgba(233,69,96,0)} }
+  </style>
+  <script>
+  (async function loadMaintStatus() {
+    try {
+      const res  = await fetch('/admin/maintenance_status');
+      const data = await res.json();
+      setMaintUI(data.maintenance, data.message);
+    } catch(e) {}
+  })();
+
+  function setMaintUI(on, msg) {
+    const panel    = document.getElementById('maintPanel');
+    const icon     = document.getElementById('maintIcon');
+    const text     = document.getElementById('maintToggleText');
+    const track    = document.getElementById('maintTrack');
+    const knob     = document.getElementById('maintKnob');
+    const banner   = document.getElementById('maintBanner');
+    const subtitle = document.getElementById('maintSubtitle');
+    const toggle   = document.getElementById('maintToggle');
+    const textarea = document.getElementById('maintMsg');
+    toggle.checked = on;
+    textarea.value = msg || '';
+    if (on) {
+      panel.style.borderColor  = '#da3633';
+      panel.style.boxShadow    = '0 0 0 3px rgba(218,54,51,.12)';
+      icon.style.background    = '#3d1515';
+      icon.textContent         = '🚧';
+      text.textContent         = 'ON';
+      text.style.color         = '#e94560';
+      track.style.background   = '#da3633';
+      knob.style.transform     = 'translateX(26px)';
+      banner.style.display     = 'flex';
+      subtitle.textContent     = 'Maintenance is ACTIVE — users are blocked';
+    } else {
+      panel.style.borderColor  = '#30363d';
+      panel.style.boxShadow    = 'none';
+      icon.style.background    = '#21262d';
+      icon.textContent         = '🔧';
+      text.textContent         = 'OFF';
+      text.style.color         = '#8b949e';
+      track.style.background   = '#30363d';
+      knob.style.transform     = 'translateX(0)';
+      banner.style.display     = 'none';
+      subtitle.textContent     = 'Turn on to pause the site for all users (admin stays accessible)';
+    }
+  }
+
+  function onMaintToggle() {
+    setMaintUI(document.getElementById('maintToggle').checked, document.getElementById('maintMsg').value);
+  }
+
+  async function saveMaintenance() {
+    const enabled = document.getElementById('maintToggle').checked;
+    const message = document.getElementById('maintMsg').value.trim();
+    const btn     = document.getElementById('maintSaveBtn');
+    btn.style.opacity = '.6';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    try {
+      const res  = await fetch('/admin/set_maintenance', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({enabled, message})
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setMaintUI(data.maintenance, data.message);
+        showToast(enabled ? '🚧 Maintenance mode is now ON' : '✅ Site is back online', enabled ? '#da3633' : '#238636');
+        btn.innerHTML = '<i class="fas fa-check"></i> Saved!';
+        setTimeout(() => { btn.style.opacity='1'; btn.innerHTML='<i class="fas fa-save"></i> Save & Apply'; }, 2000);
+      } else {
+        throw new Error(data.msg || 'Failed');
+      }
+    } catch(e) {
+      showToast('❌ ' + e.message, '#da3633');
+      btn.style.opacity = '1';
+      btn.innerHTML = '<i class="fas fa-save"></i> Save & Apply';
+    }
+  }
+  </script>
+  <!-- ─── END MAINTENANCE PANEL ──────────────────────────────────────────── -->
+
+  <!-- Stats -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:14px;margin-bottom:32px">
+    <div class="dark-stat">
+      <div style="color:#58a6ff;font-size:20px;margin-bottom:8px"><i class="fas fa-users"></i></div>
+      <div class="val">{{ stats.students }}</div>
+      <div class="lbl">Students</div>
+    </div>
+    <div class="dark-stat">
+      <div style="color:#3fb950;font-size:20px;margin-bottom:8px"><i class="fas fa-user-tie"></i></div>
+      <div class="val">{{ stats.managers }}</div>
+      <div class="lbl">Active Managers</div>
+    </div>
+    <div class="dark-stat">
+      <div style="color:#d2a8ff;font-size:20px;margin-bottom:8px"><i class="fas fa-utensils"></i></div>
+      <div class="val">{{ stats.total_orders }}</div>
+      <div class="lbl">Total Orders</div>
+    </div>
+    <div class="dark-stat">
+      <div style="color:#ffa657;font-size:20px;margin-bottom:8px"><i class="fas fa-receipt"></i></div>
+      <div class="val">{{ stats.total_payments }}</div>
+      <div class="lbl">Payment Records</div>
+    </div>
+    <div class="dark-stat">
+      <div style="color:#e94560;font-size:20px;margin-bottom:8px"><i class="fas fa-taka-sign"></i></div>
+      <div class="val">৳{{ "%.0f"|format(stats.pending_amount) }}</div>
+      <div class="lbl">Receivable</div>
+    </div>
+  </div>
+
+
+  <!-- ── NON-ORDERER ALERT (Admin View) ───────────────────────────────── -->
+  <div id="admin-non-order-alert" style="display:none;background:#161b22;border:2px solid #d97706;border-radius:var(--radius);margin-bottom:24px;overflow:hidden">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:rgba(217,119,6,0.1);border-bottom:1px solid #4a3800;flex-wrap:wrap;gap:10px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="width:38px;height:38px;background:#d97706;border-radius:10px;display:grid;place-items:center;flex-shrink:0">
+          <i class="fas fa-bell" style="color:#fff;font-size:16px"></i>
+        </div>
+        <div>
+          <div style="font-weight:700;color:#fbbf24;font-size:15px">
+            ⚠️ <span id="admin-non-order-count">0</span> Student(s) Haven't Ordered in 3+ Days
+          </div>
+          <div style="font-size:12px;color:#92400e" id="admin-non-order-since">—</div>
+        </div>
+      </div>
+      <button onclick="document.getElementById('admin-non-order-alert').style.display='none'" style="background:none;border:none;cursor:pointer;color:#6b7280;font-size:20px;padding:4px">×</button>
+    </div>
+    <div style="padding:14px 20px">
+      <div id="admin-non-order-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+      <div style="font-size:12px;color:#8b949e">
+        <i class="fas fa-info-circle"></i>
+        These students haven't placed any meal orders in the last 3 days. Go to the Manager panel to lock their ordering.
+      </div>
+    </div>
+  </div>
+  <!-- ── END ADMIN NON-ORDERER ALERT ──────────────────────────────────── -->
+
+  <div class="admin-two-col" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px">
+
+    <!-- Left: Reset Actions -->
+    <div>
+
+    <!-- Backup Card -->
+    <div style="margin-bottom:24px">
+      <div class="dark-card" style="padding:24px">
+        <div class="section-label"><i class="fas fa-database"></i> Database Backups</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+          <div>
+            <div style="color:#e6edf3;font-size:14px;font-weight:600">Auto-backup runs daily</div>
+            <div style="color:#8b949e;font-size:12px;margin-top:2px">Saves to <code style="background:#0d1117;padding:2px 6px;border-radius:4px">backups/</code> folder · keeps last 7</div>
+          </div>
+          <button class="btn btn-admin-safe btn-sm" onclick="triggerBackup()" id="backup-now-btn">
+            <i class="fas fa-download"></i> Backup Now
+          </button>
+        </div>
+        <div id="backup-list" style="display:flex;flex-direction:column;gap:6px">
+          <div style="color:#8b949e;font-size:13px;text-align:center;padding:12px">
+            <i class="fas fa-spinner fa-spin"></i> Loading backups...
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+      <div class="dark-card" style="padding:24px">
+        <div class="section-label"><i class="fas fa-triangle-exclamation"></i> Reset & Clear Operations</div>
+
+        <div class="reset-zone">
+          <h4><i class="fas fa-calendar-xmark" style="color:#d97706"></i> Clear Old Meal Data</h4>
+          <p>Delete meal orders and verified payments older than 7 days. Same as the manager's weekly clear.</p>
+          <button class="btn btn-admin-safe btn-sm" onclick="doReset('reset_weekly', 'Clear meal data older than 7 days?')">
+            <i class="fas fa-broom"></i> Clear Old Data (7 days)
+          </button>
+        </div>
+
+        <div class="reset-zone">
+          <h4><i class="fas fa-database" style="color:#d97706"></i> Reset All Meal Orders</h4>
+          <p>Delete ALL meal orders, payments, and cash requests. Student account locks will be cleared. Students remain registered.</p>
+          <button class="btn btn-admin-warn btn-sm" onclick="doReset('reset_meals', 'Delete ALL meal orders and payment records? Students will remain but all meal data is wiped.')">
+            <i class="fas fa-trash-can"></i> Reset Meal Data Only
+          </button>
+        </div>
+
+        <div class="reset-zone">
+          <h4><i class="fas fa-users-slash" style="color:#e94560"></i> Delete All Students</h4>
+          <p>Remove all registered students AND their meal data. Manager accounts are preserved.</p>
+          <button class="btn btn-admin-danger btn-sm" onclick="doReset('reset_students', 'DELETE ALL STUDENTS and their meal data? This cannot be undone!')">
+            <i class="fas fa-user-minus"></i> Delete All Students & Meals
+          </button>
+        </div>
+
+        <div class="reset-zone" style="border-color:#e94560">
+          <h4><i class="fas fa-bomb" style="color:#e94560"></i> Full System Reset</h4>
+          <p>Wipe everything — all students, orders, payments, all managers. MGR001 is re-created fresh with the default credentials from your environment (MANAGER_PASSWORD / MANAGER_BKASH). Use only for a fresh start.</p>
+          <button class="btn btn-admin-danger btn-sm" onclick="doReset('reset_all', '⚠️ FULL SYSTEM RESET: All students, orders, payments, and managers will be deleted. MGR001 will be recreated fresh. Are you absolutely sure?')">
+            <i class="fas fa-skull-crossbones"></i> FULL RESET (Nuclear)
+          </button>
+        </div>
+
+        <div class="reset-zone" style="border-color:#238636">
+          <h4><i class="fas fa-key" style="color:#238636"></i> Reset Manager Password</h4>
+          <p>Reset MGR001's password to a value you specify. Use this if the manager is locked out.</p>
+          <input type="password" class="pw-input" id="new-mgr-pass" placeholder="New password for MGR001 (min 6 chars)">
+          <button class="btn btn-admin-safe btn-sm" onclick="resetManagerPass()">
+            <i class="fas fa-lock-open"></i> Reset MGR001 Password
+          </button>
+        </div>
+
+        <div class="reset-zone" style="border-color:#58a6ff;background:rgba(88,166,255,0.04)">
+          <h4><i class="fas fa-ticket" style="color:#58a6ff"></i> Generate One-Time Reset Code</h4>
+          <p style="color:#8b949e;font-size:13px;margin-bottom:12px">
+            Generate a temporary reset code for <strong style="color:#e6edf3">any manager</strong>.
+            Give this code to the manager — they enter it on the
+            <strong style="color:#58a6ff">Reset Manager Password</strong> page along with their Manager ID.
+            The code expires in <strong style="color:#e6edf3">7 days</strong>.
+          </p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+            <select id="reset-code-mgr-id" class="pw-input"
+              style="flex:1;min-width:160px;background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:10px 12px;font-family:inherit;font-size:14px;cursor:pointer">
+              <option value="">⏳ Loading managers…</option>
+            </select>
+            <button class="btn btn-sm" style="background:#1f6feb;color:#fff;border:none;white-space:nowrap"
+              onclick="generateResetCode()">
+              <i class="fas fa-wand-magic-sparkles"></i> Generate Code
+            </button>
+          </div>
+          <!-- Result box (hidden until code generated) -->
+          <div id="reset-code-result" style="display:none;margin-top:12px;background:#0d1117;border:1.5px solid #238636;border-radius:10px;padding:16px 18px">
+            <div style="font-size:11px;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
+              <i class="fas fa-check-circle" style="color:#238636"></i> Code Generated — share this with the manager
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+              <div>
+                <div style="font-size:11px;color:#8b949e;margin-bottom:3px">Manager</div>
+                <div id="reset-code-mgr-name" style="font-size:14px;font-weight:700;color:#e6edf3"></div>
+              </div>
+              <div>
+                <div style="font-size:11px;color:#8b949e;margin-bottom:3px">One-Time Reset Code</div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <code id="reset-code-value"
+                    style="font-size:18px;font-weight:700;letter-spacing:2px;color:#58a6ff;
+                           background:#161b22;padding:6px 14px;border-radius:8px;
+                           border:1px solid #30363d;font-family:monospace"></code>
+                  <button onclick="copyResetCode()"
+                    style="background:#21262d;border:1px solid #30363d;color:#8b949e;
+                           border-radius:6px;padding:6px 10px;cursor:pointer;font-size:13px"
+                    title="Copy code">
+                    <i class="fas fa-copy"></i>
+                  </button>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:11px;color:#8b949e;margin-bottom:3px">Expires</div>
+                <div id="reset-code-expires" style="font-size:12px;color:#d97706;font-weight:600"></div>
+              </div>
+            </div>
+            <div style="margin-top:12px;font-size:12px;color:#8b949e;background:#161b22;border-radius:6px;padding:8px 12px">
+              <i class="fas fa-info-circle" style="color:#58a6ff"></i>
+              Tell the manager: go to <strong style="color:#e6edf3">/manager/login → "Reset Password"</strong>,
+              enter their Manager ID + this code + a new password.
+              <strong style="color:#f85149">This code replaces their current password — they cannot login with their old password until reset is complete.</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="reset-zone" style="border-color:#1f6feb">
+          <h4><i class="fas fa-mobile-screen" style="color:#58a6ff"></i> Reset Manager bKash Number</h4>
+          <p>Update MGR001's bKash number. Students will see this new number when submitting payments.</p>
+          <input type="text" class="pw-input" id="new-mgr-bkash" placeholder="New bKash number for MGR001">
+          <button class="btn btn-sm" style="background:#1f6feb;color:#fff;border:none" onclick="resetManagerBkash()">
+            <i class="fas fa-pen"></i> Update MGR001 bKash
+          </button>
+        </div>
+
+        <div class="reset-zone" style="border-color:#d97706">
+          <h4><i class="fas fa-user-slash" style="color:#d97706"></i> Deactivate Extra Managers</h4>
+          <p>Keep MGR001 active but deactivate all other manager accounts created via transfer. They will not be able to log in.</p>
+          <button class="btn btn-admin-warn btn-sm" onclick="doReset('deactivate_extra_managers', 'Deactivate all managers except MGR001?')">
+            <i class="fas fa-toggle-off"></i> Deactivate All Except MGR001
+          </button>
+        </div>
+
+        <div class="reset-zone" style="border-color:#e94560">
+          <h4><i class="fas fa-users-slash" style="color:#e94560"></i> Reset All Managers</h4>
+          <p>Delete ALL manager accounts, transfer history, and invites. MGR001 is recreated fresh with default credentials from your environment. Student data is kept.</p>
+          <button class="btn btn-admin-danger btn-sm" onclick="doReset('reset_all_managers', '⚠️ DELETE ALL MANAGERS and recreate MGR001 fresh? Transfer history will be lost. Student data is kept.')">
+            <i class="fas fa-skull-crossbones"></i> Wipe All Managers
+          </button>
+        </div>
+
+        <!-- Demo Data -->
+        <div class="reset-zone" style="border-color:#3fb950;margin-bottom:8px">
+          <h4><i class="fas fa-flask" style="color:#3fb950"></i> Demo Students (Project Showcase)</h4>
+          <p>Seed <strong>100 demo accounts</strong> (65 male · 35 female) with realistic meal history for demo purposes. All demo students use password <code style="background:#0d1117;padding:2px 6px;border-radius:4px;font-size:11px;color:#58a6ff">demo1234</code>. Real accounts are never affected.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-admin-safe btn-sm" onclick="seedDemo()">
+              <i class="fas fa-seedling"></i> Add 100 Demo Students
+            </button>
+            <button class="btn btn-sm" style="background:#21262d;color:#58a6ff;border:1px solid #58a6ff" onclick="clearDemoDue()">
+              <i class="fas fa-check-double"></i> Clear Demo Dues
+            </button>
+            <button class="btn btn-sm" style="background:#21262d;color:#f0a500;border:1px solid #f0a500" onclick="removeDemoLocked()">
+              <i class="fas fa-unlock"></i> Remove Demo Locked
+            </button>
+            <button class="btn btn-sm" style="background:#21262d;color:#e94560;border:1px solid #e94560" onclick="eraseDemo()">
+              <i class="fas fa-eraser"></i> Erase Demo Students
+            </button>
+          </div>
+        </div>
+
+        <!-- ── INVITE CODES ─────────────────────────────────────────────── -->
+        <div class="reset-zone" style="border-color:#a371f7;margin-top:8px">
+          <h4><i class="fas fa-ticket-alt" style="color:#a371f7"></i> Invite Codes — Registration Gate</h4>
+          <p style="margin-bottom:12px">
+            Generate single-use invite codes. Students <strong>must have a code</strong> to register.
+            Each code can optionally be locked to a specific batch.
+          </p>
+          <!-- One-per-batch rule notice -->
+          <div style="background:rgba(163,113,247,.08);border:1px solid rgba(163,113,247,.25);border-radius:8px;padding:9px 14px;margin-bottom:12px;font-size:12px;color:#c9a9ff;display:flex;gap:8px;align-items:flex-start">
+            <i class="fas fa-shield-halved" style="margin-top:1px;flex-shrink:0"></i>
+            <span><strong>One active code per batch.</strong> Each batch can only have one unused invite code at a time. Revoke the existing code first if you need to replace it. "Any batch" codes are not subject to this limit.</span>
+          </div>
+
+          <!-- Generator row -->
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <label style="font-size:11px;color:#8b949e;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Count</label>
+              <input type="number" class="pw-input" id="inv-count" value="1" min="1" max="50" style="width:70px;text-align:center">
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <label style="font-size:11px;color:#8b949e;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Batch lock</label>
+              <select id="inv-batch" class="pw-input" onchange="onInvBatchChange()" style="width:110px;padding:9px 10px;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#e6edf3;font-family:inherit;font-size:13px">
+                <option value="">Any batch</option>
+                <option value="2">Batch 2</option>
+                <option value="3">Batch 3</option>
+                <option value="4">Batch 4</option>
+                <option value="5">Batch 5</option>
+                <option value="6">Batch 6</option>
+                <option value="7">Batch 7</option>
+                <option value="8">Batch 8</option>
+              </select>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:120px">
+              <label style="font-size:11px;color:#8b949e;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Note (optional)</label>
+              <input type="text" class="pw-input" id="inv-note" placeholder="e.g. For Batch 5 students" maxlength="100">
+            </div>
+            <button class="btn btn-sm" style="background:#a371f7;color:#fff;border:none;white-space:nowrap;align-self:flex-end"
+                    onclick="generateInvites()">
+              <i class="fas fa-plus-circle"></i> Generate
+            </button>
+          </div>
+
+          <!-- One-per-batch shortcut -->
+          <div style="background:#0d1117;border:1px dashed #30363d;border-radius:8px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <div>
+              <span style="font-size:12px;font-weight:700;color:#a371f7"><i class="fas fa-magic"></i> One code per batch</span>
+              <span style="font-size:11px;color:#8b949e;display:block;margin-top:2px">Generates one unique code locked to each batch (Batch 2 – 8) in a single click.</span>
+            </div>
+            <button class="btn btn-sm" id="one-per-batch-btn"
+                    style="background:rgba(163,113,247,.15);color:#a371f7;border:1px solid #a371f7;white-space:nowrap;font-size:12px"
+                    onclick="generateOnePerBatch()">
+              <i class="fas fa-layer-group"></i> Generate All Batches
+            </button>
+          </div>
+
+          <!-- Output box -->
+          <div id="invite-output-box" style="display:none;background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:14px 16px;margin-bottom:12px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <span style="font-size:12px;color:#3fb950;font-weight:700" id="invite-output-label"></span>
+              <button onclick="copyAllCodes()" style="font-size:12px;color:#58a6ff;background:transparent;border:none;cursor:pointer;font-family:inherit">
+                <i class="fas fa-copy"></i> Copy all
+              </button>
+            </div>
+            <div id="invite-output-codes" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+            <div style="font-size:11px;color:#8b949e;margin-top:8px">
+              <i class="fas fa-info-circle"></i> Click any code to copy. Share with students privately.
+            </div>
+          </div>
+
+          <!-- Code table toolbar -->
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px">
+            <span style="font-size:11px;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:.4px">
+              All Codes
+            </span>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+              <!-- Batch filter -->
+              <select id="inv-filter-batch" onchange="applyBatchFilter()"
+                style="padding:5px 8px;background:#0d1117;border:1px solid #30363d;border-radius:6px;
+                       color:#e6edf3;font-family:inherit;font-size:11px;cursor:pointer">
+                <option value="">All batches</option>
+                <option value="any">Any (no lock)</option>
+                <option value="2">Batch 2</option>
+                <option value="3">Batch 3</option>
+                <option value="4">Batch 4</option>
+                <option value="5">Batch 5</option>
+                <option value="6">Batch 6</option>
+                <option value="7">Batch 7</option>
+                <option value="8">Batch 8</option>
+              </select>
+              <!-- Revoke extras removed -->
+              <button id="refresh-invites-btn" class="btn btn-sm" style="background:#21262d;color:#8b949e;border:1px solid #30363d;font-size:11px;padding:5px 10px"
+                      onclick="loadInvites(true)"><i class="fas fa-sync" id="refresh-icon"></i> Refresh</button>
+              <button id="clear-used-btn" class="btn btn-sm" style="background:#21262d;color:#e94560;border:1px solid #e94560;font-size:11px;padding:5px 10px"
+                      onclick="deleteUsedInvites()"><i class="fas fa-trash"></i> Clear Used</button>
+              <button id="delete-all-btn" class="btn btn-sm" style="background:#e94560;color:#fff;border:none;font-size:11px;padding:5px 10px"
+                      onclick="deleteAllInvites()"><i class="fas fa-fire"></i> Delete ALL</button>
+            </div>
+          </div>
+
+          <div style="overflow-x:auto;border-radius:8px;border:1px solid #21262d">
+            <table style="width:100%;border-collapse:collapse;font-size:12px" id="invite-table">
+              <thead>
+                <tr>
+                  <th style="background:#161b22;color:#8b949e;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:7px 10px;border-bottom:1px solid #30363d;text-align:left">Code</th>
+                  <th style="background:#161b22;color:#8b949e;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:7px 10px;border-bottom:1px solid #30363d;text-align:left">Batch</th>
+                  <th style="background:#161b22;color:#8b949e;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:7px 10px;border-bottom:1px solid #30363d;text-align:left">Status</th>
+                  <th style="background:#161b22;color:#8b949e;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:7px 10px;border-bottom:1px solid #30363d;text-align:left">Used By</th>
+                  <th style="background:#161b22;color:#8b949e;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:7px 10px;border-bottom:1px solid #30363d;text-align:left">Note</th>
+                  <th style="background:#161b22;color:#8b949e;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:7px 10px;border-bottom:1px solid #30363d;text-align:left">Created</th>
+                  <th style="background:#161b22;padding:7px 10px;border-bottom:1px solid #30363d"></th>
+                </tr>
+              </thead>
+              <tbody id="invite-tbody">
+                <tr><td colspan="7" style="text-align:center;color:#8b949e;padding:20px">
+                  <i class="fas fa-spinner fa-spin"></i> Loading...
+                </td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <!-- ── END INVITE CODES ──────────────────────────────────────────── -->
+
+        <!-- bKash / Phone Change Requests -->
+        <div class="reset-zone" style="border-color:#e51c6d;margin-bottom:8px">
+          <h4><i class="fas fa-mobile-alt" style="color:#e51c6d"></i> bKash Number Change Requests <span id="bkash-req-badge" style="display:none;background:#da3633;color:#fff;border-radius:20px;padding:2px 9px;font-size:12px;margin-left:6px;vertical-align:middle">0</span></h4>
+          <p style="color:#8b949e;font-size:13px;margin-bottom:14px">Students who want to update their bKash number will appear here. Approve to apply immediately, or reject to leave unchanged.</p>
+          <div id="bkash-req-list">
+            <div style="text-align:center;padding:20px;color:#484f58;font-size:13px"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+          </div>
+        </div>
+
+        <!-- Floor Change Requests -->
+        <div class="reset-zone" style="border-color:#d97706;margin-bottom:8px">
+          <h4><i class="fas fa-building" style="color:#d97706"></i> Floor Change Requests <span id="floor-req-badge" style="display:none;background:#da3633;color:#fff;border-radius:20px;padding:2px 9px;font-size:12px;margin-left:6px;vertical-align:middle">0</span></h4>
+          <p style="color:#8b949e;font-size:13px;margin-bottom:14px">Students who want to change their floor will appear here. Review the request and update their floor directly.</p>
+          <div id="floor-req-list">
+            <div style="text-align:center;padding:20px;color:#484f58;font-size:13px"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+          </div>
+          <hr style="border-color:#21262d;margin:16px 0">
+          <div style="font-size:13px;font-weight:700;color:#e6edf3;margin-bottom:10px">
+            Direct Floor Update <span style="color:#8b949e;font-weight:400">(no request needed)</span>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;align-items:flex-end">
+
+            <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:130px">
+              <label style="font-size:11px;color:#8b949e;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Roll Number</label>
+              <input type="text" id="direct-floor-roll" placeholder="e.g. NMC2023001"
+                style="padding:9px 12px;border-radius:8px;border:1.5px solid #30363d;background:#0d1117;color:#e6edf3;font-family:inherit;font-size:13px;width:100%">
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:4px;flex:0 0 auto;min-width:110px">
+              <label style="font-size:11px;color:#8b949e;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Gender</label>
+              <select id="direct-floor-gender" onchange="onDirectGenderChange()"
+                style="padding:9px 12px;border-radius:8px;border:1.5px solid #30363d;background:#0d1117;color:#e6edf3;font-family:inherit;font-size:13px">
+                <option value="">— select —</option>
+                <option value="male">♂ Male</option>
+                <option value="female">♀ Female</option>
+              </select>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:120px">
+              <label style="font-size:11px;color:#8b949e;font-weight:700;text-transform:uppercase;letter-spacing:.4px" id="direct-floor-label">Floor / Hostel</label>
+              <select id="direct-floor-num"
+                style="padding:9px 12px;border-radius:8px;border:1.5px solid #30363d;background:#0d1117;color:#e6edf3;font-family:inherit;font-size:13px">
+                <option value="">— select gender first —</option>
+              </select>
+            </div>
+
+            <button style="background:#d97706;color:#fff;border:none;white-space:nowrap;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;align-self:flex-end"
+              onclick="directFloorUpdate()">
+              <i class="fas fa-save"></i> Update
+            </button>
+          </div>
+          <div id="direct-floor-result" style="font-size:13px;margin-top:6px"></div>
+        </div>
+
+        <!-- Student Password Reset -->
+        <div class="reset-zone" style="border-color:#58a6ff;margin-top:8px">
+          <h4><i class="fas fa-user-lock" style="color:#58a6ff"></i> Reset a Student's Password</h4>
+          <p>Look up a student by roll number and set a new password for them. Useful when a student is locked out and can't recover via bKash.</p>
+          <input type="text" class="pw-input" id="student-roll-lookup" placeholder="Student roll number (e.g. NMC2023001)" oninput="clearStudentLookup()">
+          <button class="btn btn-sm" style="background:#1f6feb;color:#fff;border:none;margin-bottom:10px" onclick="lookupStudent()">
+            <i class="fas fa-search"></i> Look Up Student
+          </button>
+          <div id="student-lookup-result" style="display:none;background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px 14px;margin-bottom:10px;font-size:13px"></div>
+          <div id="student-pass-fields" style="display:none">
+            <input type="password" class="pw-input" id="student-new-pass" placeholder="New password (min 6 chars)">
+            <input type="password" class="pw-input" id="student-confirm-pass" placeholder="Confirm new password">
+            <button class="btn btn-sm" style="background:#58a6ff;color:#0d1117;border:none;font-weight:700" onclick="resetStudentPass()">
+              <i class="fas fa-key"></i> Set New Password
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Reset Log + Quick Links + Total Bill -->
+    <div>
+      <div class="dark-card" style="padding:24px">
+        <div class="section-label"><i class="fas fa-scroll"></i> Admin Action Log</div>
+        {% if reset_log %}
+          <div style="max-height:420px;overflow-y:auto">
+            {% for entry in reset_log %}
+            <div class="log-row">
+              <div class="log-time">{{ entry.reset_at[:16] }}</div>
+              <div class="log-action">
+                <span class="log-admin"><i class="fas fa-user-secret"></i> {{ entry.admin_id }}</span>
+                <div style="margin-top:3px;color:#8b949e">{{ entry.action }}</div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div style="text-align:center;color:#8b949e;padding:40px 0">
+            <div style="font-size:36px;margin-bottom:10px">📋</div>
+            <div>No admin actions logged yet.</div>
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Quick Links -->
+      <div class="dark-card" style="padding:24px;margin-top:16px">
+        <div class="section-label"><i class="fas fa-link"></i> Quick Navigation</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <a href="{{ url_for('manager_login') }}" class="btn btn-sm" style="background:#238636;color:#fff;justify-content:flex-start">
+            <i class="fas fa-user-tie"></i> Manager Login
+          </a>
+          <a href="{{ url_for('student_login') }}" class="btn btn-sm" style="background:#1f6feb;color:#fff;justify-content:flex-start">
+            <i class="fas fa-user-graduate"></i> Student Login
+          </a>
+          <a href="{{ url_for('admin_students') }}" class="btn btn-sm" style="background:#6e40c9;color:#fff;justify-content:flex-start">
+            <i class="fas fa-users"></i> View All Students
+          </a>
+          <a href="{{ url_for('admin_students') }}#add-student-card" class="btn btn-sm" style="background:#3fb950;color:#0d1117;font-weight:700;justify-content:flex-start">
+            <i class="fas fa-user-plus"></i> Add New Student
+          </a>
+          <a href="{{ url_for('admin_export_json') }}" class="btn btn-sm" style="background:#0d1117;color:#3fb950;border:1px solid #3fb950;justify-content:flex-start">
+            <i class="fas fa-download"></i> Download JSON Backup
+          </a>
+        </div>
+      </div>
+
+      <!-- Add Manager (keep existing) -->
+      <div class="dark-card" style="padding:24px;margin-top:16px">
+        <div class="section-label"><i class="fas fa-user-plus"></i> Add Additional Manager (Keep Existing Active)</div>
+        <p style="color:#8b949e;font-size:13px;margin-bottom:14px">Adds a new manager account without deactivating current managers. Up to <strong style="color:#e6edf3">4 managers</strong> can be active at once. Use <em>Transfer Manager</em> below to replace all current managers.</p>
+        <input type="text" class="pw-input" id="add-mgr-roll"     placeholder="Student roll number (e.g. 3-12)">
+        <input type="text" class="pw-input" id="add-mgr-id"       placeholder="New Manager ID (e.g. MGR002)">
+        <input type="password" class="pw-input" id="add-mgr-pass" placeholder="Temp password (min 6 chars)">
+        <button class="btn btn-admin-safe btn-sm" onclick="addManagerKeepExisting()">
+          <i class="fas fa-user-plus"></i> Add Manager
+        </button>
+        <div id="add-mgr-result" style="margin-top:10px;font-size:13px;display:none"></div>
+      </div>
+
+      <!-- Transfer Manager (Admin-forced, no student acceptance needed) -->
+      <div class="dark-card" style="padding:24px;margin-top:16px;border:1px solid #d97706">
+        <div class="section-label"><i class="fas fa-exchange-alt" style="color:#d97706"></i> Transfer Manager Role (Admin Override)</div>
+        <p style="color:#8b949e;font-size:13px;margin-bottom:6px">Immediately deactivates <strong style="color:#e6edf3">all current managers</strong> and assigns the role to a new student. No student acceptance required — admin-forced. The student gets a 7-day temp password and must change it on first login.</p>
+        <div style="background:rgba(217,119,6,.08);border:1px solid rgba(217,119,6,.25);border-radius:8px;padding:10px 14px;font-size:12px;color:#fbbf24;margin-bottom:14px;display:flex;gap:8px;align-items:flex-start">
+          <i class="fas fa-triangle-exclamation" style="flex-shrink:0;margin-top:1px"></i>
+          <span>This will <strong>deactivate all current managers</strong>. Use "Add Manager" above if you want to keep existing managers active alongside the new one.</span>
+        </div>
+        <input type="text" class="pw-input" id="xfer-mgr-roll"  placeholder="Student roll number (e.g. 5-22)">
+        <input type="text" class="pw-input" id="xfer-mgr-id"    placeholder="New Manager ID (e.g. MGR003)">
+        <input type="password" class="pw-input" id="xfer-mgr-pass" placeholder="Temp password (min 6 chars)">
+        <button class="btn btn-admin-warn btn-sm" onclick="transferManagerRole()">
+          <i class="fas fa-exchange-alt"></i> Transfer Role (Deactivates All Current)
+        </button>
+        <div id="xfer-mgr-result" style="margin-top:10px;font-size:13px;display:none"></div>
+      </div>
+
+      <!-- Remove Rotation Manager (Safety) -->
+      <div class="dark-card" style="padding:24px;margin-top:16px;border:1.5px solid #da3633">
+        <div class="section-label"><i class="fas fa-user-minus" style="color:#da3633"></i> Remove Rotation Manager <span style="background:rgba(218,54,51,.18);color:#da3633;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;margin-left:6px">SAFETY</span></div>
+        <p style="color:#8b949e;font-size:13px;margin-bottom:14px">Immediately deactivate a specific active manager (e.g. a rotation manager who should no longer have access). <strong style="color:#e6edf3">MGR001 cannot be removed here</strong> — use the Reset Manager options for that. This logs the action for audit purposes.</p>
+        <select id="remove-rot-mgr-sel" style="background:#0d1117;border:1.5px solid #30363d;border-radius:8px;color:#e6edf3;padding:9px 14px;font-family:inherit;font-size:13px;width:100%;margin-bottom:10px">
+          <option value="">⏳ Loading active managers…</option>
+        </select>
+        <button class="btn btn-admin-danger btn-sm" onclick="removeRotationManager()">
+          <i class="fas fa-user-minus"></i> Remove Selected Manager
+        </button>
+        <div id="remove-rot-mgr-result" style="margin-top:10px;font-size:13px;display:none"></div>
+      </div>
+
+      <!-- Clear Duty Rotation -->
+      <div class="dark-card" style="padding:24px;margin-top:16px">
+        <div class="section-label"><i class="fas fa-broom"></i> Clear Duty Rotation Schedule</div>
+        <p style="color:#8b949e;font-size:13px;margin-bottom:14px">Remove assigned students from the duty rotation schedule. Enter a week start date (Monday) to clear that specific week, or leave blank to clear <strong style="color:#e6edf3">all weeks</strong>. Pending duty invites for cleared weeks are also removed.</p>
+        <input type="date" class="pw-input" id="clear-rot-week" placeholder="Week start (leave blank for ALL weeks)" style="background:#0d1117;border:1.5px solid #30363d;border-radius:8px;color:#e6edf3;padding:9px 14px;font-family:inherit;font-size:13px;width:100%;margin-bottom:10px">
+        <button class="btn btn-sm" style="background:#da3633;color:#fff;border:none" onclick="adminClearRotation()">
+          <i class="fas fa-broom"></i> Clear Rotation
+        </button>
+        <div id="clear-rot-result" style="margin-top:10px;font-size:13px;display:none"></div>
+      </div>
+
+      <!-- Total Bill Calculator -->
+      <div class="dark-card" style="padding:24px;margin-top:16px">
+        <div class="section-label"><i class="fas fa-calculator"></i> Total Bill Calculator</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+          <input type="date" id="admin-bill-date" style="background:#0d1117;border:1.5px solid #30363d;border-radius:8px;color:#e6edf3;padding:9px 14px;font-family:inherit;font-size:13px;flex:1;min-width:140px">
+          <button class="btn btn-sm" style="background:#238636;color:#fff;border:none;white-space:nowrap" onclick="loadAdminBill()">
+            <i class="fas fa-calculator"></i> Calculate
+          </button>
+          <button class="btn btn-sm" style="background:#21262d;color:#8b949e;border:1px solid #30363d;white-space:nowrap" onclick="printAdminBill()">
+            <i class="fas fa-print"></i> Print
+          </button>
+        </div>
+        <div id="admin-bill-content">
+          <div style="text-align:center;color:#8b949e;padding:24px 0;font-size:13px">
+            <div style="font-size:28px;margin-bottom:8px">📊</div>
+            Select a date and click Calculate
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="result-toast" style="display:none;position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:#238636;color:#fff;padding:14px 28px;border-radius:10px;font-size:15px;font-weight:600;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.5);max-width:90vw;text-align:center"></div>
+
+<style>
+  .abill-grand { background: linear-gradient(135deg, #238636, #2ea043); border-radius: 10px; padding: 18px 20px; text-align:center; margin-bottom:14px; }
+  .abill-grand .amt { font-size:36px; font-weight:800; color:#fff; letter-spacing:1px; }
+  .abill-grand .sub { font-size:13px; color:rgba(255,255,255,.75); margin-top:3px; }
+  .abill-row { display:flex; justify-content:space-between; align-items:center; padding:9px 12px; border-radius:8px; margin-bottom:6px; font-size:13px; }
+  .abill-lbl { display:flex; align-items:center; gap:7px; font-weight:600; color:#e6edf3; }
+  .abill-amt { font-weight:700; font-size:14px; color:#3fb950; }
+  .abill-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:10px; }
+  .abill-table th { text-align:left; color:#8b949e; font-size:11px; text-transform:uppercase; letter-spacing:.5px; padding:6px 8px; border-bottom:1px solid #21262d; }
+  .abill-table td { padding:8px 8px; border-bottom:1px solid #21262d; color:#e6edf3; }
+  .abill-table tr:last-child td { border-bottom:none; }
+  .abill-section { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:#58a6ff; margin:14px 0 8px; }
+  /* No global print styles — bill is printed via popup window */
+</style>
+
+<script>
+// ── RESET ACTIONS ─────────────────────────────────────────────────────────────
+async function doReset(action, confirmMsg) {
+  if (!confirm(confirmMsg)) return;
+  if (action === 'reset_all' || action === 'reset_students' || action === 'reset_all_managers') {
+    const second = confirm('⚠️ SECOND CONFIRMATION REQUIRED\n\nThis action CANNOT be undone. Click OK only if you are 100% sure.');
+    if (!second) return;
+  }
+  showToast('Processing...', '#d97706');
+  try {
+    const r = await fetch('/admin/reset', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({action})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showToast('✅ ' + d.msg, '#238636');
+      setTimeout(() => location.reload(), 2500);
+    } else {
+      showToast('❌ ' + d.msg, '#da3633');
+    }
+  } catch(e) {
+    showToast('❌ Request failed', '#da3633');
+  }
+}
+
+async function resetManagerBkash() {
+  const bkash = document.getElementById('new-mgr-bkash').value.trim();
+  if (!bkash) { showToast('❌ bKash number cannot be empty', '#da3633'); return; }
+  if (!confirm(`Update MGR001 bKash number to "${bkash}"?`)) return;
+  const r = await fetch('/admin/reset', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action: 'reset_manager_bkash', new_bkash: bkash})
+  });
+  const d = await r.json();
+  showToast(d.ok ? '✅ ' + d.msg : '❌ ' + d.msg, d.ok ? '#238636' : '#da3633');
+  if (d.ok) document.getElementById('new-mgr-bkash').value = '';
+}
+
+async function resetManagerPass() {
+  const pw = document.getElementById('new-mgr-pass').value.trim();
+  if (!pw || pw.length < 6) { showToast('❌ Password must be at least 6 characters', '#da3633'); return; }
+  if (!confirm(`Reset MGR001 password to the new value?`)) return;
+  const r = await fetch('/admin/reset', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action: 'reset_manager_password', new_password: pw})
+  });
+  const d = await r.json();
+  showToast(d.ok ? '✅ ' + d.msg : '❌ ' + d.msg, d.ok ? '#238636' : '#da3633');
+  if (d.ok) document.getElementById('new-mgr-pass').value = '';
+}
+
+// ── GENERATE ONE-TIME MANAGER RESET CODE ──────────────────────────────────────
+
+// Populate manager dropdowns on load
+(async function loadManagerDropdown() {
+  try {
+    const r = await fetch('/admin/list_managers');
+    const d = await r.json();
+    const sel = document.getElementById('reset-code-mgr-id');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— Select a manager —</option>';
+    (d.managers || []).forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.manager_id;
+      const status = m.is_active ? '🟢 Active' : '🔴 Inactive';
+      opt.textContent = `${m.manager_id}  —  ${m.name}  (${status})`;
+      sel.appendChild(opt);
+    });
+    if (!d.managers || d.managers.length === 0) {
+      sel.innerHTML = '<option value="">No managers found</option>';
+    }
+    // Also populate the remove-rotation manager dropdown (active only, excl. MGR001)
+    const rmSel = document.getElementById('remove-rot-mgr-sel');
+    if (rmSel) {
+      const active = (d.managers || []).filter(m => m.is_active && m.manager_id !== 'MGR001');
+      if (active.length === 0) {
+        rmSel.innerHTML = '<option value="">No removable active managers found</option>';
+      } else {
+        rmSel.innerHTML = '<option value="">— Select a manager to remove —</option>';
+        active.forEach(m => {
+          const opt = document.createElement('option');
+          opt.value = m.manager_id;
+          opt.textContent = `${m.manager_id}  —  ${m.name}`;
+          rmSel.appendChild(opt);
+        });
+      }
+    }
+  } catch(e) {
+    const sel = document.getElementById('reset-code-mgr-id');
+    if (sel) sel.innerHTML = '<option value="">Failed to load — refresh page</option>';
+  }
+})();
+
+async function generateResetCode() {
+  const mgrId = document.getElementById('reset-code-mgr-id').value.trim();
+  if (!mgrId) { showToast('❌ Select a manager first', '#da3633'); return; }
+  const resultBox = document.getElementById('reset-code-result');
+  resultBox.style.display = 'none';
+  try {
+    const r = await fetch('/admin/generate_manager_reset_code', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({manager_id: mgrId})
+    });
+    const d = await r.json();
+    if (!d.ok) { showToast('❌ ' + d.msg, '#da3633'); return; }
+    document.getElementById('reset-code-value').textContent   = d.reset_code;
+    document.getElementById('reset-code-mgr-name').textContent = `${d.name} (${d.manager_id})`;
+    document.getElementById('reset-code-expires').textContent  = `${d.expires} UTC`;
+    resultBox.style.display = 'block';
+    showToast('✅ Reset code generated for ' + d.manager_id, '#238636');
+  } catch(e) {
+    showToast('❌ Request failed', '#da3633');
+  }
+}
+
+function copyResetCode() {
+  const code = document.getElementById('reset-code-value').textContent;
+  if (!code) return;
+  navigator.clipboard.writeText(code).then(() => {
+    showToast('📋 Reset code copied!', '#238636');
+  }).catch(() => {
+    // Fallback
+    const el = document.createElement('textarea');
+    el.value = code;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand('copy');
+    document.body.removeChild(el);
+    showToast('📋 Reset code copied!', '#238636');
+  });
+}
+
+// ── STUDENT PASSWORD RESET ────────────────────────────────────────────────────
+let _lookedUpRoll = null;
+
+function clearStudentLookup() {
+  _lookedUpRoll = null;
+  document.getElementById('student-lookup-result').style.display = 'none';
+  document.getElementById('student-pass-fields').style.display = 'none';
+}
+
+async function lookupStudent() {
+  const roll = document.getElementById('student-roll-lookup').value.trim();
+  if (!roll) { showToast('❌ Enter a roll number first', '#da3633'); return; }
+  const resultEl = document.getElementById('student-lookup-result');
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = '<span style="color:#8b949e"><i class="fas fa-spinner fa-spin"></i> Looking up...</span>';
+  document.getElementById('student-pass-fields').style.display = 'none';
+  _lookedUpRoll = null;
+
+  try {
+    const r = await fetch('/admin/lookup_student?roll=' + encodeURIComponent(roll));
+    const d = await r.json();
+    if (!d.ok) {
+      resultEl.innerHTML = `<span style="color:#e94560"><i class="fas fa-times-circle"></i> ${d.msg}</span>`;
+      return;
+    }
+    const s = d.student;
+    const lockBadge = s.is_locked
+      ? `<span style="background:#da3633;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">🔒 Locked</span>`
+      : `<span style="background:#238636;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">✓ Active</span>`;
+    resultEl.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="font-size:22px">👤</div>
+        <div style="flex:1">
+          <div style="color:#e6edf3;font-weight:700;font-size:14px">${s.name} ${lockBadge}</div>
+          <div style="color:#8b949e;font-size:12px;margin-top:2px">
+            Roll: <strong style="color:#58a6ff">${s.roll_number}</strong> &nbsp;·&nbsp;
+            Batch: ${s.batch} &nbsp;·&nbsp;
+            ${s.gender === 'female' ? '♀ Female' : '♂ Male'} &nbsp;·&nbsp;
+            bKash: ${s.bkash_number}
+          </div>
+        </div>
+      </div>`;
+    _lookedUpRoll = s.roll_number;
+    document.getElementById('student-pass-fields').style.display = 'block';
+  } catch(e) {
+    resultEl.innerHTML = `<span style="color:#e94560"><i class="fas fa-times-circle"></i> Request failed</span>`;
+  }
+}
+
+async function resetStudentPass() {
+  if (!_lookedUpRoll) { showToast('❌ Look up a student first', '#da3633'); return; }
+  const pw      = document.getElementById('student-new-pass').value.trim();
+  const confirm2 = document.getElementById('student-confirm-pass').value.trim();
+  if (!pw || pw.length < 6) { showToast('❌ Password must be at least 6 characters', '#da3633'); return; }
+  if (pw !== confirm2) { showToast('❌ Passwords do not match', '#da3633'); return; }
+  if (!confirm(`Reset password for student ${_lookedUpRoll}?`)) return;
+
+  const r = await fetch('/admin/reset_student_password', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({roll_number: _lookedUpRoll, new_password: pw})
+  });
+  const d = await r.json();
+  showToast(d.ok ? '✅ ' + d.msg : '❌ ' + d.msg, d.ok ? '#238636' : '#da3633');
+  if (d.ok) {
+    document.getElementById('student-new-pass').value = '';
+    document.getElementById('student-confirm-pass').value = '';
+    document.getElementById('student-pass-fields').style.display = 'none';
+    document.getElementById('student-lookup-result').style.display = 'none';
+    document.getElementById('student-roll-lookup').value = '';
+    _lookedUpRoll = null;
+    setTimeout(() => location.reload(), 2000);
+  }
+}
+
+// ── DEMO DATA ─────────────────────────────────────────────────────────────────
+async function seedDemo() {
+  if (!confirm('Add 100 demo students (65 male, 35 female) with sample meal history?\n\nExisting real accounts will not be affected.')) return;
+  showToast('⏳ Seeding demo students...', '#1f6feb');
+  try {
+    const r = await fetch('/admin/seed_demo', { method: 'POST', headers: {'Content-Type': 'application/json'} });
+    const d = await r.json();
+    showToast(d.ok ? '✅ ' + d.msg : '❌ ' + d.msg, d.ok ? '#238636' : '#da3633');
+    if (d.ok) setTimeout(() => location.reload(), 2500);
+  } catch(e) { showToast('❌ Request failed', '#da3633'); }
+}
+
+async function eraseDemo() {
+  if (!confirm('Remove ALL demo students and their meal data?\n\nReal student accounts will not be affected.')) return;
+  try {
+    const r = await fetch('/admin/erase_demo', { method: 'POST', headers: {'Content-Type': 'application/json'} });
+    const d = await r.json();
+    showToast(d.ok ? '✅ ' + d.msg : '❌ ' + d.msg, d.ok ? '#238636' : '#da3633');
+    if (d.ok) setTimeout(() => location.reload(), 2500);
+  } catch(e) { showToast('❌ Request failed', '#da3633'); }
+}
+
+async function clearDemoDue() {
+  if (!confirm('Mark all demo student pending/due meals as PAID (cash)?\n\nThis clears ৳ due for all 100 demo accounts. Real students are not affected.')) return;
+  showToast('⏳ Clearing demo dues...', '#1f6feb');
+  try {
+    const r = await fetch('/admin/clear_demo_due', { method: 'POST', headers: {'Content-Type': 'application/json'} });
+    const d = await r.json();
+    showToast(d.ok ? '✅ ' + d.msg : '❌ ' + d.msg, d.ok ? '#238636' : '#da3633');
+    if (d.ok) setTimeout(() => location.reload(), 2000);
+  } catch(e) { showToast('❌ Request failed', '#da3633'); }
+}
+
+async function removeDemoLocked() {
+  if (!confirm('Remove the DEMO-LOCKED student account?\n\nThis deletes the demo locked student and their meal data.')) return;
+  try {
+    const r = await fetch('/admin/remove_demo_locked', { method: 'POST', headers: {'Content-Type': 'application/json'} });
+    const d = await r.json();
+    showToast(d.ok ? '✅ ' + d.msg : '❌ ' + d.msg, d.ok ? '#238636' : '#da3633');
+    if (d.ok) setTimeout(() => location.reload(), 2000);
+  } catch(e) { showToast('❌ Request failed', '#da3633'); }
+}
+
+// ── TOTAL BILL ────────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  const today = new Date().toISOString().slice(0,10);
+  document.getElementById('admin-bill-date').value = today;
+  loadAdminBill();
+});
+
+async function loadAdminBill() {
+  const date = document.getElementById('admin-bill-date').value;
+  if (!date) return;
+  const content = document.getElementById('admin-bill-content');
+  content.innerHTML = '<div style="text-align:center;color:#8b949e;padding:20px"><i class="fas fa-spinner fa-spin"></i> Calculating...</div>';
+  try {
+    const r = await fetch('/admin/total_bill?date=' + date);
+    if (!r.ok) { throw new Error('HTTP ' + r.status); }
+    const d = await r.json();
+    renderAdminBill(d);
+  } catch(e) {
+    content.innerHTML = `<div style="color:#e94560;font-size:13px;text-align:center;padding:16px"><i class="fas fa-exclamation-circle"></i> Failed to load bill data.<br><small style="color:#8b949e">${e.message}</small></div>`;
+  }
+}
+
+function renderAdminBill(d) {
+  const fmt = n => '৳' + (n||0).toLocaleString();
+  const price = d.price_per_meal || 50;
+
+  if (d.total_meals === 0) {
+    document.getElementById('admin-bill-content').innerHTML = `
+      <div style="text-align:center;color:#8b949e;padding:20px 0;font-size:13px">
+        <div style="font-size:28px;margin-bottom:8px">🍽️</div>
+        No meals ordered on ${d.date}
+      </div>`;
+    return;
+  }
+
+  const floorsHtml = d.floors && d.floors.length ? `
+    <div class="abill-section"><i class="fas fa-building"></i> Floor Breakdown (Male)</div>
+    <table class="abill-table">
+      <thead><tr><th>Floor</th><th>Lunch</th><th>Dinner</th><th>Meals</th><th>Amount</th></tr></thead>
+      <tbody>
+        ${d.floors.map(f => `
+          <tr>
+            <td><span style="background:#21262d;color:#58a6ff;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">Floor ${f.floor ?? '—'}</span></td>
+            <td>${f.lunch}</td>
+            <td>${f.dinner}</td>
+            <td><strong>${f.total}</strong></td>
+            <td style="color:#3fb950;font-weight:700">${fmt(f.total * price)}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>` : '';
+
+  document.getElementById('admin-bill-content').innerHTML = `
+    <div class="abill-grand">
+      <div style="font-size:12px;color:rgba(255,255,255,.7);margin-bottom:4px">📅 ${d.date} &nbsp;·&nbsp; ৳${price}/meal</div>
+      <div class="amt">${fmt(d.grand_total)}</div>
+      <div class="sub">${d.total_meals} meals total</div>
+    </div>
+    <div class="abill-section"><i class="fas fa-utensils"></i> Meal Summary</div>
+    <div class="abill-row" style="background:rgba(35,134,54,.12)">
+      <div class="abill-lbl"><i class="fas fa-sun" style="color:#3fb950"></i> Lunch</div>
+      <div class="abill-amt">${d.lunch_total} meals → ${fmt(d.lunch_total * price)}</div>
+    </div>
+    <div class="abill-row" style="background:rgba(240,165,0,.1)">
+      <div class="abill-lbl"><i class="fas fa-moon" style="color:#f0a500"></i> Dinner</div>
+      <div class="abill-amt" style="color:#f0a500">${d.dinner_total} meals → ${fmt(d.dinner_total * price)}</div>
+    </div>
+    <div class="abill-section"><i class="fas fa-venus-mars"></i> By Gender</div>
+    <div class="abill-row" style="background:rgba(59,95,226,.1)">
+      <div class="abill-lbl"><i class="fas fa-mars" style="color:#58a6ff"></i> Male</div>
+      <div class="abill-amt" style="color:#58a6ff">${d.male_lunch+d.male_dinner} meals (L:${d.male_lunch} D:${d.male_dinner}) → ${fmt((d.male_lunch+d.male_dinner)*price)}</div>
+    </div>
+    <div class="abill-row" style="background:rgba(194,24,91,.1)">
+      <div class="abill-lbl"><i class="fas fa-venus" style="color:#f778a1"></i> Female</div>
+      <div class="abill-amt" style="color:#f778a1">${d.female_lunch+d.female_dinner} meals (L:${d.female_lunch} D:${d.female_dinner}) → ${fmt((d.female_lunch+d.female_dinner)*price)}</div>
+    </div>
+    ${floorsHtml}
+  `;
+}
+
+// ── ADD MANAGER (KEEP EXISTING) ───────────────────────────────────────────────
+async function addManagerKeepExisting() {
+  const roll    = document.getElementById('add-mgr-roll').value.trim();
+  const mgrId   = document.getElementById('add-mgr-id').value.trim();
+  const pass    = document.getElementById('add-mgr-pass').value.trim();
+  const result  = document.getElementById('add-mgr-result');
+  if (!roll || !mgrId || !pass) { showToast('❌ All three fields are required', '#da3633'); return; }
+  if (pass.length < 6) { showToast('❌ Temp password must be at least 6 characters', '#da3633'); return; }
+  if (!confirm(`Add new manager "${mgrId}" for student roll "${roll}"?\nExisting managers will stay active.`)) return;
+  result.style.display = 'none';
+  try {
+    const r = await fetch('/admin/add_manager', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({roll_number: roll, new_manager_id: mgrId, temp_password: pass})
+    });
+    const d = await r.json();
+    result.style.display = 'block';
+    result.style.color = d.ok ? '#3fb950' : '#e94560';
+    result.textContent = (d.ok ? '✅ ' : '❌ ') + d.msg;
+    if (d.ok) {
+      document.getElementById('add-mgr-roll').value = '';
+      document.getElementById('add-mgr-id').value = '';
+      document.getElementById('add-mgr-pass').value = '';
+      showToast('✅ Manager added!', '#238636');
+      setTimeout(() => location.reload(), 2500);
+    }
+  } catch(e) { showToast('❌ Request failed', '#da3633'); }
+}
+
+// ── PRINT ADMIN BILL (popup window — no full-page print) ──────────────────────
+function printAdminBill() {
+  const src      = document.getElementById('admin-bill-content');
+  const dateInp  = document.getElementById('admin-bill-date');
+  const dateStr  = dateInp ? dateInp.value : '';
+  if (!src || src.querySelector('[style*="Select a date"]') || !dateStr) {
+    showToast('❌ Calculate the bill first before printing', '#da3633');
+    return;
+  }
+  const [y, m, d2] = dateStr.split('-');
+  const fmtDate = new Date(+y, +m-1, +d2).toLocaleDateString('en-US',
+    {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+
+  // Build a clean light-mode print document
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head>
+    <title>NMMS Total Bill — ${fmtDate}</title>
+    <style>
+      body{font-family:'Segoe UI',sans-serif;color:#111;padding:30px;max-width:700px;margin:0 auto}
+      h2{font-size:18px;margin:0 0 4px}p.sub{font-size:12px;color:#555;margin:0 0 20px}
+      hr{border:none;border-top:2px solid #1a6b3a;margin:0 0 20px}
+      .grand{background:#1a6b3a;color:#fff;border-radius:8px;padding:16px 20px;text-align:center;margin-bottom:16px}
+      .grand .amt{font-size:36px;font-weight:800;letter-spacing:1px}
+      .grand .sub2{font-size:13px;opacity:.8;margin-top:3px}
+      .row{display:flex;justify-content:space-between;padding:8px 10px;border-radius:6px;margin-bottom:5px;font-size:13px}
+      .row.lunch{background:#e8f5ee}.row.dinner{background:#fff8e6}
+      .row.male{background:#e8f0ff}.row.female{background:#fce8f0}
+      .section{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#1a6b3a;margin:14px 0 8px}
+      table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+      th{text-align:left;color:#555;font-size:11px;text-transform:uppercase;padding:5px 8px;border-bottom:1px solid #ccc}
+      td{padding:7px 8px;border-bottom:1px solid #eee}
+      .footer{margin-top:24px;font-size:11px;color:#999;text-align:right;border-top:1px solid #eee;padding-top:10px}
+    </style>
+  </head><body>
+    <h2>Netrokona Medical College — NMMS Total Bill</h2>
+    <p class="sub">Bill for: <strong style="color:#1a6b3a">${fmtDate}</strong> &nbsp;·&nbsp;
+       Generated: ${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}</p>
+    <hr>
+    ${_buildPrintBillHTML(src)}
+    <div class="footer">Netrokona Medical Meal Management System · NMMS Admin</div>
+  </body></html>`);
+  win.document.close();
+  win.focus();
+  win.print();
+}
+
+function _buildPrintBillHTML(src) {
+  // Re-parse the rendered bill data from the DOM
+  const grandEl  = src.querySelector('.abill-grand');
+  const rowEls   = [...src.querySelectorAll('.abill-row')];
+  const secEls   = [...src.querySelectorAll('.abill-section')];
+  const tableEl  = src.querySelector('.abill-table');
+
+  let html = '';
+  if (grandEl) {
+    const amt = grandEl.querySelector('.amt')?.textContent || '';
+    const sub = grandEl.querySelector('.sub')?.textContent || '';
+    const dateInfo = grandEl.querySelector('div')?.textContent || '';
+    html += `<div class="grand"><div class="amt">${amt}</div><div class="sub2">${sub}</div></div>`;
+  }
+
+  // Walk sections + rows in DOM order
+  const children = [...src.children];
+  let currentSection = '';
+  for (const el of children) {
+    if (el.classList.contains('abill-section')) {
+      currentSection = el.textContent.trim();
+      html += `<div class="section">${currentSection}</div>`;
+    } else if (el.classList.contains('abill-row')) {
+      const lbl = el.querySelector('.abill-lbl')?.textContent.trim() || '';
+      const amt = el.querySelector('.abill-amt')?.textContent.trim() || '';
+      const cls = lbl.toLowerCase().includes('lunch') ? 'lunch'
+                : lbl.toLowerCase().includes('dinner') ? 'dinner'
+                : lbl.toLowerCase().includes('male') && !lbl.toLowerCase().includes('female') ? 'male'
+                : lbl.toLowerCase().includes('female') ? 'female' : '';
+      html += `<div class="row ${cls}"><span>${lbl}</span><strong>${amt}</strong></div>`;
+    } else if (el.querySelector && el.querySelector('.abill-table')) {
+      // Floor table
+      const tbl = el.querySelector('.abill-table');
+      if (tbl) html += tbl.outerHTML;
+    }
+  }
+  return html || src.innerText;
+}
+
+// ── TRANSFER MANAGER ROLE (Admin Override) ────────────────────────────────────
+async function transferManagerRole() {
+  const roll   = document.getElementById('xfer-mgr-roll').value.trim();
+  const mgrId  = document.getElementById('xfer-mgr-id').value.trim();
+  const pass   = document.getElementById('xfer-mgr-pass').value.trim();
+  const result = document.getElementById('xfer-mgr-result');
+  if (!roll || !mgrId || !pass) { showToast('❌ All three fields are required', '#da3633'); return; }
+  if (pass.length < 6) { showToast('❌ Temp password must be at least 6 characters', '#da3633'); return; }
+  if (!confirm(`Transfer manager role to student roll "${roll}" as "${mgrId}"?\n\n⚠️ ALL current managers will be deactivated immediately.`)) return;
+  const second = confirm('⚠️ SECOND CONFIRMATION\n\nAll current active managers will be logged out and deactivated. The new manager will receive a 7-day temp password. Continue?');
+  if (!second) return;
+  result.style.display = 'none';
+  showToast('⏳ Transferring role...', '#d97706');
+  try {
+    const r = await fetch('/admin/transfer_manager', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({roll_number: roll, new_manager_id: mgrId, temp_password: pass})
+    });
+    const d = await r.json();
+    result.style.display = 'block';
+    result.style.color = d.ok ? '#3fb950' : '#e94560';
+    result.innerHTML = (d.ok ? '✅ ' : '❌ ') + d.msg;
+    if (d.ok) {
+      document.getElementById('xfer-mgr-roll').value = '';
+      document.getElementById('xfer-mgr-id').value = '';
+      document.getElementById('xfer-mgr-pass').value = '';
+      showToast('✅ Manager role transferred!', '#238636');
+      setTimeout(() => location.reload(), 3000);
+    } else {
+      showToast('❌ ' + d.msg, '#da3633');
+    }
+  } catch(e) { showToast('❌ Request failed: ' + e.message, '#da3633'); }
+}
+
+async function adminClearRotation() {
+  const weekInput = document.getElementById('clear-rot-week').value.trim();
+  const result    = document.getElementById('clear-rot-result');
+  const label     = weekInput ? `week starting ${weekInput}` : 'ALL rotation weeks';
+  if (!confirm(`Clear duty rotation schedule for ${label}?\n\nPending duty invites for the cleared week(s) will also be removed.`)) return;
+  result.style.display = 'none';
+  showToast('⏳ Clearing...', '#d97706');
+  try {
+    const body = weekInput ? { week_start: weekInput } : {};
+    const r = await fetch('/admin/rotation/clear', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    result.style.display = 'block';
+    result.style.color = d.ok ? '#3fb950' : '#e94560';
+    result.innerHTML = (d.ok ? '✅ ' : '❌ ') + d.msg;
+    if (d.ok) {
+      document.getElementById('clear-rot-week').value = '';
+      showToast('✅ Rotation cleared!', '#238636');
+    } else {
+      showToast('❌ ' + d.msg, '#da3633');
+    }
+  } catch(e) { showToast('❌ Request failed: ' + e.message, '#da3633'); }
+}
+
+async function removeRotationManager() {
+  const sel    = document.getElementById('remove-rot-mgr-sel');
+  const mgrId  = sel.value;
+  const result = document.getElementById('remove-rot-mgr-result');
+  if (!mgrId) { showToast('❌ Please select a manager to remove', '#da3633'); return; }
+  const mgrLabel = sel.options[sel.selectedIndex].textContent;
+  if (!confirm(`⚠️ REMOVE ROTATION MANAGER\n\n${mgrLabel}\n\nThis will immediately deactivate this manager account. They will no longer be able to log in. This action is logged for audit.\n\nAre you sure?`)) return;
+  result.style.display = 'none';
+  showToast('⏳ Removing manager...', '#d97706');
+  try {
+    const r = await fetch('/admin/remove_rotation_manager', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ manager_id: mgrId })
+    });
+    const d = await r.json();
+    result.style.display = 'block';
+    result.style.color = d.ok ? '#3fb950' : '#e94560';
+    result.innerHTML = (d.ok ? '✅ ' : '❌ ') + d.msg;
+    if (d.ok) {
+      showToast('✅ Manager removed successfully', '#238636');
+      // Refresh both manager dropdowns
+      loadManagerDropdowns();
+    } else {
+      showToast('❌ ' + d.msg, '#da3633');
+    }
+  } catch(e) { showToast('❌ Request failed: ' + e.message, '#da3633'); }
+}
+
+// Populate ALL manager dropdowns (existing + remove-rotation)
+async function loadManagerDropdowns() {
+  try {
+    const r = await fetch('/admin/list_managers');
+    const d = await r.json();
+    // Existing reset-code dropdown
+    const sel = document.getElementById('reset-code-mgr-sel');
+    if (sel) {
+      sel.innerHTML = '<option value="">— Select a manager —</option>';
+      (d.managers || []).forEach(m => {
+        const opt = document.createElement('option');
+        const status = m.is_active ? 'Active' : 'Inactive';
+        opt.value = m.manager_id;
+        opt.textContent = m.manager_id + '  —  ' + m.name + '  (' + status + ')';
+        sel.appendChild(opt);
+      });
+      if (!d.managers || d.managers.length === 0) sel.innerHTML = '<option value="">No managers found</option>';
+    }
+    // Remove-rotation dropdown (active only, excluding MGR001)
+    const rmSel = document.getElementById('remove-rot-mgr-sel');
+    if (rmSel) {
+      const active = (d.managers || []).filter(m => m.is_active && m.manager_id !== 'MGR001');
+      if (active.length === 0) {
+        rmSel.innerHTML = '<option value="">No removable active managers found</option>';
+      } else {
+        rmSel.innerHTML = '<option value="">— Select a manager to remove —</option>';
+        active.forEach(m => {
+          const opt = document.createElement('option');
+          opt.value = m.manager_id;
+          opt.textContent = m.manager_id + '  —  ' + m.name;
+          rmSel.appendChild(opt);
+        });
+      }
+    }
+  } catch(e) { console.error('Failed to load managers:', e); }
+}
+
+function showToast(msg, bg) {
+  const t = document.getElementById('result-toast');
+  t.textContent = msg;
+  t.style.background = bg;
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 4000);
+}
+
+// ── NON-ORDERER ALERT (Admin) ────────────────────────────────────────────────
+(async function loadAdminNonOrderAlert() {
+  try {
+    const r = await fetch('/api/non_orderers_summary');
+    const d = await r.json();
+    if (!d.ok || d.non_order_count === 0) return;
+
+    document.getElementById('admin-non-order-count').textContent = d.non_order_count;
+    document.getElementById('admin-non-order-since').textContent =
+      'No orders since ' + d.since_date + ' (' + d.non_order_count + ' of ' + d.total + ' students)';
+
+    const list = document.getElementById('admin-non-order-list');
+    list.innerHTML = d.non_orderers.slice(0, 8).map(s =>
+      `<span style="display:inline-flex;align-items:center;gap:5px;background:#21262d;border:1px solid #30363d;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:600;color:#e6edf3">
+        <i class="fas fa-user" style="color:#8b949e;font-size:10px"></i> ${s.name}
+        <span style="color:#6b7280;font-size:11px">${s.roll_number}</span>
+        ${s.ordering_locked ? '<i class="fas fa-lock" style="font-size:10px;color:#d97706"></i>' : ''}
+      </span>`
+    ).join('') + (d.non_orderers.length > 8 ? `<span style="font-size:12px;color:#8b949e;align-self:center">+${d.non_orderers.length - 8} more</span>` : '');
+
+    document.getElementById('admin-non-order-alert').style.display = 'block';
+  } catch(e) {}
+})();
+
+
+// ── BACKUP ───────────────────────────────────────────────────────────────────
+async function loadBackups() {
+  try {
+    const r = await fetch('/admin/backup_status');
+    const d = await r.json();
+    const list = document.getElementById('backup-list');
+    if (!d.ok || d.backups.length === 0) {
+      list.innerHTML = '<div style="color:#8b949e;font-size:13px;text-align:center;padding:12px">No backups yet. Click "Backup Now" to create one.</div>';
+      return;
+    }
+    list.innerHTML = d.backups.map((b, i) => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#0d1117;border-radius:8px;border:1px solid #21262d">
+        <div style="display:flex;align-items:center;gap:10px">
+          <i class="fas fa-database" style="color:${i===0?'#3fb950':'#484f58'}"></i>
+          <div>
+            <div style="font-size:13px;color:#e6edf3;font-family:monospace">${b.name}</div>
+            <div style="font-size:11px;color:#8b949e">${b.size_kb} KB ${i===0?'<span style=\"background:#238636;color:#fff;padding:1px 6px;border-radius:10px;font-size:10px;margin-left:4px\">latest</span>':''}</div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {
+    document.getElementById('backup-list').innerHTML = '<div style="color:#e94560;font-size:13px">Failed to load backups.</div>';
+  }
+}
+
+async function triggerBackup() {
+  const btn = document.getElementById('backup-now-btn');
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Backing up...';
+  btn.disabled = true;
+  try {
+    const r = await fetch('/admin/backup_now', {method:'POST'});
+    const d = await r.json();
+    if (d.ok) {
+      showToast('✅ ' + d.msg, '#238636');
+      loadBackups();
+    } else {
+      showToast('❌ ' + d.msg, '#da3633');
+    }
+  } catch(e) {
+    showToast('❌ Backup failed', '#da3633');
+  }
+  btn.innerHTML = '<i class="fas fa-download"></i> Backup Now';
+  btn.disabled = false;
+}
+
+loadBackups();
+
+// ─── Invite Code Panel ────────────────────────────────────────────────────────
+
+let _inviteCodes  = [];
+let _allInviteRows = [];   // full dataset for client-side filtering
+
+function _renderCodePill(c, small = false) {
+  const sz  = small ? '12px' : '13px';
+  const pad = small ? '2px 8px' : '4px 10px';
+  return `<span onclick="copyInviteCode('${c}',this)" title="Click to copy"
+    style="font-family:monospace;font-size:${sz};font-weight:700;letter-spacing:.1em;
+           background:#0d1117;border:1px solid #30363d;border-radius:6px;
+           padding:${pad};color:#79c0ff;cursor:pointer;display:inline-flex;
+           align-items:center;gap:6px">
+    ${c} <i class="fas fa-copy" style="font-size:10px;opacity:.6"></i>
+  </span>`;
+}
+
+function _buildTableRows(codes) {
+  if (!codes || codes.length === 0) {
+    return '<tr><td colspan="7" style="text-align:center;color:#8b949e;padding:20px">No codes match this filter.</td></tr>';
+  }
+  return codes.map(c => {
+    const isUsed    = c.is_used === 1;
+    const isRevoked = isUsed && c.used_by === 'REVOKED';
+    const statusBadge = isRevoked
+      ? '<span style="background:#21262d;color:#8b949e;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600">Revoked</span>'
+      : isUsed
+      ? '<span style="background:#21262d;color:#8b949e;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600">Used</span>'
+      : '<span style="background:rgba(63,185,80,.15);color:#3fb950;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600">Active</span>';
+    const batchBadge = c.batch
+      ? `<span style="background:#1f3a5f;color:#79c0ff;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600">Batch ${c.batch}</span>`
+      : '<span style="color:#8b949e;font-size:11px">Any</span>';
+    const usedBy  = isRevoked ? '—' : (c.used_by || '—');
+    const usedAt  = c.used_at ? `<br><span style="font-size:10px;color:#8b949e">${c.used_at.slice(0,16)}</span>` : '';
+    const created = c.created_at ? c.created_at.slice(0,16) : '—';
+    const revokeBtn = !isUsed
+      ? `<button onclick="revokeInvite('${c.code}')" class="btn btn-sm"
+           style="background:transparent;color:#e94560;border:1px solid #e94560;font-size:11px;padding:4px 8px">
+           <i class="fas fa-ban"></i> Revoke
+         </button>` : '';
+    return `<tr>
+      <td style="padding:7px 10px;border-bottom:1px solid #21262d">${_renderCodePill(c.code, true)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #21262d">${batchBadge}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #21262d">${statusBadge}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #21262d;font-size:12px;color:#e6edf3">${usedBy}${usedAt}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #21262d;font-size:12px;color:#8b949e;max-width:140px;word-break:break-word">${c.note || '—'}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #21262d;font-size:11px;color:#8b949e">${created}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #21262d">${revokeBtn}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Batch filter ──────────────────────────────────────────────────────────────
+function applyBatchFilter() {
+  const val   = document.getElementById('inv-filter-batch').value;
+  const tbody = document.getElementById('invite-tbody');
+
+  let filtered;
+  if (!val) {
+    filtered = _allInviteRows;
+  } else if (val === 'any') {
+    filtered = _allInviteRows.filter(c => !c.batch);
+  } else {
+    filtered = _allInviteRows.filter(c => c.batch === val);
+  }
+  tbody.innerHTML = _buildTableRows(filtered);
+}
+
+async function generateInvites() {
+  const count = parseInt(document.getElementById('inv-count').value) || 1;
+  const batch = document.getElementById('inv-batch').value || null;
+  const note  = document.getElementById('inv-note').value.trim();
+  try {
+    const res  = await fetch('/admin/generate_invite', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ count, batch, note })
+    });
+    const data = await res.json();
+    if (!data.ok) { toast('Error: ' + data.msg, 'error'); return; }
+    _showGeneratedCodes(data.codes, batch, note);
+    loadInvites();
+  } catch(e) { toast('Network error: ' + e.message, 'error'); }
+}
+
+// ── One code per batch (Batch 2–8) ───────────────────────────────────────────
+async function generateOnePerBatch() {
+  const btn = document.getElementById('one-per-batch-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating…';
+  const batches = ['2','3','4','5','6','7','8'];
+  const allCodes  = [];
+  const skipped   = [];
+  try {
+    for (const b of batches) {
+      const res  = await fetch('/admin/generate_invite', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ count: 1, batch: b, note: `Batch ${b} code` })
+      });
+      const data = await res.json();
+      if (data.ok && data.codes.length) {
+        allCodes.push({ batch: b, code: data.codes[0] });
+      } else {
+        // Already has an active code — record as skipped
+        skipped.push(b);
+      }
+    }
+    if (!allCodes.length) {
+      toast('All batches already have active codes. Revoke existing codes first.', 'error');
+      return;
+    }
+    const box     = document.getElementById('invite-output-box');
+    const label   = document.getElementById('invite-output-label');
+    const codesEl = document.getElementById('invite-output-codes');
+    _inviteCodes = allCodes.map(x => x.code);
+    label.textContent = `${allCodes.length} code${allCodes.length > 1 ? 's' : ''} generated` +
+      (skipped.length ? ` · Batch ${skipped.join(', ')} skipped (already have active codes)` : ' — one per batch (Batch 2–8)');
+    codesEl.innerHTML = allCodes.map(x =>
+      `<div style="display:inline-flex;flex-direction:column;align-items:center;gap:3px;margin:2px">
+        <span style="font-size:10px;color:#8b949e;font-weight:700">Batch ${x.batch}</span>
+        ${_renderCodePill(x.code)}
+      </div>`
+    ).join('');
+    box.style.display = 'block';
+    if (skipped.length) {
+      toast(`⚠️ ${allCodes.length} generated, ${skipped.length} batch(es) skipped — already have active codes.`, 'error');
+    } else {
+      toast('✅ 7 batch codes generated (one per batch)', 'success');
+    }
+    loadInvites();
+  } catch(e) {
+    toast('Error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-layer-group"></i> Generate All Batches';
+  }
+}
+
+// Lock count to 1 when a specific batch is selected
+function onInvBatchChange() {
+  const batch    = document.getElementById('inv-batch').value;
+  const countEl  = document.getElementById('inv-count');
+  if (batch) {
+    countEl.value    = 1;
+    countEl.disabled = true;
+    countEl.title    = 'Only one code allowed per batch';
+  } else {
+    countEl.disabled = false;
+    countEl.title    = '';
+  }
+}
+
+function _showGeneratedCodes(codes, batch, note) {
+  _inviteCodes = codes;
+  const box    = document.getElementById('invite-output-box');
+  const label  = document.getElementById('invite-output-label');
+  const codesEl = document.getElementById('invite-output-codes');
+  label.textContent = `${codes.length} code${codes.length > 1 ? 's' : ''} generated` +
+    (batch ? ` · Batch ${batch} only` : ' · Any batch') +
+    (note  ? ` · "${note}"` : '');
+  codesEl.innerHTML = codes.map(c => _renderCodePill(c)).join('');
+  box.style.display = 'block';
+  toast(`✅ ${codes.length} invite code(s) generated`, 'success');
+}
+
+function copyInviteCode(code, el) {
+  navigator.clipboard.writeText(code).then(() => {
+    const orig = el.innerHTML;
+    el.innerHTML = `${code} <i class="fas fa-check" style="font-size:10px;color:#3fb950"></i>`;
+    setTimeout(() => { el.innerHTML = orig; }, 1500);
+  });
+}
+
+function copyAllCodes() {
+  if (!_inviteCodes.length) return;
+  navigator.clipboard.writeText(_inviteCodes.join('\n')).then(() => {
+    toast(`Copied ${_inviteCodes.length} codes to clipboard`, 'success');
+  });
+}
+
+// ── loadInvites with spinner + store full data for filtering ──────────────────
+async function loadInvites(showSpinner = false) {
+  const tbody = document.getElementById('invite-tbody');
+  const refreshBtn  = document.getElementById('refresh-invites-btn');
+  const refreshIcon = document.getElementById('refresh-icon');
+
+  if (showSpinner && refreshBtn) {
+    refreshBtn.disabled = true;
+    refreshIcon.className = 'fas fa-sync fa-spin';
+  }
+
+  try {
+    const res  = await fetch('/admin/list_invites');
+    const data = await res.json();
+    _allInviteRows = data.codes || [];
+
+    if (_allInviteRows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#8b949e;padding:20px">No invite codes yet. Generate some above.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = _buildTableRows(_allInviteRows);
+    if (showSpinner) toast('✅ Codes refreshed', 'success');
+
+    // Re-apply active filter if any
+    const filterVal = document.getElementById('inv-filter-batch').value;
+    if (filterVal) applyBatchFilter();
+
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#e94560;padding:16px">Failed to load codes. Please try again.</td></tr>`;
+    if (showSpinner) toast('Failed to refresh codes', 'error');
+  } finally {
+    if (refreshBtn) {
+      refreshBtn.disabled = false;
+      refreshIcon.className = 'fas fa-sync';
+    }
+  }
+}
+
+async function revokeInvite(code) {
+  if (!confirm(`Revoke code ${code}? It will no longer be usable.`)) return;
+  try {
+    const res  = await fetch('/admin/revoke_invite', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ code })
+    });
+    const data = await res.json();
+    toast(data.ok ? `Code ${code} revoked.` : data.msg, data.ok ? 'success' : 'error');
+    if (data.ok) { await loadInvites(); applyBatchFilter(); }
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+async function deleteUsedInvites() {
+  const btn = document.getElementById('clear-used-btn');
+  if (!confirm('Delete all used & revoked codes?\nActive (unused) codes will NOT be affected.')) return;
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Clearing…'; }
+  try {
+    const res  = await fetch('/admin/delete_used_invites', { method: 'POST' });
+    const data = await res.json();
+    toast(data.msg, data.ok ? 'success' : 'error');
+    if (data.ok) { await loadInvites(); applyBatchFilter(); }
+  } catch(e) {
+    toast('Error: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash"></i> Clear Used'; }
+  }
+}
+
+async function deleteAllInvites() {
+  const btn = document.getElementById('delete-all-btn');
+  if (!confirm('⚠️ Delete EVERY invite code — including all active unused ones?\n\nStudents holding unused codes will lose access.')) return;
+  if (!confirm('Second confirmation: Delete ALL codes with no recovery?')) return;
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting…'; }
+  try {
+    const res  = await fetch('/admin/delete_all_invites', { method: 'POST' });
+    const data = await res.json();
+    toast(data.msg, data.ok ? 'success' : 'error');
+    if (data.ok) { await loadInvites(); applyBatchFilter(); }
+  } catch(e) {
+    toast('Error: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-fire"></i> Delete ALL'; }
+  }
+}
+
+loadInvites();
+
+// ── BKASH CHANGE REQUESTS (Admin) ────────────────────────────────────────────
+async function loadBkashRequests() {
+  const list = document.getElementById('bkash-req-list');
+  if (!list) return;
+  try {
+    const r = await fetch('/admin/phone_change_requests');
+    if (!r.ok) {
+      if (r.status === 401) { list.innerHTML = '<div style="color:#f0883e;font-size:13px;padding:12px">⚠️ Session expired. <a href="/admin/login" style="color:#58a6ff">Log in again</a>.</div>'; return; }
+      throw new Error('HTTP ' + r.status);
+    }
+    const d = await r.json();
+    if (d.error === 'not_authenticated') { list.innerHTML = '<div style="color:#f0883e;font-size:13px;padding:12px">⚠️ Session expired. <a href="/admin/login" style="color:#58a6ff">Log in again</a>.</div>'; return; }
+    if (!d.ok || !d.requests || !d.requests.length) {
+      list.innerHTML = '<div style="text-align:center;padding:16px;color:#484f58;font-size:13px">No bKash change requests.</div>';
+      const badge = document.getElementById('bkash-req-badge');
+      if (badge) badge.style.display = 'none';
+      return;
+    }
+    const pending = d.requests.filter(x => x.status === 'pending');
+    const badge = document.getElementById('bkash-req-badge');
+    if (badge) { if (pending.length) { badge.textContent = pending.length; badge.style.display = ''; } else { badge.style.display = 'none'; } }
+    const statusColor = { pending: '#e6a817', approved: '#238636', rejected: '#da3633' };
+    list.innerHTML = d.requests.map(req => `
+      <div id="bkash-row-${req.id}" style="background:#0d1117;border:1px solid ${req.status==='pending'?'#e6a817':'#21262d'};border-radius:8px;padding:12px 14px;margin-bottom:8px;font-size:13px">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div>
+            <span style="font-weight:700;color:#e6edf3">${req.name}</span>
+            <span style="color:#8b949e;margin-left:8px">${req.roll_number} · Batch ${req.batch} · Floor ${req.floor}</span>
+          </div>
+          <span style="background:${statusColor[req.status]||'#484f58'};color:#fff;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700">${req.status}</span>
+        </div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+          <span style="font-family:monospace;color:#8b949e">${req.old_bkash}</span>
+          <span style="color:#e51c6d;font-weight:700">→</span>
+          <span style="font-family:monospace;color:#58a6ff;font-weight:700">${req.new_bkash}</span>
+          ${req.reason ? `<span style="color:#8b949e;font-size:12px">"${req.reason}"</span>` : ''}
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span style="color:#484f58;font-size:12px">${(req.created_at||'').slice(0,16).replace('T',' ')}</span>
+          ${req.status === 'pending' ? `
+            <button onclick="decideBkashChange(${req.id},'approved')" style="background:#238636;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer">
+              <i class="fas fa-check"></i> Approve
+            </button>
+            <button onclick="decideBkashChange(${req.id},'rejected')" style="background:#da3633;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer">
+              <i class="fas fa-times"></i> Reject
+            </button>` : `<span style="color:#484f58;font-size:12px">Decided ${req.decided_at ? req.decided_at.slice(0,10) : ''}</span>`}
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    if (list) list.innerHTML = '<div style="color:#da3633;font-size:13px;padding:12px">❌ Failed to load bKash requests. <button onclick="loadBkashRequests()" style="background:none;border:none;color:#58a6ff;cursor:pointer;font-size:13px">Retry</button></div>';
+  }
+}
+
+async function decideBkashChange(reqId, verdict) {
+  const label = verdict === 'approved' ? 'APPROVE' : 'REJECT';
+  if (!confirm(`${label} this bKash change request?\n\n${verdict==='approved'?"This will immediately update the student's bKash number.":"The student's bKash number will NOT change."}`)) return;
+  const row = document.getElementById(`bkash-row-${reqId}`);
+  if (row) row.style.opacity = '0.5';
+  try {
+    const r = await fetch('/admin/decide_phone_change', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ request_id: reqId, verdict: verdict })
+    });
+    const d = await r.json();
+    showToast(d.ok ? `✅ ${d.msg}` : `❌ ${d.msg}`, d.ok ? '#238636' : '#da3633');
+    if (d.ok) loadBkashRequests();
+    else if (row) row.style.opacity = '1';
+  } catch(e) {
+    if (row) row.style.opacity = '1';
+    showToast('❌ Network error. Please try again.', '#da3633');
+  }
+}
+
+// Auto-load on page ready
+document.addEventListener('DOMContentLoaded', loadBkashRequests);
+
+// ── FLOOR CHANGE REQUESTS (Admin) ─────────────────────────────────────────────
+// ── HOSTEL HELPERS (Patch 1) ──────────────────────────────────────────────────
+const HOSTEL_MAP = { 1: 'Campus', 2: 'Sentu House', 3: 'Chairman House' };
+
+function floorLabel(floor, gender) {
+  if (gender === 'female') return HOSTEL_MAP[floor] || `Hostel ${floor}`;
+  return `Floor ${floor}`;
+}
+
+function floorOptionsHtml(currentVal, gender) {
+  if (gender === 'female') {
+    return [1, 2, 3].map(f =>
+      `<option value="${f}" ${f === currentVal ? 'selected' : ''}>${HOSTEL_MAP[f]}</option>`
+    ).join('');
+  }
+  return [1, 2, 3, 4, 5, 6, 7].map(f =>
+    `<option value="${f}" ${f === currentVal ? 'selected' : ''}>Floor ${f}</option>`
+  ).join('');
+}
+
+async function loadFloorRequests() {
+  const list = document.getElementById('floor-req-list');
+  if (!list) return;
+  try {
+    const r = await fetch('/admin/floor_change_requests');
+    if (!r.ok) {
+      if (r.status === 401) {
+        list.innerHTML = '<div style="color:#f0883e;font-size:13px;padding:12px">⚠️ Session expired. <a href="/admin/login" style="color:#58a6ff">Log in again</a>.</div>';
+        return;
+      }
+      throw new Error('HTTP ' + r.status);
+    }
+    const d = await r.json();
+    if (d.error === 'not_authenticated') {
+      list.innerHTML = '<div style="color:#f0883e;font-size:13px;padding:12px">⚠️ Session expired. <a href="/admin/login" style="color:#58a6ff">Log in again</a>.</div>';
+      return;
+    }
+    const badge = document.getElementById('floor-req-badge');
+    if (!d.requests || d.requests.length === 0) {
+      list.innerHTML = '<div style="text-align:center;padding:16px;color:#484f58;font-size:13px">No pending floor change requests.</div>';
+      if (badge) badge.style.display = 'none';
+      return;
+    }
+    if (badge) { badge.textContent = d.requests.length; badge.style.display = ''; }
+
+    list.innerHTML = d.requests.map(req => {
+      const isFemale   = req.gender === 'female';
+      const fromLabel  = floorLabel(req.current_floor,   req.gender);
+      const toLabel    = floorLabel(req.requested_floor, req.gender);
+      const kindLabel  = isFemale ? 'Hostel' : 'Floor';
+      const genderTag  = isFemale
+        ? '<span style="background:rgba(247,120,161,.15);color:#f778a1;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;margin-left:6px">♀ Female</span>'
+        : '<span style="background:rgba(88,166,255,.12);color:#58a6ff;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;margin-left:6px">♂ Male</span>';
+      const optionsHtml = floorOptionsHtml(req.requested_floor, req.gender);
+
+      return `
+        <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:14px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+            <div>
+              <div style="font-weight:700;color:#e6edf3;font-size:14px">
+                ${req.student_name}
+                ${genderTag}
+                <span style="color:#8b949e;font-weight:400;font-size:13px">(${req.roll_number}, Batch ${req.batch})</span>
+              </div>
+              <div style="color:#8b949e;font-size:12px;margin-top:5px">
+                ${kindLabel}: <span style="color:#e6edf3">${fromLabel}</span>
+                → <strong style="color:#f0883e">${toLabel}</strong>
+                ${req.reason ? `· <em style="color:#8b949e">"${req.reason}"</em>` : ''}
+                · Requested ${req.created_at ? req.created_at.slice(0,10) : ''}
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;align-items:center">
+              <select id="approve-floor-${req.id}"
+                style="padding:6px 10px;border-radius:6px;border:1px solid #30363d;background:#0d1117;color:#e6edf3;font-size:13px">
+                ${optionsHtml}
+              </select>
+              <button onclick="approveFloor(${req.id},'${req.roll_number}','${req.gender}')"
+                style="padding:7px 14px;border-radius:6px;background:#238636;color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer">
+                <i class="fas fa-check"></i> Approve
+              </button>
+              <button onclick="rejectFloor(${req.id})"
+                style="padding:7px 14px;border-radius:6px;background:#da3633;color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer">
+                <i class="fas fa-times"></i> Reject
+              </button>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  } catch(e) {
+    if (list) list.innerHTML = '<div style="color:#f85149;font-size:13px;padding:12px">❌ Failed to load requests. <button onclick="loadFloorRequests()" style="background:none;border:none;color:#58a6ff;cursor:pointer;font-size:13px">Retry</button></div>';
+  }
+}
+
+// ── BLOCK_C: patched approveFloor (gender-aware) ──────────────────────────────
+async function approveFloor(reqId, roll, gender) {
+  const sel = document.getElementById('approve-floor-' + reqId);
+  const newFloor = sel ? parseInt(sel.value) : null;
+  if (!newFloor) return;
+  const label = gender === 'female'
+    ? (HOSTEL_MAP[newFloor] || `Hostel ${newFloor}`)
+    : `Floor ${newFloor}`;
+  if (!confirm(`Approve ${gender === 'female' ? 'hostel' : 'floor'} change to "${label}" for ${roll}?`)) return;
+  const r = await fetch('/admin/update_student_floor', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ roll_number: roll, floor: newFloor, request_id: reqId })
+  });
+  const d = await r.json();
+  showToast(d.msg, d.ok ? '#238636' : '#da3633');
+  if (d.ok) loadFloorRequests();
+}
+
+async function rejectFloor(reqId) {
+  const r = await fetch('/admin/reject_floor_change', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ request_id: reqId })
+  });
+  const d = await r.json();
+  showToast(d.msg, d.ok ? '#238636' : '#da3633');
+  if (d.ok) loadFloorRequests();
+}
+
+// ── BLOCK_D: directFloorUpdate (manual gender select) ────────────────────────
+
+function onDirectGenderChange() {
+  const gender = document.getElementById('direct-floor-gender').value;
+  const sel    = document.getElementById('direct-floor-num');
+  const lbl    = document.getElementById('direct-floor-label');
+
+  if (!gender) {
+    lbl.textContent = 'Floor / Hostel';
+    sel.innerHTML = '<option value="">— select gender first —</option>';
+    return;
+  }
+
+  if (gender === 'female') {
+    lbl.textContent = 'Hostel';
+    sel.innerHTML = `
+      <option value="">Select hostel…</option>
+      <option value="1">Campus</option>
+      <option value="2">Sentu House</option>
+      <option value="3">Chairman House</option>`;
+  } else {
+    lbl.textContent = 'Floor';
+    sel.innerHTML = `
+      <option value="">Select floor…</option>
+      <option value="1">Floor 1</option>
+      <option value="2">Floor 2</option>
+      <option value="3">Floor 3</option>
+      <option value="4">Floor 4</option>
+      <option value="5">Floor 5</option>
+      <option value="6">Floor 6</option>
+      <option value="7">Floor 7</option>`;
+  }
+}
+
+async function directFloorUpdate() {
+  const roll   = document.getElementById('direct-floor-roll').value.trim();
+  const gender = document.getElementById('direct-floor-gender').value;
+  const floor  = document.getElementById('direct-floor-num').value;
+  const res    = document.getElementById('direct-floor-result');
+
+  if (!roll || !gender || !floor) {
+    res.innerHTML = '<span style="color:#f0883e">⚠️ Fill in roll number, gender, and floor/hostel.</span>';
+    return;
+  }
+
+  const label = gender === 'female'
+    ? (HOSTEL_MAP[parseInt(floor)] || `Hostel ${floor}`)
+    : `Floor ${floor}`;
+
+  res.innerHTML = '<span style="color:#8b949e"><i class="fas fa-spinner fa-spin"></i> Updating…</span>';
+  const r = await fetch('/admin/update_student_floor', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ roll_number: roll, floor: parseInt(floor) })
+  });
+  const d = await r.json();
+  res.innerHTML = d.ok
+    ? `<span style="color:#3fb950">✅ Updated to ${label}.</span>`
+    : `<span style="color:#f85149">❌ ${d.msg}</span>`;
+  if (d.ok) {
+    loadFloorRequests();
+    document.getElementById('direct-floor-roll').value = '';
+    document.getElementById('direct-floor-gender').value = '';
+    document.getElementById('direct-floor-num').innerHTML = '<option value="">— select gender first —</option>';
+    document.getElementById('direct-floor-label').textContent = 'Floor / Hostel';
+  }
+}
+
+// Load floor requests eagerly on page ready (no IntersectionObserver delay)
+document.addEventListener('DOMContentLoaded', loadFloorRequests);
+
+</script>
+{% endblock %}

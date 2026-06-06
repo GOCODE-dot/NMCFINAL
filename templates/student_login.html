@@ -1,0 +1,225 @@
+{% extends 'base.html' %}
+{% block title %}Student Login{% endblock %}
+{% block extra_head %}
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --sl-bg: #f0f7f2; --sl-panel: #e4f2ea; --sl-card: #fff;
+    --sl-text: #0d1f15; --sl-muted: #5a7a66;
+    --sl-border: rgba(26,107,58,0.15); --sl-input-bg: #f8fcf9;
+    --sl-shadow: 0 24px 80px rgba(26,107,58,0.12);
+    --sl-orb: rgba(26,107,58,0.08);
+  }
+  [data-theme="dark"] {
+    --sl-bg: #0a1a0f; --sl-panel: #0d2316; --sl-card: #112a18;
+    --sl-text: #e4f2ea; --sl-muted: #7ab88a;
+    --sl-border: rgba(45,158,90,0.22); --sl-input-bg: #0f2419;
+    --sl-shadow: 0 24px 80px rgba(0,0,0,0.4);
+    --sl-orb: rgba(45,158,90,0.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  .page { min-height: 100vh; display: flex; background: var(--sl-bg); transition: background 0.4s; font-family: 'Plus Jakarta Sans', sans-serif; }
+  .illus-panel {
+    width: 45%; background: linear-gradient(160deg, var(--sl-panel) 0%, var(--sl-bg) 100%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 60px 40px; position: relative; overflow: hidden;
+  }
+  .illus-panel::before { content: ''; position: absolute; width: 500px; height: 500px; border-radius: 50%; background: radial-gradient(circle, var(--sl-orb) 0%, transparent 70%); top: -100px; left: -100px; }
+  .illus-panel::after { content: ''; position: absolute; width: 300px; height: 300px; border-radius: 50%; background: radial-gradient(circle, rgba(240,165,0,0.06) 0%, transparent 70%); bottom: -60px; right: -60px; }
+  .illus-scene { position: relative; z-index: 1; text-align: center; }
+  .illus-title { font-family: 'Cormorant Garamond', serif; font-size: 30px; font-style: italic; font-weight: 600; color: var(--primary); margin-bottom: 10px; line-height: 1.2; }
+  .illus-sub { font-size: 14px; color: var(--sl-muted); line-height: 1.6; max-width: 260px; margin: 0 auto 36px; }
+  .cartoon-wrap { width: 240px; height: 240px; margin: 0 auto; animation: float 4s ease-in-out infinite; }
+  @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
+  .feature-pills { display: flex; flex-direction: column; gap: 10px; margin-top: 36px; }
+  .feat-pill { display: flex; align-items: center; gap: 12px; background: rgba(26,107,58,0.08); border: 1px solid rgba(26,107,58,0.12); border-radius: 40px; padding: 10px 18px; font-size: 13px; color: var(--sl-muted); font-weight: 500; animation: slideIn 0.5s ease both; }
+  .feat-pill i { color: var(--primary); width: 16px; text-align: center; }
+  @keyframes slideIn { from{transform:translateX(-20px);opacity:0} to{transform:translateX(0);opacity:1} }
+  .form-panel { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 24px; position: relative; }
+  .form-inner { width: 100%; max-width: 400px; }
+  .theme-btn { position: fixed; top: 16px; right: 16px; z-index: 200; width: 44px; height: 44px; border-radius: 50%; background: var(--sl-card); border: 1.5px solid var(--sl-border); display: grid; place-items: center; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.08); font-size: 18px; transition: all 0.3s; -webkit-tap-highlight-color: transparent; }
+  .back-link { display: inline-flex; align-items: center; gap: 6px; color: var(--sl-muted); text-decoration: none; font-size: 13px; font-weight: 600; margin-bottom: 28px; padding: 9px 16px; border-radius: 20px; background: var(--sl-input-bg); border: 1px solid var(--sl-border); transition: all 0.2s; }
+  .back-link:hover { color: var(--primary); border-color: var(--primary); }
+  .card-header { margin-bottom: 28px; }
+  .card-header .icon-wrap { width: 60px; height: 60px; background: linear-gradient(135deg, var(--primary), var(--primary-light)); border-radius: 18px; display: grid; place-items: center; font-size: 26px; color: #fff; margin-bottom: 18px; box-shadow: 0 8px 24px rgba(26,107,58,0.3); animation: iconPop 0.5s cubic-bezier(0.34,1.56,0.64,1) both; }
+  @keyframes iconPop { from{transform:scale(0.5);opacity:0} to{transform:scale(1);opacity:1} }
+  .card-header h2 { font-size: 24px; font-weight: 800; color: var(--sl-text); margin-bottom: 4px; }
+  .card-header p { color: var(--sl-muted); font-size: 14px; }
+  .flash { padding: 12px 16px; border-radius: 10px; font-size: 14px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .flash-success { background: var(--primary-pale); color: var(--primary); border: 1px solid #b7e4c7; }
+  .flash-error { background: #fff5f5; color: #e53e3e; border: 1px solid #feb2b2; }
+  .field { margin-bottom: 18px; }
+  .field label { display: block; font-size: 12px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--sl-muted); margin-bottom: 7px; }
+  .input-wrap { position: relative; }
+  .input-wrap i.icon { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: var(--sl-muted); font-size: 15px; pointer-events: none; }
+  .input-wrap input { width: 100%; padding: 14px 16px 14px 44px; background: var(--sl-input-bg); border: 1.5px solid var(--sl-border); border-radius: 12px; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 16px; color: var(--sl-text); transition: all 0.25s; -webkit-appearance: none; }
+  .input-wrap input::placeholder { color: var(--sl-muted); opacity: 0.6; }
+  .input-wrap input:focus { outline: none; border-color: var(--primary); background: var(--sl-card); box-shadow: 0 0 0 4px rgba(26,107,58,0.1); }
+  .eye-btn { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--sl-muted); font-size: 15px; transition: color 0.2s; padding: 6px; -webkit-tap-highlight-color: transparent; }
+  .eye-btn:hover { color: var(--primary); }
+  .row-opts { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; font-size: 13px; }
+  .remember-label { display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--sl-muted); font-weight: 500; user-select: none; }
+  .remember-label input[type=checkbox] { display: none; }
+  .checkbox-box { width: 20px; height: 20px; border-radius: 6px; border: 2px solid var(--sl-border); background: var(--sl-input-bg); display: grid; place-items: center; transition: all 0.2s; flex-shrink: 0; }
+  .remember-label input:checked + .checkbox-box { background: var(--primary); border-color: var(--primary); }
+  .remember-label input:checked + .checkbox-box::after { content: '✓'; color: #fff; font-size: 12px; font-weight: 700; }
+  .forgot-link { color: var(--sl-muted); text-decoration: none; font-weight: 600; transition: color 0.2s; }
+  .forgot-link:hover { color: var(--primary); }
+  .submit-btn { width: 100%; padding: 15px; border-radius: 12px; background: linear-gradient(135deg, var(--primary), var(--primary-light)); color: #fff; border: none; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 16px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: all 0.25s; box-shadow: 0 8px 24px rgba(26,107,58,0.3); -webkit-tap-highlight-color: transparent; min-height: 52px; }
+  .submit-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(26,107,58,0.4); }
+  .submit-btn:active { transform: scale(0.98); }
+  .form-footer { text-align: center; margin-top: 22px; font-size: 14px; color: var(--sl-muted); }
+  .form-footer a { color: var(--primary); font-weight: 700; text-decoration: none; }
+  .divider { height: 1px; background: var(--sl-border); margin: 20px 0; }
+  @media(max-width:768px) { .illus-panel { display: none; } .form-panel { padding: 28px 20px; } }
+  @media(max-width:480px) {
+    .form-panel { padding: 20px 14px; }
+    .card-header h2 { font-size: 20px; }
+    .submit-btn { min-height: 54px; font-size: 17px; }
+    .input-wrap input { padding: 13px 14px 13px 42px; }
+    .back-link { margin-bottom: 20px; }
+    .row-opts { flex-direction: row; gap: 8px; }
+  }
+  @media(max-width:360px) {
+    .form-panel { padding: 16px 12px; }
+    .card-header h2 { font-size: 18px; }
+  }
+</style>
+{% endblock %}
+{% block body %}
+<button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌙</button>
+<div class="page">
+  <div class="illus-panel">
+    <div class="illus-scene">
+      <div class="illus-title">Student Portal</div>
+      <p class="illus-sub">Welcome back! Manage your meals, track payments and stay nourished.</p>
+      <div class="cartoon-wrap">
+        <svg viewBox="0 0 280 280" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="140" cy="140" r="130" fill="rgba(26,107,58,0.07)"/>
+          <ellipse cx="140" cy="262" rx="55" ry="10" fill="rgba(0,0,0,0.08)"/>
+          <rect x="85" y="155" width="110" height="90" rx="20" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+          <path d="M140 165 L110 155 L105 185 L140 175 Z" fill="#f0f7f2"/>
+          <path d="M140 165 L170 155 L175 185 L140 175 Z" fill="#f0f7f2"/>
+          <rect x="127" y="165" width="26" height="55" rx="4" fill="#1a6b3a" opacity="0.15"/>
+          <path d="M115 172 Q108 195 115 210 Q122 225 132 222" stroke="#1a6b3a" stroke-width="3" fill="none" stroke-linecap="round"/>
+          <circle cx="133" cy="224" r="7" fill="#1a6b3a" opacity="0.9"/>
+          <circle cx="133" cy="224" r="4" fill="#2d9e5a"/>
+          <rect x="153" y="180" width="22" height="18" rx="4" fill="#e8f5ee" stroke="#b7e4c7" stroke-width="1"/>
+          <rect x="158" y="175" width="3" height="12" rx="1.5" fill="#e94560"/>
+          <rect x="163" y="175" width="3" height="12" rx="1.5" fill="#1a6b3a"/>
+          <rect x="128" y="128" width="24" height="30" rx="10" fill="#f9d8b0"/>
+          <ellipse cx="140" cy="112" rx="42" ry="44" fill="#f9d8b0"/>
+          <ellipse cx="98" cy="112" rx="8" ry="10" fill="#f9d8b0"/>
+          <ellipse cx="100" cy="112" rx="5" ry="7" fill="#f5c9a0"/>
+          <ellipse cx="182" cy="112" rx="8" ry="10" fill="#f9d8b0"/>
+          <ellipse cx="180" cy="112" rx="5" ry="7" fill="#f5c9a0"/>
+          <ellipse cx="140" cy="78" rx="42" ry="20" fill="#3d2b1f"/>
+          <rect x="98" y="75" width="84" height="22" rx="5" fill="#3d2b1f"/>
+          <path d="M115 70 Q140 60 165 70" stroke="#5a3e2b" stroke-width="3" fill="none"/>
+          <ellipse cx="122" cy="108" rx="10" ry="11" fill="#fff"/>
+          <ellipse cx="158" cy="108" rx="10" ry="11" fill="#fff"/>
+          <circle cx="124" cy="110" r="6" fill="#3d2b1f"/>
+          <circle cx="160" cy="110" r="6" fill="#3d2b1f"/>
+          <circle cx="126" cy="108" r="2" fill="#fff"/>
+          <circle cx="162" cy="108" r="2" fill="#fff"/>
+          <path d="M112 97 Q122 92 132 96" stroke="#3d2b1f" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+          <path d="M148 96 Q158 92 168 97" stroke="#3d2b1f" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+          <rect x="111" y="101" width="22" height="16" rx="6" fill="none" stroke="#1a6b3a" stroke-width="2.5"/>
+          <rect x="147" y="101" width="22" height="16" rx="6" fill="none" stroke="#1a6b3a" stroke-width="2.5"/>
+          <line x1="133" y1="109" x2="147" y2="109" stroke="#1a6b3a" stroke-width="2"/>
+          <line x1="98" y1="107" x2="111" y2="107" stroke="#1a6b3a" stroke-width="2"/>
+          <line x1="169" y1="107" x2="182" y2="107" stroke="#1a6b3a" stroke-width="2"/>
+          <path d="M136 115 Q140 122 144 115" stroke="#d4a87a" stroke-width="1.5" fill="none"/>
+          <path d="M126 128 Q140 138 154 128" stroke="#d4a87a" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <ellipse cx="114" cy="124" rx="9" ry="6" fill="#f4a4a4" opacity="0.4"/>
+          <ellipse cx="166" cy="124" rx="9" ry="6" fill="#f4a4a4" opacity="0.4"/>
+          <rect x="168" y="190" width="32" height="42" rx="4" fill="#1a6b3a"/>
+          <rect x="170" y="192" width="28" height="38" rx="3" fill="#2d9e5a"/>
+          <rect x="176" y="198" width="16" height="2" rx="1" fill="rgba(255,255,255,0.6)"/>
+          <rect x="176" y="203" width="16" height="2" rx="1" fill="rgba(255,255,255,0.6)"/>
+          <rect x="176" y="208" width="10" height="2" rx="1" fill="rgba(255,255,255,0.6)"/>
+          <ellipse cx="176" cy="240" rx="14" ry="9" fill="#f9d8b0"/>
+          <path d="M85 175 Q75 200 80 230" stroke="#ffffff" stroke-width="20" stroke-linecap="round" fill="none"/>
+          <circle cx="140" cy="240" r="14" fill="#1a6b3a" opacity="0.9"/>
+          <text x="140" y="245" text-anchor="middle" font-size="14" fill="#fff">⚕</text>
+          <text x="60" y="80" font-size="16" opacity="0.5">✦</text>
+          <text x="210" y="70" font-size="12" opacity="0.4">✧</text>
+        </svg>
+      </div>
+      <div class="feature-pills">
+        <div class="feat-pill" style="animation-delay:0.1s"><i class="fas fa-utensils"></i> Order lunch & dinner meals</div>
+        <div class="feat-pill" style="animation-delay:0.2s"><i class="fas fa-taka-sign"></i> Track payments & balance</div>
+        <div class="feat-pill" style="animation-delay:0.3s"><i class="fas fa-history"></i> View your meal history</div>
+      </div>
+    </div>
+  </div>
+  <div class="form-panel">
+    <div class="form-inner">
+      <a href="{{ url_for('index') }}" class="back-link"><i class="fas fa-arrow-left"></i> Back to Home</a>
+      <div class="card-header">
+        <div class="icon-wrap"><i class="fas fa-user-graduate"></i></div>
+        <h2>Student Login</h2>
+        <p>Sign in to manage your meals</p>
+      </div>
+      {% with msgs = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in msgs %}
+          <div class="flash flash-{{ cat }}"><i class="fas fa-{{ 'check-circle' if cat=='success' else 'exclamation-circle' }}"></i> {{ msg }}</div>
+        {% endfor %}
+      {% endwith %}
+      <form method="POST">
+        <div class="field">
+          <label>Roll Number <span style="font-size:11px;font-weight:500;opacity:0.7;text-transform:none;letter-spacing:0">(Batch–Roll, e.g. 2-5)</span></label>
+          <div class="input-wrap">
+            <i class="fas fa-id-card icon"></i>
+            <input type="text" name="roll_number" placeholder="e.g. 2-5  (Batch 2, Roll 5)" required autocomplete="username">
+          </div>
+          <div style="margin-top:6px;font-size:12px;color:var(--sl-muted);display:flex;align-items:center;gap:5px">
+            <i class="fas fa-circle-info" style="color:var(--primary);font-size:11px"></i>
+            Format: <strong>Batch</strong>–<strong>Roll</strong> &nbsp;·&nbsp; Batch 3, Roll 12 → <code style="background:rgba(26,107,58,0.1);padding:1px 6px;border-radius:4px;font-size:11px;color:var(--primary)">3-12</code>
+          </div>
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <div class="input-wrap">
+            <i class="fas fa-lock icon"></i>
+            <input type="password" name="password" placeholder="Enter your password" required autocomplete="current-password" id="sl-pw">
+            <button type="button" class="eye-btn" onclick="togglePw('sl-pw', this)"><i class="fas fa-eye"></i></button>
+          </div>
+        </div>
+        <div class="row-opts">
+          <label class="remember-label">
+            <input type="checkbox" name="remember_me" value="1">
+            <div class="checkbox-box"></div>
+            Remember me
+          </label>
+          <a href="{{ url_for('student_reset_password') }}" class="forgot-link"><i class="fas fa-key"></i> Forgot?</a>
+        </div>
+        <button type="submit" class="submit-btn"><i class="fas fa-sign-in-alt"></i> Sign In to Portal</button>
+      </form>
+      <div class="divider"></div>
+      <div class="form-footer">
+        Don't have an account? <a href="{{ url_for('student_register') }}">Register here</a>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+function togglePw(id, btn) {
+  const inp = document.getElementById(id);
+  const isHidden = inp.type === 'password';
+  inp.type = isHidden ? 'text' : 'password';
+  btn.querySelector('i').className = isHidden ? 'fas fa-eye-slash' : 'fas fa-eye';
+}
+function toggleTheme() {
+  const html = document.documentElement;
+  const btn = document.getElementById('themeBtn');
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  btn.textContent = isDark ? '🌙' : '☀️';
+  localStorage.setItem('nmms-theme', isDark ? 'light' : 'dark');
+}
+const saved = localStorage.getItem('nmms-theme') || 'light';
+document.documentElement.setAttribute('data-theme', saved);
+document.getElementById('themeBtn').textContent = saved === 'dark' ? '☀️' : '🌙';
+</script>
+{% endblock %}
