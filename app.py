@@ -417,7 +417,7 @@ def init_db():
         )
 
     # ── Remove ALL demo/test students permanently ────────────────────────────
-    demo_rows = query(conn, "SELECT id FROM students WHERE is_demo=1 OR roll_number LIKE 'DEMO%%' OR roll_number='2-1'")
+    demo_rows = query(conn, "SELECT id FROM students WHERE is_demo=1 OR roll_number LIKE 'DEMO%%'")
     demo_ids  = [r['id'] for r in demo_rows]
     if demo_ids:
         ph = ','.join(['%s'] * len(demo_ids))
@@ -549,10 +549,6 @@ def student_register():
                 return render_template('student_register.html')
 
             roll_number = f'{batch_num}-{roll_raw}'
-            if roll_number == '2-1':
-                flash('Roll number 2-1 is not available for registration.', 'error')
-                return render_template('student_register.html')
-
             execute(conn,
                 "INSERT INTO students (name,batch,roll_number,bkash_number,password,gender,floor) VALUES (%s,%s,%s,%s,%s,%s,%s)",
                 (name, str(batch_num), roll_number, bkash, hash_pass(password), gender, floor_val)
