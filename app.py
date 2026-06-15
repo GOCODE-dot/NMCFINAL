@@ -379,6 +379,18 @@ def init_db():
         )
     """)
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS ordering_unlock_requests (
+            id         SERIAL PRIMARY KEY,
+            student_id INTEGER NOT NULL,
+            reason     TEXT DEFAULT '',
+            status     TEXT DEFAULT 'pending',
+            decided_by TEXT DEFAULT NULL,
+            decided_at TEXT DEFAULT NULL,
+            created_at TEXT DEFAULT (to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'))
+        )
+    """)
+
     conn.commit()
 
     # ── Safe migrations (ADD COLUMN if not exists) ───────────────────────────
@@ -660,9 +672,9 @@ def student_dashboard():
     week_end    = week_end_date.isoformat()
     week_dates  = [(week_start_date + timedelta(days=i)).isoformat() for i in range(7)]
 
-    # 3-day payment window: ordering allowed only Sun(0), Mon(1), Tue(2)
+    # Ordering open all week — only per-meal midnight cutoff applies
     days_into_week  = days_since_start
-    pay_window_open = days_into_week <= 2
+    pay_window_open = True  # 3-day window removed
 
     orders = query(conn,
         "SELECT meal_date, meal_type, payment_status, amount FROM meal_orders "
@@ -777,8 +789,16 @@ def student_order():
     # To book a meal for Day X, the student must order before 00:00 AM (midnight)
     # of Day X — i.e. right now (BD time) must be before midnight of meal_date.
     # Today's meals are always open until midnight tonight.
+    #
+    # ADMIN OVERRIDE: if the admin has disabled the cutoff (cutoff_override='1'
+    # in site_settings), skip the deadline check entirely.
     try:
-        order_date  = datetime.strptime(meal_date_str, '%Y-%m-%d').date()
+        order_date = datetime.strptime(meal_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        conn.close()
+        return jsonify({'ok': False, 'msg': '⛔ Invalid date format.'})
+
+    if not is_cutoff_override_active():
         now_bd      = datetime.utcnow() + timedelta(hours=6)  # Bangladesh time (UTC+6)
         deadline_dt = datetime(order_date.year, order_date.month, order_date.day, 0, 0, 0)
         if now_bd >= deadline_dt:
@@ -788,9 +808,6 @@ def student_order():
                 'msg':   f'⏰ Ordering deadline passed — meals for {order_date.strftime("%d %b")} had to be booked before midnight. You can still order upcoming days.',
                 'locked': True
             })
-    except ValueError:
-        conn.close()
-        return jsonify({'ok': False, 'msg': '⛔ Invalid date format.'})
 
     WEEK_START_DAY   = 6   # 6 = Sunday (must match student_dashboard())
     days_since_start = (today_bd.weekday() - WEEK_START_DAY) % 7
@@ -800,11 +817,8 @@ def student_order():
         conn.close()
         return jsonify({'ok': False, 'msg': '📅 You can only order meals within the current week (Sun–Sat).'})
 
-    # 3-day payment window: new orders only allowed Sun(0), Mon(1), Tue(2)
-    days_into_week = days_since_start
-    if days_into_week > 2:
-        conn.close()
-        return jsonify({'ok': False, 'msg': '🔒 Ordering window closed. New meals can only be ordered on Sunday, Monday, and Tuesday. The window reopens next Sunday.'})
+    # 3-day payment window REMOVED — students can order any day of the week.
+    # Only the per-meal midnight cutoff (handled above) applies.
 
     month_ago = (today_bd - timedelta(days=30)).isoformat()
     overdue = queryOne(conn,
@@ -1977,7 +1991,10 @@ def ordering_lock_status():
     conn = get_db()
     row  = queryOne(conn, "SELECT ordering_locked FROM students WHERE id=%s", (sid,))
     conn.close()
-    return jsonify({'ordering_locked': bool(row and row['ordering_locked'])})
+    return jsonify({
+        'ordering_locked': bool(row and row['ordering_locked']),
+        'cutoff_disabled': is_cutoff_override_active(),
+    })
 
 
 @app.route('/api/current_bkash')
@@ -2981,6 +2998,62 @@ def admin_set_maintenance():
 @admin_required
 def maintenance_preview():
     return render_template('maintenance.html', maintenance_message=get_maintenance_message())
+
+# ── MIDNIGHT CUTOFF OVERRIDE ──────────────────────────────────────────────────
+
+def is_cutoff_override_active():
+    """
+    Return True if the admin has turned OFF the midnight ordering deadline.
+    When True, students can order ANY day's meal at ANY time
+    (the per-meal midnight cutoff is ignored, server- and client-side).
+    """
+    try:
+        conn = get_db()
+        row  = queryOne(conn, "SELECT value FROM site_settings WHERE key='cutoff_override'")
+        conn.close()
+        return bool(row and row['value'] == '1')
+    except Exception:
+        return False
+
+
+@app.route('/admin/cutoff_status')
+@admin_required
+def admin_cutoff_status():
+    """Return whether the midnight ordering cutoff is currently overridden (disabled)."""
+    return jsonify({'ok': True, 'cutoff_disabled': is_cutoff_override_active()})
+
+
+@app.route('/admin/set_cutoff_override', methods=['POST'])
+@admin_required
+def admin_set_cutoff_override():
+    """
+    Turn the midnight ordering-deadline ON or OFF for everyone.
+    Body JSON: { enabled: bool }   -- enabled=true means the CUTOFF IS DISABLED
+    (i.e. students can order any day's meal at any time of day).
+    """
+    data    = request.json or {}
+    enabled = '1' if data.get('enabled') else '0'
+
+    conn = get_db()
+    execute(conn,
+        "INSERT INTO site_settings (key, value) VALUES ('cutoff_override', %s) "
+        "ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value, updated_at=to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS')",
+        (enabled,)
+    )
+    execute(conn, "INSERT INTO admin_reset_log (admin_id, action) VALUES (%s,%s)",
+            (session['admin_id'],
+             f"midnight_cutoff_override_{'ON' if enabled == '1' else 'OFF'}"))
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        'ok': True,
+        'cutoff_disabled': enabled == '1',
+        'msg': ('🔓 Midnight ordering cutoff is now DISABLED — students can order '
+                'any day at any time.') if enabled == '1'
+               else ('⏰ Midnight ordering cutoff is back ON — normal per-meal '
+                     'deadlines apply.')
+    })
 
 # ── MANAGER ROTATION ──────────────────────────────────────────────────────────
 
