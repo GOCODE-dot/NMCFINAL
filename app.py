@@ -466,6 +466,11 @@ def login_required(role):
         @wraps(f)
         def decorated(*args, **kwargs):
             if 'user_id' not in session or session.get('role') != role:
+                # Return JSON for fetch/XHR requests so the frontend shows a
+                # proper error instead of silently failing on a redirect response.
+                if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest' \
+                        or request.path.startswith(('/api/', '/manager/', '/student/', '/admin/')):
+                    return jsonify({'ok': False, 'msg': 'Session expired. Please log in again.'}), 401
                 return redirect(url_for('index'))
             return f(*args, **kwargs)
         return decorated
@@ -3860,3 +3865,94 @@ with app.app_context():
 
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('PORT', 5000)))
+
+
+# ── ORDERING UNLOCK REQUESTS (manager-side) ───────────────────────────────────
+
+@app.route('/manager/ordering_unlock_requests')
+@login_required('manager')
+def manager_ordering_unlock_requests():
+    conn   = get_db()
+    rows   = query(conn, """
+        SELECT ur.id, ur.reason, ur.status, ur.created_at,
+               s.name, s.roll_number, s.batch, s.gender, s.floor
+        FROM ordering_unlock_requests ur
+        JOIN students s ON s.id = ur.student_id
+        WHERE ur.status = 'pending'
+        ORDER BY ur.created_at DESC
+    """)
+    conn.close()
+    return jsonify({'ok': True, 'requests': [dict(r) for r in rows]})
+
+
+@app.route('/manager/decide_ordering_unlock', methods=['POST'])
+@login_required('manager')
+def manager_decide_ordering_unlock():
+    data       = request.json or {}
+    request_id = data.get('request_id')
+    verdict    = data.get('verdict')
+    if not request_id or verdict not in ('approved', 'rejected'):
+        return jsonify({'ok': False, 'msg': 'Invalid request.'})
+
+    mgr_id = session.get('user_id')
+    now    = (datetime.utcnow() + timedelta(hours=6)).strftime('%Y-%m-%d %H:%M:%S')
+    conn   = get_db()
+
+    row = query(conn, """
+        SELECT ur.id, ur.student_id
+        FROM ordering_unlock_requests ur
+        JOIN students s ON s.id = ur.student_id
+        WHERE ur.id = %s AND ur.status = 'pending'
+    """, (request_id,))
+
+    if not row:
+        conn.close()
+        return jsonify({'ok': False, 'msg': 'Request not found or already decided.'})
+
+    student_id = row[0]['student_id']
+    execute(conn, """
+        UPDATE ordering_unlock_requests
+        SET status=%s, decided_by=%s, decided_at=%s
+        WHERE id=%s
+    """, (verdict, str(mgr_id), now, request_id))
+
+    if verdict == 'approved':
+        execute(conn, "UPDATE students SET ordering_locked=0 WHERE id=%s", (student_id,))
+
+    conn.commit()
+    conn.close()
+    msg = 'Student unlocked successfully.' if verdict == 'approved' else 'Request rejected.'
+    return jsonify({'ok': True, 'msg': msg})
+
+
+# ── ORDERING UNLOCK REQUEST (student-side) ────────────────────────────────────
+
+@app.route('/student/request_ordering_unlock', methods=['POST'])
+@login_required('student')
+def student_request_ordering_unlock():
+    data       = request.json or {}
+    reason     = (data.get('reason') or '').strip()[:500]
+    student_id = session.get('user_id')
+    now        = (datetime.utcnow() + timedelta(hours=6)).strftime('%Y-%m-%d %H:%M:%S')
+    conn       = get_db()
+
+    row = query(conn, "SELECT ordering_locked FROM students WHERE id=%s", (student_id,))
+    if not row or not row[0]['ordering_locked']:
+        conn.close()
+        return jsonify({'ok': False, 'msg': 'Your ordering is not currently locked.'})
+
+    existing = query(conn, """
+        SELECT id FROM ordering_unlock_requests
+        WHERE student_id=%s AND status='pending'
+    """, (student_id,))
+    if existing:
+        conn.close()
+        return jsonify({'ok': False, 'msg': 'You already have a pending unlock request.'})
+
+    execute(conn, """
+        INSERT INTO ordering_unlock_requests (student_id, reason, status, created_at)
+        VALUES (%s, %s, 'pending', %s)
+    """, (student_id, reason, now))
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True, 'msg': 'Unlock request sent to your manager.'})
