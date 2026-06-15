@@ -477,23 +477,277 @@ document.addEventListener('click', function(e) {
     </div>
   </div>
 
-  <!-- TABS -->
-  <div class="tabs">
-    <button class="tab active" id="cook-tab-btn" onclick="showTab('cook')"><i class="fas fa-utensils"></i> Cook Sheet</button>
-    <button class="tab" onclick="showTab('payments')">
-      <i class="fas fa-mobile-alt"></i> bKash Payment Proofs
-      {% if pending_payments %}<span class="notification-dot">{{ pending_payments|length }}</span>{% endif %}
+  <!-- TABS — primary actions always visible, overflow in ⋯ menu -->
+  <style>
+    /* ── Streamlined tab bar ──────────────────────────────────────────── */
+    .tabs-wrap {
+      display: flex;
+      align-items: stretch;
+      background: var(--tabs-bg, #e2e8f0);
+      border-radius: var(--radius, 12px);
+      padding: 4px;
+      gap: 2px;
+      margin-bottom: 20px;
+      position: relative;
+    }
+    .tabs-primary {
+      display: flex;
+      flex: 1;
+      gap: 2px;
+      overflow: hidden;
+      min-width: 0;
+    }
+    .tabs-primary .tab {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+    }
+
+    /* ── Three-dots trigger ──────────────────────────────────────────── */
+    .tab-more-btn {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 100%;
+      border-radius: var(--radius-sm, 8px);
+      background: transparent;
+      border: none;
+      font-size: 20px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: background .15s, color .15s;
+      position: relative;
+    }
+    .tab-more-btn:hover,
+    .tab-more-btn.open {
+      background: var(--tab-active-bg, #fff);
+      color: var(--primary);
+    }
+    /* red dot on more button when any overflow tab has a notification */
+    .tab-more-btn .more-badge {
+      position: absolute;
+      top: 5px; right: 5px;
+      width: 8px; height: 8px;
+      background: var(--danger);
+      border-radius: 50%;
+      display: none;
+    }
+
+    /* ── Dropdown ────────────────────────────────────────────────────── */
+    .tab-overflow-menu {
+      display: none;
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      min-width: 230px;
+      background: var(--card, #fff);
+      border: 1px solid var(--border);
+      border-radius: var(--radius, 12px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.13);
+      z-index: 999;
+      overflow: hidden;
+      padding: 6px;
+    }
+    .tab-overflow-menu.open { display: block; }
+
+    .tab-overflow-menu .om-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 10px 14px;
+      background: transparent;
+      border: none;
+      border-radius: 8px;
+      text-align: left;
+      font-family: var(--font-body, inherit);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      cursor: pointer;
+      transition: background .12s, color .12s;
+    }
+    .tab-overflow-menu .om-item:hover {
+      background: var(--primary-pale);
+      color: var(--primary);
+    }
+    .tab-overflow-menu .om-item.active {
+      background: var(--primary-pale);
+      color: var(--primary);
+    }
+    .tab-overflow-menu .om-item i {
+      width: 18px;
+      text-align: center;
+      flex-shrink: 0;
+      color: var(--text-muted);
+    }
+    .tab-overflow-menu .om-item:hover i,
+    .tab-overflow-menu .om-item.active i { color: var(--primary); }
+
+    .om-badge {
+      margin-left: auto;
+      background: var(--danger);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 20px;
+      padding: 1px 7px;
+      min-width: 20px;
+      text-align: center;
+    }
+    .om-separator {
+      height: 1px;
+      background: var(--border);
+      margin: 4px 8px;
+    }
+
+    /* Mobile: let tabs shrink gracefully */
+    @media(max-width: 540px) {
+      .tabs-primary .tab { font-size: 12px; padding: 8px 10px; }
+      .tabs-primary .tab i { display: none; }
+    }
+    @media(max-width: 360px) {
+      .tabs-primary { gap: 1px; }
+      .tabs-primary .tab { padding: 8px 6px; font-size: 11px; }
+    }
+  </style>
+
+  <div class="tabs-wrap" id="main-tabs-wrap">
+    <div class="tabs-primary">
+      <!-- ── PRIMARY TABS (always visible) ── -->
+      <button class="tab active" id="cook-tab-btn" onclick="showTab('cook')">
+        <i class="fas fa-utensils"></i> Cook Sheet
+      </button>
+      <button class="tab" id="payments-tab-btn" onclick="showTab('payments')">
+        <i class="fas fa-mobile-alt"></i> bKash
+        {% if pending_payments %}<span class="notification-dot">{{ pending_payments|length }}</span>{% endif %}
+      </button>
+      <button class="tab" id="cash-tab-btn" onclick="showTab('cash')">
+        <i class="fas fa-money-bill-wave"></i> Cash
+        <span class="notification-dot" id="cash-dot" style="display:none">0</span>
+      </button>
+      <button class="tab" id="verified-tab-btn" onclick="showTab('verified')">
+        <i class="fas fa-check-circle"></i> Verified
+      </button>
+    </div>
+
+    <!-- ── THREE-DOTS OVERFLOW ── -->
+    <button class="tab-more-btn" id="tab-more-btn" onclick="toggleOverflowMenu(event)" title="More options">
+      ⋯
+      <span class="more-badge" id="more-badge"></span>
     </button>
-    <button class="tab" onclick="showTab('cash')" id="cash-tab-btn"><i class="fas fa-money-bill-wave"></i> Cash Requests <span class="notification-dot" id="cash-dot" style="display:none">0</span></button>
-    <button class="tab" onclick="showTab('floors')"><i class="fas fa-building"></i> Floor Breakdown</button>
-    <button class="tab" onclick="showTab('weekly')"><i class="fas fa-chart-bar"></i> Weekly Summary</button>
-    <button class="tab" onclick="showTab('verified')"><i class="fas fa-check-circle"></i> Verified</button>
-    <button class="tab" onclick="showTab('locked')" id="locked-tab-btn"><i class="fas fa-lock"></i> Locked Accounts {% if locked_students %}<span style="background:#e53e3e;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px">{{ locked_students|length }}</span>{% endif %}</button>
-    <button class="tab" onclick="showTab('rotation');loadBkashProposals()"><i class="fas fa-rotate"></i> Duty Rotation</button>
-    <button class="tab" onclick="showTab('weekly_orders');loadNonOrderers()"><i class="fas fa-calendar-xmark"></i> Weekly Orders</button>
-    <button class="tab" id="edit-req-tab-btn" onclick="showTab('edit_requests');loadEditRequests()"><i class="fas fa-pen-to-square"></i> Meal Edits <span class="notification-dot" id="edit-req-dot" style="display:none">0</span></button>
-    <button class="tab" id="unpaid-tab-btn" onclick="showTab('unpaid_orders');loadUnpaidOrders()"><i class="fas fa-clock"></i> Ordered, Not Paid <span class="notification-dot" id="unpaid-dot" style="display:none">0</span></button>
+    <div class="tab-overflow-menu" id="tab-overflow-menu">
+      <button class="om-item" id="om-floors"     onclick="selectOverflow('floors')">
+        <i class="fas fa-building"></i> Floor Breakdown
+      </button>
+      <button class="om-item" id="om-weekly"     onclick="selectOverflow('weekly')">
+        <i class="fas fa-chart-bar"></i> Weekly Summary
+      </button>
+      <button class="om-item" id="om-weekly_orders" onclick="selectOverflow('weekly_orders',loadNonOrderers)">
+        <i class="fas fa-calendar-xmark"></i> Weekly Orders
+      </button>
+      <div class="om-separator"></div>
+      <button class="om-item" id="om-locked"     onclick="selectOverflow('locked')">
+        <i class="fas fa-lock"></i> Locked Accounts
+        {% if locked_students %}<span class="om-badge">{{ locked_students|length }}</span>{% endif %}
+      </button>
+      <button class="om-item" id="om-unlock_requests" onclick="selectOverflow('unlock_requests',loadOrderingUnlockRequests)">
+        <i class="fas fa-lock-open"></i> Unlock Requests
+        <span class="om-badge" id="unlock-req-dot" style="display:none">0</span>
+      </button>
+      <div class="om-separator"></div>
+      <button class="om-item" id="om-edit_requests" onclick="selectOverflow('edit_requests',loadEditRequests)">
+        <i class="fas fa-pen-to-square"></i> Meal Edits
+        <span class="om-badge" id="edit-req-dot" style="display:none">0</span>
+      </button>
+      <button class="om-item" id="om-unpaid_orders" onclick="selectOverflow('unpaid_orders',loadUnpaidOrders)">
+        <i class="fas fa-clock"></i> Ordered, Not Paid
+        <span class="om-badge" id="unpaid-dot" style="display:none">0</span>
+      </button>
+      <div class="om-separator"></div>
+      <button class="om-item" id="om-rotation"   onclick="selectOverflow('rotation',loadBkashProposals)">
+        <i class="fas fa-rotate"></i> Duty Rotation
+      </button>
+    </div>
   </div>
+
+  <script>
+  // ── Overflow menu helpers ─────────────────────────────────────────────────
+  function toggleOverflowMenu(e) {
+    e.stopPropagation();
+    const menu = document.getElementById('tab-overflow-menu');
+    const btn  = document.getElementById('tab-more-btn');
+    const open = menu.classList.toggle('open');
+    btn.classList.toggle('open', open);
+  }
+  document.addEventListener('click', function(e) {
+    const menu = document.getElementById('tab-overflow-menu');
+    const btn  = document.getElementById('tab-more-btn');
+    if (!menu) return;
+    if (!menu.contains(e.target) && e.target !== btn) {
+      menu.classList.remove('open');
+      btn.classList.remove('open');
+    }
+  });
+
+  function selectOverflow(tabName, loadFn) {
+    // Close menu
+    document.getElementById('tab-overflow-menu').classList.remove('open');
+    document.getElementById('tab-more-btn').classList.remove('open');
+    // Mark all primary tabs inactive
+    document.querySelectorAll('.tabs-primary .tab').forEach(t => t.classList.remove('active'));
+    // Mark more button "active" style (optional visual cue)
+    document.getElementById('tab-more-btn').classList.add('open');
+    // Mark overflow item active
+    document.querySelectorAll('.om-item').forEach(i => i.classList.remove('active'));
+    const omItem = document.getElementById('om-' + tabName);
+    if (omItem) omItem.classList.add('active');
+    // Show the tab panel
+    showTab(tabName);
+    if (typeof loadFn === 'function') loadFn();
+  }
+
+  // Patch showTab to also handle primary tab active state
+  const _origShowTab = window.showTab;
+  window.showTab = function(name) {
+    if (typeof _origShowTab === 'function') _origShowTab(name);
+    // Sync primary tab highlight
+    const primaryMap = { cook:'cook-tab-btn', payments:'payments-tab-btn', cash:'cash-tab-btn', verified:'verified-tab-btn' };
+    document.querySelectorAll('.tabs-primary .tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.om-item').forEach(i => i.classList.remove('active'));
+    document.getElementById('tab-more-btn').classList.remove('open');
+    if (primaryMap[name]) {
+      const btn = document.getElementById(primaryMap[name]);
+      if (btn) btn.classList.add('active');
+    } else {
+      // It's an overflow tab
+      const omItem = document.getElementById('om-' + name);
+      if (omItem) omItem.classList.add('active');
+      document.getElementById('tab-more-btn').classList.add('open');
+    }
+  };
+
+  // Watch overflow notification dots and mirror to the more-badge
+  function syncMoreBadge() {
+    const dotIds = ['unlock-req-dot','edit-req-dot','unpaid-dot'];
+    let total = 0;
+    dotIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el && el.style.display !== 'none') {
+        total += parseInt(el.textContent || '0', 10) || 1;
+      }
+    });
+    const badge = document.getElementById('more-badge');
+    if (badge) badge.style.display = total > 0 ? 'block' : 'none';
+  }
+  // Poll every 3s to keep badge fresh
+  setInterval(syncMoreBadge, 3000);
+  document.addEventListener('DOMContentLoaded', syncMoreBadge);
+  </script>
 
   <!-- PAYMENT PROOFS TAB -->
   <div id="tab-payments" class="tab-panel">
@@ -1314,6 +1568,33 @@ document.addEventListener('click', function(e) {
   [data-theme="dark"] .edit-req-card { background:var(--input-bg) !important; }
   [data-theme="dark"] .edit-req-reason { background:rgba(240,165,0,0.1) !important; border-color:rgba(240,165,0,0.3) !important; }
 </style>
+
+  <!-- ORDERING UNLOCK REQUESTS TAB -->
+  <div id="tab-unlock_requests" class="tab-panel">
+    <div class="card section-card" style="overflow:hidden;border-top:3px solid var(--primary)">
+      <div style="padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div>
+          <div class="section-title" style="margin:0;color:var(--primary)">
+            <i class="fas fa-lock-open"></i> Student Ordering Unlock Requests
+          </div>
+          <p style="font-size:13px;color:var(--text-muted);margin-top:4px;margin-bottom:0">
+            Students whose ordering was locked can send a request here asking you to unlock them.
+            Approve to immediately restore their ability to order meals.
+          </p>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="loadOrderingUnlockRequests()">
+          <i class="fas fa-sync-alt"></i> Refresh
+        </button>
+      </div>
+      <div id="ordering-unlock-body" style="padding:20px 24px">
+        <div style="text-align:center;color:var(--text-muted);padding:40px 0">
+          <i class="fas fa-spinner fa-spin" style="font-size:24px;margin-bottom:12px;display:block"></i>
+          Loading…
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- END ORDERING UNLOCK REQUESTS TAB -->
 
 <script>
 function showTab(name) {
@@ -3353,6 +3634,160 @@ const _origRejectPayment = window.rejectPayment;
 })();
 // Also refresh every 2 minutes automatically
 setInterval(refreshDashboardStats, 120000);
+
+// ── Ordering Unlock Requests Panel ───────────────────────────────────────────
+
+async function loadOrderingUnlockRequests() {
+  const body = document.getElementById('ordering-unlock-body');
+  const dot  = document.getElementById('unlock-req-dot');
+  if (!body) return;
+
+  body.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:40px 0">
+    <i class="fas fa-spinner fa-spin" style="font-size:24px;margin-bottom:12px;display:block"></i>Loading…</div>`;
+
+  let data;
+  try {
+    const res = await fetch('/manager/ordering_unlock_requests');
+    data = await res.json();
+  } catch(e) {
+    body.innerHTML = `<div style="text-align:center;color:var(--danger);padding:32px 0">
+      <i class="fas fa-exclamation-triangle"></i> Failed to load. Please try again.</div>`;
+    return;
+  }
+
+  const requests = data.requests || [];
+
+  if (dot) {
+    dot.style.display = requests.length > 0 ? 'inline-block' : 'none';
+    dot.textContent   = requests.length;
+  }
+
+  if (!requests.length) {
+    body.innerHTML = `
+      <div style="text-align:center;color:var(--text-muted);padding:48px 0">
+        <div style="font-size:44px;margin-bottom:12px">🔓</div>
+        <div style="font-weight:700;font-size:15px;margin-bottom:4px">No pending unlock requests</div>
+        <div style="font-size:13px">Students with locked ordering can send a request from their dashboard.</div>
+      </div>`;
+    return;
+  }
+
+  const rows = requests.map(r => {
+    const genderIcon = r.gender === 'female' ? '👩' : '👨';
+    const floorLabel = r.gender === 'male' && r.floor ? `Floor ${r.floor}` : (r.gender === 'female' && r.floor
+      ? (['Campus','Sentu House','Chairman House'][r.floor - 1] || `Hostel ${r.floor}`) : '—');
+    const submittedAt = r.created_at ? r.created_at.slice(0, 16).replace('T', ' ') : '';
+    const reasonHtml  = r.reason
+      ? `<div style="margin-top:6px;font-size:12px;color:#7a5c00;background:#fff8e6;border:1px solid #fcd97d;border-radius:6px;padding:5px 10px;display:inline-block">
+           <i class="fas fa-comment"></i> ${_esc(r.reason)}
+         </div>`
+      : `<div style="margin-top:4px;font-size:12px;color:var(--text-muted);font-style:italic">No reason provided</div>`;
+
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;
+                  padding:14px 18px;border:1.5px solid var(--border);border-radius:var(--radius-sm);
+                  margin-bottom:10px;background:var(--primary-pale)" id="ulreq-${r.id}">
+        <div style="min-width:0;flex:1">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:2px">
+            <span style="font-size:16px">${genderIcon}</span>
+            <strong style="font-size:15px">${_esc(r.name)}</strong>
+            <span class="badge badge-green">Batch ${r.batch}</span>
+            <span style="font-size:12px;color:var(--text-muted)">Roll ${_esc(r.roll_number)} · ${floorLabel}</span>
+          </div>
+          ${reasonHtml}
+          <div style="font-size:11px;color:var(--text-muted);margin-top:6px">
+            <i class="fas fa-clock"></i> Submitted: ${submittedAt}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap">
+          <button class="btn btn-sm" style="background:var(--primary);color:#fff"
+            onclick="decideOrderingUnlock(${r.id},'approved',this)">
+            <i class="fas fa-unlock"></i> Approve & Unlock
+          </button>
+          <button class="btn btn-sm" style="background:transparent;color:var(--danger);border:1.5px solid var(--danger)"
+            onclick="decideOrderingUnlock(${r.id},'rejected',this)">
+            <i class="fas fa-times"></i> Reject
+          </button>
+        </div>
+      </div>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px">
+      <i class="fas fa-info-circle"></i>
+      ${requests.length} pending request${requests.length !== 1 ? 's' : ''}.
+      Approving will immediately remove the ordering lock so the student can place meal orders again.
+    </div>
+    ${rows}`;
+}
+
+async function decideOrderingUnlock(reqId, verdict, btn) {
+  const label = verdict === 'approved' ? 'APPROVE & UNLOCK' : 'REJECT';
+  if (!confirm(`${label} this ordering unlock request?`)) return;
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+  try {
+    const res  = await fetch('/manager/decide_ordering_unlock', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ request_id: reqId, verdict })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast(data.msg, verdict === 'approved' ? 'success' : 'secondary');
+      const card = document.getElementById('ulreq-' + reqId);
+      if (card) {
+        card.style.transition = 'opacity .3s';
+        card.style.opacity    = '0';
+        setTimeout(() => { card.remove(); }, 320);
+      }
+      setTimeout(loadOrderingUnlockRequests, 400);
+      if (document.getElementById('tab-weekly_orders').classList.contains('active')) {
+        loadNonOrderers();
+      }
+    } else {
+      btn.disabled = false;
+      btn.innerHTML = verdict === 'approved'
+        ? '<i class="fas fa-unlock"></i> Approve & Unlock'
+        : '<i class="fas fa-times"></i> Reject';
+      toast(data.msg || 'Error. Please try again.', 'error');
+    }
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = verdict === 'approved'
+      ? '<i class="fas fa-unlock"></i> Approve & Unlock'
+      : '<i class="fas fa-times"></i> Reject';
+    toast('Network error. Please try again.', 'error');
+  }
+}
+
+function _esc(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+(async function initUnlockRequestBadge() {
+  try {
+    const res  = await fetch('/manager/ordering_unlock_requests');
+    const data = await res.json();
+    const cnt  = (data.requests || []).length;
+    const dot  = document.getElementById('unlock-req-dot');
+    if (dot) { dot.style.display = cnt > 0 ? 'inline-block' : 'none'; dot.textContent = cnt; }
+  } catch(e) {}
+})();
+
+setInterval(async () => {
+  try {
+    const res  = await fetch('/manager/ordering_unlock_requests');
+    const data = await res.json();
+    const cnt  = (data.requests || []).length;
+    const dot  = document.getElementById('unlock-req-dot');
+    if (dot) { dot.style.display = cnt > 0 ? 'inline-block' : 'none'; dot.textContent = cnt; }
+  } catch(e) {}
+}, 90000);
 
 </script>
 
