@@ -633,6 +633,9 @@ document.addEventListener('click', function(e) {
       <button class="tab" id="verified-tab-btn" onclick="showTab('verified')">
         <i class="fas fa-check-circle"></i> Verified
       </button>
+      <button class="tab" id="floors-tab-btn" onclick="showTab('floors')">
+        <i class="fas fa-building"></i> Floors
+      </button>
     </div>
 
     <!-- ── THREE-DOTS OVERFLOW ── -->
@@ -641,9 +644,6 @@ document.addEventListener('click', function(e) {
       <span class="more-badge" id="more-badge"></span>
     </button>
     <div class="tab-overflow-menu" id="tab-overflow-menu">
-      <button class="om-item" id="om-floors"     onclick="selectOverflow('floors')">
-        <i class="fas fa-building"></i> Floor Breakdown
-      </button>
       <button class="om-item" id="om-weekly"     onclick="selectOverflow('weekly')">
         <i class="fas fa-chart-bar"></i> Weekly Summary
       </button>
@@ -716,7 +716,7 @@ document.addEventListener('click', function(e) {
   window.showTab = function(name) {
     if (typeof _origShowTab === 'function') _origShowTab(name);
     // Sync primary tab highlight
-    const primaryMap = { cook:'cook-tab-btn', payments:'payments-tab-btn', cash:'cash-tab-btn', verified:'verified-tab-btn' };
+    const primaryMap = { cook:'cook-tab-btn', payments:'payments-tab-btn', cash:'cash-tab-btn', verified:'verified-tab-btn', floors:'floors-tab-btn' };
     document.querySelectorAll('.tabs-primary .tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.om-item').forEach(i => i.classList.remove('active'));
     document.getElementById('tab-more-btn').classList.remove('open');
@@ -3648,10 +3648,25 @@ async function loadOrderingUnlockRequests() {
   let data;
   try {
     const res = await fetch('/manager/ordering_unlock_requests');
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const msg = errData.msg || `Server error (${res.status})`;
+      body.innerHTML = `<div style="text-align:center;color:var(--danger);padding:32px 0">
+        <i class="fas fa-exclamation-triangle"></i> ${msg}
+        ${res.status === 401 ? '<br><small>Please <a href="/manager/login">log in</a> again.</small>' : ''}
+      </div>`;
+      return;
+    }
     data = await res.json();
   } catch(e) {
     body.innerHTML = `<div style="text-align:center;color:var(--danger);padding:32px 0">
       <i class="fas fa-exclamation-triangle"></i> Failed to load. Please try again.</div>`;
+    return;
+  }
+
+  if (!data.ok) {
+    body.innerHTML = `<div style="text-align:center;color:var(--danger);padding:32px 0">
+      <i class="fas fa-exclamation-triangle"></i> ${data.msg || 'Failed to load.'}</div>`;
     return;
   }
 
