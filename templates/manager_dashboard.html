@@ -1586,16 +1586,44 @@ function updateBulkCount() {
 
 async function unlockStudent(roll, btn) {
   if (!confirm(`Unlock account for ${roll}?\n\nMake sure their dues are cleared or an arrangement has been made.`)) return;
-  const r = await fetch('/manager/unlock_student', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({roll})});
-  const d = await r.json();
-  if (d.ok) {
-    toast('Account unlocked successfully!');
-    btn.closest('tr').style.opacity = '.4';
-    btn.innerHTML = '<i class="fas fa-check"></i> Unlocked';
-    btn.disabled = true;
-    setTimeout(() => location.reload(), 1200);
-  } else {
-    toast(d.msg || 'Failed to unlock.', 'error');
+  const origHTML = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Unlocking…';
+  try {
+    const r = await fetch('/manager/unlock_student', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({roll})
+    });
+    // Guard against non-JSON response (e.g. session expired → redirect HTML)
+    const contentType = r.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      if (r.redirected || r.status === 302 || r.url.includes('login')) {
+        toast('Session expired. Redirecting to login…', 'error');
+        setTimeout(() => location.href = '/manager/login', 1200);
+      } else {
+        toast(`Server error (HTTP ${r.status}). Check Flask logs.`, 'error');
+        btn.disabled = false; btn.innerHTML = origHTML;
+      }
+      return;
+    }
+    const d = await r.json();
+    if (d.ok) {
+      toast('Account unlocked successfully!', 'success');
+      btn.closest('tr').style.opacity = '.4';
+      btn.innerHTML = '<i class="fas fa-check"></i> Unlocked';
+      // Update the locked badge count in the tab
+      const badge = document.querySelector('#tab-btn-locked .notification-dot, .tab[onclick*="locked"] .notification-dot');
+      if (badge) { const n = parseInt(badge.textContent||'0') - 1; badge.textContent = n; if(n<=0) badge.style.display='none'; }
+      setTimeout(() => location.reload(), 1200);
+    } else {
+      toast(d.msg || 'Failed to unlock. Please try again.', 'error');
+      btn.disabled = false; btn.innerHTML = origHTML;
+    }
+  } catch(e) {
+    console.error('unlockStudent error:', e);
+    toast('Network error — could not reach server. Please try again.', 'error');
+    btn.disabled = false; btn.innerHTML = origHTML;
   }
 }
 

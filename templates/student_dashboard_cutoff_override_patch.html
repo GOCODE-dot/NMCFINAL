@@ -1,0 +1,190 @@
+<!--
+══════════════════════════════════════════════════════════════════════
+  student_dashboard.html — Midnight Cutoff Admin-Override Patch
+══════════════════════════════════════════════════════════════════════
+
+  WHAT THIS ADDS:
+  ─────────────────
+  Makes the client-side midnight-deadline lock respect the new admin
+  toggle (see app_cutoff_override_additions.py + admin_cutoff_widget.html).
+  When the admin turns the cutoff OFF, students immediately stop seeing
+  greyed-out "deadline passed" buttons and can order/cancel any day.
+
+  WORKS TOGETHER WITH the server-side check in /student/order, which
+  already skips the deadline using is_cutoff_override_active().
+
+  4 small edits, all inside the existing <script> block of
+  student_dashboard.html:
+
+    EDIT 1 — add a flag + loader function          (near isMidnightLocked)
+    EDIT 2 — make isMidnightLocked() respect it     (replace function)
+    EDIT 3 — load it before the first lock pass     (replace DOMContentLoaded init)
+    EDIT 4 — re-check it in the 15s live poll       (replace startLockPoll)
+══════════════════════════════════════════════════════════════════════
+-->
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     EDIT 1 — ADD this near the top of the
+     "── MIDNIGHT DEADLINE HELPERS ──" section, i.e. right BEFORE
+     the existing `function isMidnightLocked(mealDateStr) {` line.
+     ══════════════════════════════════════════════════════════════════ -->
+
+<script>
+// Set by loadCutoffOverrideStatus(). When true, the admin has disabled
+// the midnight ordering deadline for everyone.
+let _cutoffOverrideActive = false;
+
+async function loadCutoffOverrideStatus() {
+  try {
+    const r = await fetch('/api/ordering_lock_status', { credentials: 'same-origin' });
+    if (!r.ok) return;
+    const d = await r.json();
+    _cutoffOverrideActive = !!d.cutoff_disabled;
+  } catch (e) { /* keep previous value on network error */ }
+}
+</script>
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     EDIT 2 — REPLACE the existing isMidnightLocked() function:
+
+       function isMidnightLocked(mealDateStr) {
+         // Returns true if now (local time) is past midnight of mealDateStr.
+         // e.g. for "2026-05-19": locked once the clock ticks past 00:00 on May 19.
+         const now      = new Date();
+         const deadline = new Date(mealDateStr + 'T00:00:00');
+         return now >= deadline;
+       }
+
+     WITH:
+     ══════════════════════════════════════════════════════════════════ -->
+
+<script>
+function isMidnightLocked(mealDateStr) {
+  // Admin override: cutoff disabled → nothing is ever midnight-locked.
+  if (_cutoffOverrideActive) return false;
+
+  // Returns true if now (local time) is past midnight of mealDateStr.
+  // e.g. for "2026-05-19": locked once the clock ticks past 00:00 on May 19.
+  const now      = new Date();
+  const deadline = new Date(mealDateStr + 'T00:00:00');
+  return now >= deadline;
+}
+</script>
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     EDIT 3 — REPLACE the existing init block:
+
+       // Run on load and every 60 seconds
+       document.addEventListener('DOMContentLoaded', function() {
+         applyDeadlineLocks();
+         setInterval(applyDeadlineLocks, 60000);
+       });
+
+     WITH:
+     ══════════════════════════════════════════════════════════════════ -->
+
+<script>
+// Run on load and every 60 seconds — load the cutoff-override flag
+// FIRST so the initial render isn't locked by mistake.
+document.addEventListener('DOMContentLoaded', function() {
+  loadCutoffOverrideStatus().then(applyDeadlineLocks);
+  setInterval(applyDeadlineLocks, 60000);
+});
+</script>
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     EDIT 4 — REPLACE the existing live lock-poll block:
+
+       (function startLockPoll() {
+         const currentlyLocked = {{ 'true' if ordering_locked else 'false' }};
+         // ordering_open is always true now — only manager lock matters
+         async function checkLock() {
+           try {
+             const r = await fetch('/api/ordering_lock_status', { credentials: 'same-origin' });
+             if (!r.ok) return;
+             const d = await r.json();
+             if (d.ordering_locked !== currentlyLocked) {
+               location.reload();
+             }
+           } catch(e) {}
+         }
+         setInterval(checkLock, 15000);
+       })();
+
+     WITH (adds a check for cutoff_disabled changing, so the page
+     refreshes — and unlocks/relocks meal buttons — as soon as the
+     admin flips the toggle):
+     ══════════════════════════════════════════════════════════════════ -->
+
+<script>
+// ── Live ordering-lock + cutoff-override polling ──────────────────────────────
+// Polls every 15 s. Reloads the page if the manager's lock state changes,
+// or if the admin turns the midnight-cutoff override on/off.
+(function startLockPoll() {
+  const currentlyLocked = {{ 'true' if ordering_locked else 'false' }};
+  let currentlyOverridden = _cutoffOverrideActive;
+
+  async function checkLock() {
+    try {
+      const r = await fetch('/api/ordering_lock_status', { credentials: 'same-origin' });
+      if (!r.ok) return;
+      const d = await r.json();
+      if (d.ordering_locked !== currentlyLocked) {
+        location.reload();
+        return;
+      }
+      if (!!d.cutoff_disabled !== currentlyOverridden) {
+        location.reload();
+      }
+    } catch(e) {}
+  }
+  setInterval(checkLock, 15000);
+})();
+</script>
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     OPTIONAL — info bar + countdown notice when the override is active.
+     Inside applyDeadlineLocks(), right after:
+
+       const { hours, mins } = midnightCountdown();
+       const payOpen = isPayWindowOpen();
+       const pwCountdown = payWindowCountdown();
+
+     you can ADD this small block so the yellow "Ordering deadline:
+     midnight" info bar turns green and explains the override, and the
+     countdown text says ordering is unrestricted:
+     ══════════════════════════════════════════════════════════════════ -->
+
+<!--
+  const infoBar = document.getElementById('deadlineInfoBar');
+  if (infoBar) {
+    if (_cutoffOverrideActive) {
+      infoBar.style.background = 'linear-gradient(135deg, #e8f5ee, #f5fffa)';
+      infoBar.style.borderColor = '#b7e4c7';
+      infoBar.style.color = '#1a6b3a';
+      infoBar.querySelector('i').style.color = '#1a6b3a';
+    } else {
+      infoBar.style.background = '';
+      infoBar.style.borderColor = '';
+      infoBar.style.color = '';
+      infoBar.querySelector('i').style.color = '';
+    }
+  }
+-->
+
+<!--
+  In the "── Update midnight countdown text ──" block, add an override
+  check BEFORE the existing if/else-if/else chain:
+
+    const countdownEl = document.getElementById('deadlineCountdownText');
+    if (countdownEl) {
+      if (_cutoffOverrideActive) {
+        countdownEl.innerHTML = `<span style="color:#1a6b3a">🔓 Midnight cutoff temporarily disabled by admin — order any day, any time.</span>`;
+      } else if (hours < 1) {
+        ... (existing branches unchanged) ...
+-->

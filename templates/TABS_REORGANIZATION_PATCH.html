@@ -1,0 +1,403 @@
+<!--
+══════════════════════════════════════════════════════════════════════
+  TABS REORGANIZATION PATCH  —  manager_dashboard.html
+  ──────────────────────────────────────────────────────────────────
+  Replaces the flat 11-tab bar with:
+    • 4 always-visible primary tabs
+    • "More ⋯" button that opens a categorised dropdown for the
+      remaining 7 secondary tabs
+
+  HOW TO APPLY (one change):
+  ──────────────────────────
+  In manager_dashboard.html, find this block (around line 481):
+
+      <!-- TABS -->
+      <div class="tabs">
+        <button class="tab active" id="cook-tab-btn" onclick="showTab('cook')">…</button>
+        …11 buttons…
+        <button class="tab" id="unpaid-tab-btn" …>…</button>
+      </div>
+
+  Delete it entirely (the opening <div class="tabs"> through its
+  closing </div>) and paste the NEW TABS BLOCK below in its place.
+
+  Then find the existing  function showTab(name) { … }  and replace
+  it with the UPDATED showTab FUNCTION below.
+
+  That's the only two changes needed. No backend edits required.
+══════════════════════════════════════════════════════════════════════
+-->
+
+
+<!-- ══ STEP 1: NEW TABS BLOCK ════════════════════════════════════════
+
+  Replace the old <div class="tabs"> … </div> block with this.
+  ════════════════════════════════════════════════════════════════════ -->
+
+<!-- Extra styles for the new tabs bar — paste inside or just before this block -->
+<style>
+/* ── Primary tabs bar ───────────────────────────────────────────── */
+.tabs-primary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--tabs-bg, #e2e8f0);
+  border-radius: 10px;
+  padding: 6px 8px;
+  margin-bottom: 20px;
+  position: relative;
+  flex-wrap: nowrap;
+  overflow: visible;          /* allow dropdown to overflow */
+}
+
+/* Keep the existing .tab button styles working */
+.tabs-primary > .tab {
+  flex-shrink: 0;
+}
+
+/* ── "More" dropdown trigger ──────────────────────────────────────── */
+.more-btn-wrap {
+  margin-left: auto;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.more-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #718096);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+  white-space: nowrap;
+}
+.more-btn:hover,
+.more-btn.open {
+  background: var(--tab-active-bg, #ffffff);
+  color: var(--primary, #1a6b3a);
+  box-shadow: 0 2px 8px rgba(26,107,58,.10);
+}
+.more-btn .more-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  background: #e53e3e;
+  color: #fff;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ── Dropdown menu ─────────────────────────────────────────────── */
+.more-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 230px;
+  background: var(--card, #fff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  box-shadow: 0 10px 36px rgba(0,0,0,.15);
+  z-index: 999;
+  overflow: hidden;
+  animation: dropdownIn .15s ease;
+}
+.more-dropdown.open {
+  display: block;
+}
+@keyframes dropdownIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.dropdown-section-label {
+  padding: 8px 14px 4px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: var(--text-muted, #718096);
+  background: var(--card, #fff);
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text, #1a202c);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: background .12s, color .12s;
+  white-space: nowrap;
+}
+.dropdown-item:hover,
+.dropdown-item.active-dropdown-item {
+  background: var(--primary-pale, #e8f5ee);
+  color: var(--primary, #1a6b3a);
+}
+.dropdown-item .dd-badge {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  background: #e53e3e;
+  color: #fff;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.dropdown-divider {
+  height: 1px;
+  background: var(--border, #e2e8f0);
+  margin: 4px 0;
+}
+
+[data-theme="dark"] .more-dropdown {
+  background: var(--card);
+  border-color: var(--border);
+}
+[data-theme="dark"] .dropdown-item:hover,
+[data-theme="dark"] .dropdown-item.active-dropdown-item {
+  background: var(--primary-pale);
+  color: var(--primary);
+}
+
+/* Mobile: shrink primary tab text */
+@media (max-width: 600px) {
+  .tabs-primary > .tab { padding: 8px 10px; font-size: 13px; }
+  .more-btn { padding: 8px 10px; font-size: 13px; }
+}
+</style>
+
+
+<!-- NEW TABS BAR — paste in place of the old <div class="tabs"> block -->
+<div class="tabs-primary" id="main-tabs-bar">
+
+  <!-- ── PRIMARY TABS (always visible) ─────────────────────────── -->
+  <button class="tab active" id="cook-tab-btn" onclick="showTab('cook')">
+    <i class="fas fa-utensils"></i> Cook Sheet
+  </button>
+
+  <button class="tab" id="payments-tab-btn" onclick="showTab('payments')">
+    <i class="fas fa-mobile-alt"></i> bKash Proofs
+    {% if pending_payments %}<span class="notification-dot">{{ pending_payments|length }}</span>{% endif %}
+  </button>
+
+  <button class="tab" id="cash-tab-btn" onclick="showTab('cash')">
+    <i class="fas fa-money-bill-wave"></i> Cash Requests
+    <span class="notification-dot" id="cash-dot" style="display:none">0</span>
+  </button>
+
+  <button class="tab" id="verified-tab-btn" onclick="showTab('verified')">
+    <i class="fas fa-check-circle"></i> Verified
+  </button>
+
+  <!-- ── MORE DROPDOWN ─────────────────────────────────────────── -->
+  <div class="more-btn-wrap" id="more-btn-wrap">
+    <button class="more-btn" id="more-tab-btn" onclick="toggleMoreDropdown(event)" aria-haspopup="true" aria-expanded="false">
+      <i class="fas fa-ellipsis-h"></i> More
+      <!-- Badge shown when any secondary tab has pending notifications -->
+      <span class="more-badge" id="more-total-badge" style="display:none">0</span>
+    </button>
+
+    <div class="more-dropdown" id="more-dropdown" role="menu">
+
+      <!-- ANALYTICS group -->
+      <div class="dropdown-section-label">Analytics</div>
+      <button class="dropdown-item" id="dd-floors" onclick="selectMoreTab('floors')">
+        <i class="fas fa-building"></i> Floor Breakdown
+      </button>
+      <button class="dropdown-item" id="dd-weekly" onclick="selectMoreTab('weekly')">
+        <i class="fas fa-chart-bar"></i> Weekly Summary
+      </button>
+
+      <div class="dropdown-divider"></div>
+
+      <!-- ACCOUNTS group -->
+      <div class="dropdown-section-label">Accounts</div>
+      <button class="dropdown-item" id="dd-locked" onclick="selectMoreTab('locked')">
+        <i class="fas fa-lock"></i> Locked Accounts
+        {% if locked_students %}<span class="dd-badge" id="locked-dd-badge">{{ locked_students|length }}</span>{% endif %}
+      </button>
+      <button class="dropdown-item" id="dd-rotation" onclick="selectMoreTab('rotation');loadBkashProposals()">
+        <i class="fas fa-rotate"></i> Duty Rotation
+      </button>
+      <button class="dropdown-item" id="dd-weekly_orders" onclick="selectMoreTab('weekly_orders');loadNonOrderers()">
+        <i class="fas fa-calendar-xmark"></i> Weekly Orders
+      </button>
+
+      <div class="dropdown-divider"></div>
+
+      <!-- REQUESTS group -->
+      <div class="dropdown-section-label">Requests</div>
+      <button class="dropdown-item" id="dd-edit_requests" onclick="selectMoreTab('edit_requests');loadEditRequests()">
+        <i class="fas fa-pen-to-square"></i> Meal Edits
+        <span class="dd-badge" id="edit-req-dd-badge" style="display:none">0</span>
+      </button>
+      <button class="dropdown-item" id="dd-unpaid_orders" onclick="selectMoreTab('unpaid_orders');loadUnpaidOrders()">
+        <i class="fas fa-clock"></i> Ordered, Not Paid
+        <span class="dd-badge" id="unpaid-dd-badge" style="display:none">0</span>
+      </button>
+
+    </div><!-- /.more-dropdown -->
+  </div><!-- /.more-btn-wrap -->
+
+</div><!-- /.tabs-primary -->
+
+<!-- Hidden spans kept for backward compatibility — existing JS writes to these IDs.
+     The syncMoreBadge() function reads them and mirrors counts to the dropdown badges. -->
+<span id="edit-req-dot"  style="display:none" aria-hidden="true">0</span>
+<span id="unpaid-dot"    style="display:none" aria-hidden="true">0</span>
+<!-- Also preserve the old tab button IDs so any JS referencing them doesn't error -->
+<span id="edit-req-tab-btn"  style="display:none" aria-hidden="true"></span>
+<span id="unpaid-tab-btn"    style="display:none" aria-hidden="true"></span>
+
+
+<!-- ══ STEP 2: UPDATED showTab + MORE-DROPDOWN LOGIC ════════════════
+
+  Replace the existing  function showTab(name) { … }  in the
+  <script> block with this entire section.
+  ════════════════════════════════════════════════════════════════════ -->
+<script>
+// ── Tab switching (updated for primary + dropdown design) ─────────────────────
+
+// Tabs whose buttons live inside the dropdown (not in the primary bar)
+const SECONDARY_TABS = new Set([
+  'floors', 'weekly', 'locked', 'rotation', 'weekly_orders',
+  'edit_requests', 'unpaid_orders'
+]);
+
+function showTab(name) {
+  // 1. Deactivate all primary tab buttons
+  document.querySelectorAll('.tabs-primary > .tab').forEach(t => t.classList.remove('active'));
+
+  // 2. Deactivate all dropdown items
+  document.querySelectorAll('.dropdown-item').forEach(d => d.classList.remove('active-dropdown-item'));
+
+  // 3. Activate the right control
+  if (SECONDARY_TABS.has(name)) {
+    // Mark the More button as "active"
+    const moreBtn = document.getElementById('more-tab-btn');
+    if (moreBtn) moreBtn.classList.add('open');
+    // Highlight the specific dropdown item
+    const ddItem = document.getElementById('dd-' + name);
+    if (ddItem) ddItem.classList.add('active-dropdown-item');
+  } else {
+    // Activate primary tab button
+    const primaryBtn = document.getElementById(name + '-tab-btn');
+    if (primaryBtn) primaryBtn.classList.add('active');
+    // Un-highlight More button
+    const moreBtn = document.getElementById('more-tab-btn');
+    if (moreBtn) moreBtn.classList.remove('open');
+  }
+
+  // 4. Switch visible panel
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById('tab-' + name);
+  if (panel) panel.classList.add('active');
+
+  // 5. Trigger side-effects (same as before)
+  if (name === 'cash')          loadCashRequests();
+  if (name === 'rotation')      loadRotation();
+  if (name === 'cook')          setTimeout(loadCookSheet, 50);
+  if (name === 'unpaid_orders') loadUnpaidOrders();
+}
+
+// Called when a dropdown item is clicked — shows tab and closes dropdown
+function selectMoreTab(name) {
+  closeMoreDropdown();
+  showTab(name);
+}
+
+// ── More-dropdown open / close ────────────────────────────────────────────────
+
+function toggleMoreDropdown(e) {
+  e.stopPropagation();
+  const dd  = document.getElementById('more-dropdown');
+  const btn = document.getElementById('more-tab-btn');
+  const open = dd.classList.contains('open');
+  if (open) {
+    dd.classList.remove('open');
+    btn.setAttribute('aria-expanded', 'false');
+  } else {
+    dd.classList.add('open');
+    btn.setAttribute('aria-expanded', 'true');
+  }
+}
+
+function closeMoreDropdown() {
+  const dd  = document.getElementById('more-dropdown');
+  const btn = document.getElementById('more-tab-btn');
+  if (dd)  dd.classList.remove('open');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+  const wrap = document.getElementById('more-btn-wrap');
+  if (wrap && !wrap.contains(e.target)) closeMoreDropdown();
+});
+
+// Close on Escape
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeMoreDropdown();
+});
+
+// ── Mirror notification dots from primary tabs into the dropdown ──────────────
+// (The existing cash-dot / edit-req-dot / unpaid-dot IDs still work; we just
+//  also sync the cloned badges inside the dropdown and update the More badge.)
+
+function syncMoreBadge() {
+  const editCount   = parseInt(document.getElementById('edit-req-dot')?.textContent  || '0') || 0;
+  const unpaidCount = parseInt(document.getElementById('unpaid-dot')?.textContent    || '0') || 0;
+  const lockedCount = parseInt(document.getElementById('locked-dd-badge')?.textContent || '0') || 0;
+
+  // Sync dropdown-specific badges
+  const editDd   = document.getElementById('edit-req-dd-badge');
+  const unpaidDd = document.getElementById('unpaid-dd-badge');
+  if (editDd)   { editDd.textContent   = editCount;   editDd.style.display   = editCount   > 0 ? '' : 'none'; }
+  if (unpaidDd) { unpaidDd.textContent = unpaidCount; unpaidDd.style.display = unpaidCount > 0 ? '' : 'none'; }
+
+  // Sync the "More" button total badge
+  const total = editCount + unpaidCount + lockedCount;
+  const moreBadge = document.getElementById('more-total-badge');
+  if (moreBadge) { moreBadge.textContent = total; moreBadge.style.display = total > 0 ? '' : 'none'; }
+}
+
+// Watch for changes to the notification dots and re-sync
+(function watchDots() {
+  const obs = new MutationObserver(syncMoreBadge);
+  ['edit-req-dot', 'unpaid-dot', 'cash-dot'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) obs.observe(el, { childList: true, characterData: true, subtree: true, attributes: true });
+  });
+  // Also call once on load
+  syncMoreBadge();
+})();
+
+// Also: keep the old notification-dot IDs working so existing code doesn't break.
+// edit-req-dot and unpaid-dot are still present in the primary bar area
+// (they're just hidden visually since those buttons moved to the dropdown).
+// The dropdown badges (edit-req-dd-badge, unpaid-dd-badge) mirror them via syncMoreBadge().
+</script>

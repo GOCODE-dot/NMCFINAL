@@ -405,6 +405,121 @@
   </script>
   <!-- ─── END MAINTENANCE PANEL ──────────────────────────────────────────── -->
 
+  <!-- ─── MIDNIGHT CUTOFF OVERRIDE PANEL ─────────────────────────────────── -->
+  <div id="cutoffPanel" style="border:2px solid #30363d;border-radius:var(--radius);overflow:hidden;margin-bottom:24px;transition:border-color .25s,box-shadow .25s">
+    <!-- Header row -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 22px;background:#161b22;border-bottom:1px solid #30363d;gap:16px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:14px;min-width:0">
+        <div id="cutoffIcon" style="width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:20px;background:#21262d;flex-shrink:0;transition:background .3s">⏰</div>
+        <div>
+          <div style="font-size:15px;font-weight:700;color:#e6edf3">Midnight Ordering Cutoff</div>
+          <div id="cutoffSubtitle" style="font-size:13px;color:#8b949e;margin-top:2px">Students must book each meal before midnight the night before</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+        <span id="cutoffToggleText" style="font-size:13px;font-weight:700;color:#8b949e;min-width:78px;text-align:right">CUTOFF ON</span>
+        <label style="position:relative;width:56px;height:30px;flex-shrink:0;cursor:pointer;display:block">
+          <input type="checkbox" id="cutoffToggle" onchange="onCutoffToggle()" style="opacity:0;width:0;height:0;position:absolute">
+          <span id="cutoffTrack" style="position:absolute;inset:0;border-radius:30px;background:#30363d;transition:background .25s"></span>
+          <span id="cutoffKnob" style="position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.4);transition:transform .25s cubic-bezier(0.34,1.4,0.64,1)"></span>
+        </label>
+      </div>
+    </div>
+    <!-- Body -->
+    <div style="padding:18px 22px;background:#0d1117">
+      <div id="cutoffBanner" style="display:none;align-items:center;gap:10px;background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.35);border-radius:8px;padding:11px 14px;font-size:13px;color:#3fb950;font-weight:600;margin-bottom:14px">
+        <span style="width:8px;height:8px;background:#3fb950;border-radius:50%;flex-shrink:0;animation:cPulse 1.4s ease-in-out infinite"></span>
+        Cutoff override is ACTIVE — students can order/cancel ANY day's meal at ANY time
+      </div>
+      <div style="font-size:12px;color:#8b949e;line-height:1.6">
+        <i class="fas fa-info-circle"></i>
+        Turning this <strong style="color:#e6edf3">ON</strong> disables the midnight deadline for every student —
+        useful if the cutoff fired too early, or you want to temporarily allow late bookings.
+        Turn it back <strong style="color:#e6edf3">OFF</strong> to restore the normal "book before midnight" rule.
+      </div>
+    </div>
+  </div>
+  <style>
+    @keyframes cPulse { 0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(63,185,80,.5)} 50%{opacity:.8;box-shadow:0 0 0 5px rgba(63,185,80,0)} }
+  </style>
+  <script>
+  (async function loadCutoffStatus() {
+    try {
+      const res  = await fetch('/admin/cutoff_status');
+      const data = await res.json();
+      setCutoffUI(!!data.cutoff_disabled);
+    } catch(e) {}
+  })();
+
+  function setCutoffUI(disabled) {
+    const panel    = document.getElementById('cutoffPanel');
+    const icon     = document.getElementById('cutoffIcon');
+    const text     = document.getElementById('cutoffToggleText');
+    const track    = document.getElementById('cutoffTrack');
+    const knob     = document.getElementById('cutoffKnob');
+    const banner   = document.getElementById('cutoffBanner');
+    const subtitle = document.getElementById('cutoffSubtitle');
+    const toggle   = document.getElementById('cutoffToggle');
+    toggle.checked = disabled;
+    if (disabled) {
+      panel.style.borderColor  = '#238636';
+      panel.style.boxShadow    = '0 0 0 3px rgba(35,134,54,.15)';
+      icon.style.background    = '#0f2818';
+      icon.textContent         = '🔓';
+      text.textContent         = 'CUTOFF OFF';
+      text.style.color         = '#3fb950';
+      track.style.background   = '#238636';
+      knob.style.transform     = 'translateX(26px)';
+      banner.style.display     = 'flex';
+      subtitle.textContent     = 'Override active — midnight deadline is disabled for everyone';
+    } else {
+      panel.style.borderColor  = '#30363d';
+      panel.style.boxShadow    = 'none';
+      icon.style.background    = '#21262d';
+      icon.textContent         = '⏰';
+      text.textContent         = 'CUTOFF ON';
+      text.style.color         = '#8b949e';
+      track.style.background   = '#30363d';
+      knob.style.transform     = 'translateX(0)';
+      banner.style.display     = 'none';
+      subtitle.textContent     = 'Students must book each meal before midnight the night before';
+    }
+  }
+
+  async function onCutoffToggle() {
+    const toggle  = document.getElementById('cutoffToggle');
+    const enabled = toggle.checked; // checked = cutoff DISABLED (override ON)
+
+    const confirmMsg = enabled
+      ? '🔓 Disable the midnight ordering cutoff for ALL students?\n\nThey will be able to order or cancel ANY day\'s meal at ANY time until you turn this back off.'
+      : '⏰ Re-enable the midnight ordering cutoff?\n\nStudents will go back to the normal "book before midnight" rule.';
+
+    if (!confirm(confirmMsg)) {
+      toggle.checked = !enabled;
+      return;
+    }
+
+    try {
+      const res  = await fetch('/admin/set_cutoff_override', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ enabled })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setCutoffUI(!!data.cutoff_disabled);
+        showToast(data.msg, data.cutoff_disabled ? '#238636' : '#58a6ff');
+      } else {
+        throw new Error(data.msg || 'Failed');
+      }
+    } catch(e) {
+      showToast('❌ ' + e.message, '#da3633');
+      toggle.checked = !enabled;
+    }
+  }
+  </script>
+  <!-- ─── END MIDNIGHT CUTOFF OVERRIDE PANEL ────────────────────────────── -->
+
   <!-- Stats -->
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:14px;margin-bottom:32px">
     <div class="dark-stat">
