@@ -469,11 +469,23 @@ def login_required(role):
             # Use role-specific session keys so student/manager sessions never collide
             key_uid  = f'{role}_user_id'
             key_role = f'{role}_role'
+            
+            # DEBUG: Log what we're checking
+            uid_val = session.get(key_uid)
+            role_val = session.get(key_role)
+            all_keys = dict(session)
+            print(f"\n[LOGIN_REQUIRED] Role: {role}")
+            print(f"  Checking keys: {key_uid}={uid_val}, {key_role}={role_val}")
+            print(f"  All session keys: {list(all_keys.keys())}")
+            print(f"  Session cookie sent: {'session' in request.cookies}")
+            
             if session.get(key_uid) is None or session.get(key_role) != role:
+                print(f"  ❌ Auth check FAILED")
                 if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest' \
                         or request.path.startswith(('/api/', '/manager/', '/student/', '/admin/')):
                     return jsonify({'ok': False, 'msg': 'Session expired. Please log in again.'}), 401
                 return redirect(url_for('index'))
+            print(f"  ✅ Auth check PASSED")
             return f(*args, **kwargs)
         return decorated
     return decorator
@@ -620,6 +632,9 @@ def student_login():
             session['stu_name']    = row['name']
             session['stu_roll']    = row['roll_number']
             session.modified = True  # Ensure session is saved
+            print(f"\n[STUDENT LOGIN] ✅ Login successful for {row['roll_number']}")
+            print(f"  Session set: stu_user_id={row['id']}, stu_role='student'")
+            print(f"  Session.permanent={remember_me}, session.modified={True}")
             return redirect(url_for('student_dashboard'))
         else:
             conn.close()
