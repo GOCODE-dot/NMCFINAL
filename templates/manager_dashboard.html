@@ -1415,6 +1415,8 @@ document.addEventListener('click', function(e) {
     </div>
   </div>
 
+</div>
+
 <!-- Student Picker for Rotation -->
 <div class="modal-overlay" id="rot-picker-modal" style="z-index:400">
   <div class="modal" style="max-width:400px">
@@ -1430,6 +1432,7 @@ document.addEventListener('click', function(e) {
 
 
 <!-- ── bKASH TAB ──────────────────────────────────────────────────────────── -->
+<div class="container" style="padding-top:0">
 
 
   <!-- MEAL EDIT REQUESTS TAB -->
@@ -1595,8 +1598,8 @@ document.addEventListener('click', function(e) {
 
 <script>
 function showTab(name) {
-  // Scope to .tabs > .tab only — avoids collision with floor sub-tabs inside panels
-  document.querySelectorAll('.tabs > .tab').forEach(t => {
+  // Handle both old .tabs > .tab and new .tabs-primary .tab systems
+  document.querySelectorAll('.tabs > .tab, .tabs-primary .tab').forEach(t => {
     const oc    = t.getAttribute('onclick') || '';
     const match = oc.match(/showTab\('([^']+)'\)/);
     if (match) t.classList.toggle('active', match[1] === name);
