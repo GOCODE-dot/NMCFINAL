@@ -12,6 +12,40 @@
 
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+/* ── SESSION EXPIRED BANNER ─────────────────────────────────────────────── */
+#session-expired-banner {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 99999;
+  background: linear-gradient(90deg, #b45309, #d97706);
+  color: #fff;
+  padding: 10px 16px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  box-shadow: 0 2px 12px rgba(0,0,0,.25);
+}
+#session-expired-banner.visible { display: flex; }
+#session-expired-banner a {
+  color: #fff;
+  background: rgba(255,255,255,.2);
+  border: 1.5px solid rgba(255,255,255,.5);
+  border-radius: 8px;
+  padding: 6px 16px;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+  transition: background .2s;
+}
+#session-expired-banner a:hover { background: rgba(255,255,255,.35); }
+#session-expired-banner .seb-msg { display: flex; align-items: center; gap: 8px; }
+
 /* ── DARK / LIGHT THEME SYSTEM ─────────────────────────────────────────── */
 :root {
   --primary: #1a6b3a; --primary-light: #2d9e5a; --primary-pale: #e8f5ee;
@@ -397,6 +431,17 @@ document.addEventListener('click', function(e) {
   obs.observe(document.body,{childList:true,subtree:true});
 })();
 </script>
+
+<!-- ── SESSION EXPIRED BANNER (shown when manager session is lost) ── -->
+<div id="session-expired-banner">
+  <div class="seb-msg">
+    <span style="font-size:16px">⚠️</span>
+    Your session has expired — the page is still showing but live updates are paused.
+  </div>
+  <a href="/manager/login" target="_blank" onclick="handleSessionRelogin(event)">
+    Re-login → stay on page
+  </a>
+</div>
 
 <div class="container">
   <div class="page-header">
@@ -1598,8 +1643,8 @@ document.addEventListener('click', function(e) {
 
 <script>
 function showTab(name) {
-  // Handle both old .tabs > .tab and new .tabs-primary .tab systems
-  document.querySelectorAll('.tabs > .tab, .tabs-primary .tab').forEach(t => {
+  // Scope to .tabs > .tab only — avoids collision with floor sub-tabs inside panels
+  document.querySelectorAll('.tabs > .tab').forEach(t => {
     const oc    = t.getAttribute('onclick') || '';
     const match = oc.match(/showTab\('([^']+)'\)/);
     if (match) t.classList.toggle('active', match[1] === name);
@@ -1879,13 +1924,9 @@ async function unlockStudent(roll, btn) {
     // Guard against non-JSON response (e.g. session expired → redirect HTML)
     const contentType = r.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
-      if (r.redirected || r.status === 302 || r.url.includes('login')) {
-        toast('Session expired. Redirecting to login…', 'error');
-        setTimeout(() => location.href = '/manager/login', 1200);
-      } else {
-        toast(`Server error (HTTP ${r.status}). Check Flask logs.`, 'error');
-        btn.disabled = false; btn.innerHTML = origHTML;
-      }
+      // Session guardian will have already shown the banner
+      toast('Session expired — please re-login using the banner above.', 'error');
+      btn.disabled = false; btn.innerHTML = origHTML;
       return;
     }
     const d = await r.json();
@@ -3804,6 +3845,100 @@ setInterval(async () => {
   } catch(e) {}
 }, 90000);
 
-</script>
+// ══════════════════════════════════════════════════════════════════════════════
+// SESSION GUARDIAN — intercepts all fetch() calls, detects session expiry,
+// shows a banner instead of kicking the manager out of the dashboard.
+// ══════════════════════════════════════════════════════════════════════════════
 
-{% endblock %}
+(function installSessionGuardian() {
+  const _nativeFetch = window.fetch.bind(window);
+  let _sessionLost   = false;
+  let _sessionWindow = null;
+
+  // Show the banner without reloading or redirecting
+  function showSessionBanner() {
+    if (_sessionLost) return;
+    _sessionLost = true;
+    const banner = document.getElementById('session-expired-banner');
+    if (banner) banner.classList.add('visible');
+    // Pause all polling intervals gracefully (they'll just show stale data)
+    console.warn('[NMMS] Manager session expired. Banner shown — page preserved.');
+  }
+
+  // Called when the manager clicks "Re-login → stay on page"
+  window.handleSessionRelogin = function(e) {
+    e.preventDefault();
+    // Open login in a small popup
+    const popup = window.open(
+      '/manager/login',
+      'nmms_relogin',
+      'width=480,height=600,left=' + Math.round((screen.width-480)/2) +
+      ',top=' + Math.round((screen.height-600)/2)
+    );
+    _sessionWindow = popup;
+
+    // Poll until the popup closes (manager logged back in)
+    const check = setInterval(() => {
+      if (!popup || popup.closed) {
+        clearInterval(check);
+        // Verify session is restored by pinging a lightweight endpoint
+        _nativeFetch('/manager/dashboard_stats')
+          .then(r => {
+            if (r.ok || r.status === 200) {
+              // Session restored — hide banner and resume
+              _sessionLost = false;
+              const banner = document.getElementById('session-expired-banner');
+              if (banner) banner.classList.remove('visible');
+              toast('✅ Session restored — live updates resumed', 'success');
+              // Reload silently to refresh all stat cards
+              setTimeout(() => location.reload(), 1500);
+            }
+          })
+          .catch(() => {});
+      }
+    }, 800);
+  };
+
+  // Override global fetch to intercept session expiry
+  window.fetch = async function(...args) {
+    // Only intercept manager API calls
+    const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
+    const isManagerCall = url.startsWith('/manager/') || url.startsWith('/admin/');
+
+    let response;
+    try {
+      response = await _nativeFetch(...args);
+    } catch(err) {
+      throw err; // network error — let the original handler deal with it
+    }
+
+    // Detect session expiry:
+    // 1. Response was redirected to a login page
+    // 2. Status is 401 (Unauthorized)
+    // 3. Content-type is HTML but we expected JSON (Flask redirect to login page)
+    if (isManagerCall && !_sessionLost) {
+      const contentType = response.headers.get('content-type') || '';
+      const isLoginRedirect =
+        response.redirected && response.url.includes('login');
+      const isUnauthorized = response.status === 401;
+      const isHtmlWhenExpectingJson =
+        contentType.includes('text/html') &&
+        (args[1]?.headers?.['Content-Type'] === 'application/json' ||
+         (typeof args[0] === 'string' && args[0].includes('/manager/')));
+
+      if (isLoginRedirect || isUnauthorized || isHtmlWhenExpectingJson) {
+        showSessionBanner();
+        // Return a fake "session expired" JSON response so callers don't crash
+        return new Response(
+          JSON.stringify({ ok: false, msg: 'Session expired. Please re-login.' }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    return response;
+  };
+})();
+
+// Also remove the old hard-redirect in unlockStudent — now handled by the guardian above
+
