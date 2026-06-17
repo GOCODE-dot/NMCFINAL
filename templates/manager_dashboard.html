@@ -3912,23 +3912,17 @@ setInterval(async () => {
       throw err; // network error — let the original handler deal with it
     }
 
-    // Detect session expiry:
-    // 1. Response was redirected to a login page
-    // 2. Status is 401 (Unauthorized)
-    // 3. Content-type is HTML but we expected JSON (Flask redirect to login page)
+    // Detect session expiry — ONLY on clear signals:
+    // 1. Flask redirected the request to a login page URL
+    // 2. Explicit 401 Unauthorized status
     if (isManagerCall && !_sessionLost) {
-      const contentType = response.headers.get('content-type') || '';
       const isLoginRedirect =
         response.redirected && response.url.includes('login');
       const isUnauthorized = response.status === 401;
-      const isHtmlWhenExpectingJson =
-        contentType.includes('text/html') &&
-        (args[1]?.headers?.['Content-Type'] === 'application/json' ||
-         (typeof args[0] === 'string' && args[0].includes('/manager/')));
 
-      if (isLoginRedirect || isUnauthorized || isHtmlWhenExpectingJson) {
+      if (isLoginRedirect || isUnauthorized) {
         showSessionBanner();
-        // Return a fake "session expired" JSON response so callers don't crash
+        // Return a fake "session expired" JSON so callers don't crash
         return new Response(
           JSON.stringify({ ok: false, msg: 'Session expired. Please re-login.' }),
           { status: 401, headers: { 'Content-Type': 'application/json' } }
