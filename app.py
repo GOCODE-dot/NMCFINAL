@@ -22,23 +22,15 @@ import secrets as _secrets
 
 _secret = os.environ.get('SECRET_KEY')
 if not _secret:
-    # For development only: generate a key
-    # FOR PRODUCTION ON RAILWAY: You MUST set the SECRET_KEY environment variable!
     _key_file = os.path.join(os.path.dirname(__file__), '.secret_key')
     if os.path.exists(_key_file):
         with open(_key_file) as f:
             _secret = f.read().strip()
-        print(f"[NMMS] ✅ Loaded SECRET_KEY from .secret_key file (dev only)")
     else:
-        # Generate a temporary key for this session
         _secret = _secrets.token_hex(32)
         with open(_key_file, 'w') as f:
             f.write(_secret)
-        print(f"[NMMS] ⚠️  Generated temporary SECRET_KEY (dev mode)")
-        print(f"[NMMS] FOR PRODUCTION: Set this as a Railway environment variable:")
-        print(f"[NMMS]   SECRET_KEY={_secret}")
-else:
-    print(f"[NMMS] ✅ Using SECRET_KEY from environment variable")
+        print(f"[NMMS] Generated new SECRET_KEY and saved to {_key_file}")
 
 app.secret_key = _secret
 
@@ -51,7 +43,6 @@ _is_https = os.environ.get('HTTPS', '').lower() in ('1', 'true', 'on') or \
             os.environ.get('RENDER')
 app.config['SESSION_COOKIE_SECURE']   = bool(_is_https)
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)   # "remember me" default
-app.config['SESSION_REFRESH_EACH_REQUEST'] = True  # Keep session alive on each request
 
 limiter = Limiter(
     get_remote_address,
@@ -474,26 +465,13 @@ def login_required(role):
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
-            # Use role-specific session keys so student/manager sessions never collide
-            key_uid  = f'{role}_user_id'
-            key_role = f'{role}_role'
-            
-            # DEBUG: Log what we're checking
-            uid_val = session.get(key_uid)
-            role_val = session.get(key_role)
-            all_keys = dict(session)
-            print(f"\n[LOGIN_REQUIRED] Role: {role}")
-            print(f"  Checking keys: {key_uid}={uid_val}, {key_role}={role_val}")
-            print(f"  All session keys: {list(all_keys.keys())}")
-            print(f"  Session cookie sent: {'session' in request.cookies}")
-            
-            if session.get(key_uid) is None or session.get(key_role) != role:
-                print(f"  ❌ Auth check FAILED")
+            if 'user_id' not in session or session.get('role') != role:
+                # Return JSON for fetch/XHR requests so the frontend shows a
+                # proper error instead of silently failing on a redirect response.
                 if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest' \
                         or request.path.startswith(('/api/', '/manager/', '/student/', '/admin/')):
                     return jsonify({'ok': False, 'msg': 'Session expired. Please log in again.'}), 401
                 return redirect(url_for('index'))
-            print(f"  ✅ Auth check PASSED")
             return f(*args, **kwargs)
         return decorated
     return decorator
@@ -525,20 +503,6 @@ def get_current_weekly_bkash():
         return {'bkash_number': '', 'week_start': '', 'approved': False}
 
 # ── Routes ────────────────────────────────────────────────────────────────────
-
-@app.route('/debug/session')
-def debug_session():
-    """Diagnostic endpoint — shows current session state"""
-    return jsonify({
-        'session_keys': list(session.keys()),
-        'session_data': {k: v for k, v in session.items() if k != 'password'},
-        'secret_key_hash': hash(app.secret_key) % 10000,  # Last 4 digits of SECRET_KEY
-        'browser_cookies': {k: '***' for k in request.cookies.keys()},
-        'request_headers': {
-            'User-Agent': request.headers.get('User-Agent', '')[:50],
-            'Accept': request.headers.get('Accept', '')[:50],
-        }
-    })
 
 @app.route('/')
 def index():
@@ -649,14 +613,10 @@ def student_login():
                 return render_template('student_login.html')
             remember_me       = request.form.get('remember_me') in ('1', 'on')
             session.permanent = remember_me
-            session['stu_user_id'] = row['id']
-            session['stu_role']    = 'student'
-            session['stu_name']    = row['name']
-            session['stu_roll']    = row['roll_number']
-            session.modified = True  # Ensure session is saved
-            print(f"\n[STUDENT LOGIN] ✅ Login successful for {row['roll_number']}")
-            print(f"  Session set: stu_user_id={row['id']}, stu_role='student'")
-            print(f"  Session.permanent={remember_me}, session.modified={True}")
+            session['user_id'] = row['id']
+            session['role']    = 'student'
+            session['name']    = row['name']
+            session['roll']    = row['roll_number']
             return redirect(url_for('student_dashboard'))
         else:
             conn.close()
@@ -704,7 +664,7 @@ def student_logout():
 @login_required('student')
 def student_dashboard():
     conn  = get_db()
-    sid   = session['stu_user_id']
+    sid   = session['user_id']
     today = (datetime.utcnow() + timedelta(hours=6)).date()
     # Fixed weekly cycle — always anchored to Sunday.
     # The grid shows the same 7 days (Sun–Sat) for everyone until the week flips.
@@ -812,7 +772,7 @@ def student_dashboard():
 @login_required('student')
 def student_order():
     d        = request.json
-    sid      = session['stu_user_id']
+    sid      = session['user_id']
     conn     = get_db()
     today_bd = (datetime.utcnow() + timedelta(hours=6)).date()
 
@@ -892,7 +852,7 @@ def student_order():
 @login_required('student')
 def cancel_order():
     d        = request.json
-    sid      = session['stu_user_id']
+    sid      = session['user_id']
     today_bd = (datetime.utcnow() + timedelta(hours=6)).date()
     conn     = get_db()
     meal_date = d.get('meal_date', '')
@@ -943,7 +903,7 @@ def cancel_order():
 @login_required('student')
 def request_meal_edit():
     d      = request.json
-    sid    = session['stu_user_id']
+    sid    = session['user_id']
     dt     = d.get('meal_date', '')
     mtype  = d.get('meal_type', '')
     action = d.get('action', '')
@@ -973,7 +933,7 @@ def request_meal_edit():
 @app.route('/student/edit_request_status')
 @login_required('student')
 def edit_request_status():
-    sid  = session['stu_user_id']
+    sid  = session['user_id']
     now  = (datetime.utcnow() + timedelta(hours=6)).strftime('%Y-%m-%d %H:%M:%S')
     conn = get_db()
     rows = query(conn,
@@ -991,7 +951,7 @@ def edit_request_status():
 @login_required('student')
 def execute_meal_edit():
     d      = request.json
-    sid    = session['stu_user_id']
+    sid    = session['user_id']
     req_id = d.get('request_id')
     now    = (datetime.utcnow() + timedelta(hours=6)).strftime('%Y-%m-%d %H:%M:%S')
     conn   = get_db()
@@ -1066,12 +1026,12 @@ def decide_edit_request():
         )
         execute(conn,
             "UPDATE meal_edit_requests SET status='used', approved_at=%s, decided_by=%s WHERE id=%s",
-            (now, session['mgr_user_id'], req_id)
+            (now, session['user_id'], req_id)
         )
     else:
         execute(conn,
             "UPDATE meal_edit_requests SET status=%s, approved_at=%s, expires_at=%s, decided_by=%s WHERE id=%s",
-            (verdict, now, expires if verdict == 'approved' else None, session['mgr_user_id'], req_id)
+            (verdict, now, expires if verdict == 'approved' else None, session['user_id'], req_id)
         )
     conn.commit()
     conn.close()
@@ -1081,7 +1041,7 @@ def decide_edit_request():
 @app.route('/student/mark_due', methods=['POST'])
 @login_required('student')
 def mark_due():
-    sid = session['stu_user_id']
+    sid = session['user_id']
     with db() as conn:
         execute(conn,
             "UPDATE meal_orders SET payment_status='due' WHERE student_id=%s AND payment_status='pending'", (sid,)
@@ -1093,7 +1053,7 @@ def mark_due():
 @login_required('student')
 def submit_payment():
     d         = request.json
-    sid       = session['stu_user_id']
+    sid       = session['user_id']
     bkash_txn = d.get('bkash_txn', '').strip()
     note      = d.get('note', '').strip()
     if not bkash_txn:
@@ -1138,7 +1098,7 @@ def submit_payment():
 @login_required('student')
 def request_cash_payment():
     d    = request.json
-    sid  = session['stu_user_id']
+    sid  = session['user_id']
     note = d.get('note', '').strip()
     conn = get_db()
     row  = queryOne(conn,
@@ -1164,7 +1124,7 @@ def request_cash_payment():
 @app.route('/student/cash_request_status')
 @login_required('student')
 def cash_request_status():
-    sid  = session['stu_user_id']
+    sid  = session['user_id']
     conn = get_db()
     req  = queryOne(conn,
         "SELECT * FROM cash_payment_requests WHERE student_id=%s AND status='pending' ORDER BY requested_at DESC LIMIT 1", (sid,)
@@ -1182,7 +1142,7 @@ def cash_request_status():
 @app.route('/student/unpaid_meal_count')
 @login_required('student')
 def student_unpaid_meal_count():
-    sid  = session['stu_user_id']
+    sid  = session['user_id']
     conn = get_db()
     row  = queryOne(conn,
         "SELECT COUNT(*) as cnt FROM meal_orders WHERE student_id=%s AND payment_status IN ('pending','due')", (sid,)
@@ -1195,7 +1155,7 @@ def student_unpaid_meal_count():
 @app.route('/student/bkash_payment_status')
 @login_required('student')
 def bkash_payment_status():
-    sid  = session['stu_user_id']
+    sid  = session['user_id']
     conn = get_db()
     row  = queryOne(conn,
         "SELECT id, bkash_txn, amount, created_at FROM payments "
@@ -1210,7 +1170,7 @@ def bkash_payment_status():
 @app.route('/student/cancel_bkash_payment', methods=['POST'])
 @login_required('student')
 def cancel_bkash_payment():
-    sid  = session['stu_user_id']
+    sid  = session['user_id']
     conn = get_db()
     row  = queryOne(conn,
         "SELECT id FROM payments WHERE student_id=%s AND status='pending_verification'", (sid,)
@@ -1237,7 +1197,7 @@ def student_update_bkash():
         return jsonify({'ok': False, 'msg': 'bKash number and password are required.'})
     if not re.match(r'^01[3-9]\d{8}$', new_bkash):
         return jsonify({'ok': False, 'msg': 'Invalid bKash number.'})
-    sid  = session['stu_user_id']
+    sid  = session['user_id']
     conn = get_db()
     row  = queryOne(conn, "SELECT id, password FROM students WHERE id=%s", (sid,))
     if not row or not verify_pass(row['password'], password):
@@ -1260,7 +1220,7 @@ def student_request_phone_change():
         return jsonify({'ok': False, 'msg': 'New bKash number and password are required.'})
     if not re.match(r'^01[3-9]\d{8}$', new_bkash):
         return jsonify({'ok': False, 'msg': 'Invalid bKash number.'})
-    sid  = session['stu_user_id']
+    sid  = session['user_id']
     conn = get_db()
     row  = queryOne(conn, "SELECT id, password, bkash_number FROM students WHERE id=%s", (sid,))
     if not row or not verify_pass(row['password'], password):
@@ -1285,7 +1245,7 @@ def student_request_phone_change():
 @app.route('/student/phone_change_status')
 @login_required('student')
 def student_phone_change_status():
-    sid  = session['stu_user_id']
+    sid  = session['user_id']
     conn = get_db()
     rows = query(conn,
         "SELECT id, old_bkash, new_bkash, reason, status, decided_at, created_at "
@@ -1322,12 +1282,11 @@ def manager_login():
                     display_name = f"{row['name']} ({s_row['roll_number']})"
             remember_me       = request.form.get('remember_me') in ('1', 'on')
             session.permanent = remember_me
-            session['mgr_user_id']      = row['id']
-            session['mgr_role']         = 'manager'
-            session['mgr_name']         = display_name
+            session['user_id']          = row['id']
+            session['role']             = 'manager'
+            session['name']             = display_name
             session['mgr_bkash']        = row['bkash_number']
             session['must_change_pass'] = bool(row['must_change_password'])
-            session.modified = True  # Ensure session is saved
             if row['must_change_password']:
                 conn.close()
                 flash('Welcome! Please set a new password.', 'success')
@@ -1491,13 +1450,13 @@ def manager_dashboard():
                 'dinner_today':  int(d['dinner_today']  or 0),
             }
 
-    mgr_row      = queryOne(conn, "SELECT bkash_number, manager_id FROM meal_managers WHERE id=%s", (session['mgr_user_id'],))
+    mgr_row      = queryOne(conn, "SELECT bkash_number, manager_id FROM meal_managers WHERE id=%s", (session['user_id'],))
     mgr_bkash_val = mgr_row['bkash_number'] if mgr_row else session.get('mgr_bkash', '')
     mgr_id_val    = mgr_row['manager_id']   if mgr_row else ''
 
     mgr_student  = queryOne(conn,
         "SELECT s.roll_number FROM meal_managers m LEFT JOIN students s ON s.id=m.student_id WHERE m.id=%s",
-        (session['mgr_user_id'],)
+        (session['user_id'],)
     )
     mgr_roll_val = mgr_student['roll_number'] if mgr_student and mgr_student['roll_number'] else ''
 
@@ -1537,7 +1496,7 @@ def verify_payment():
     try:
         execute(conn,
             "UPDATE payments SET status='verified', verified_at=to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS'), verified_by=%s WHERE id=%s",
-            (session['mgr_name'], d['payment_id'])
+            (session['name'], d['payment_id'])
         )
         student = queryOne(conn, "SELECT id FROM students WHERE roll_number=%s", (d['roll'],))
         if student:
@@ -1565,7 +1524,7 @@ def reject_payment():
     try:
         execute(conn,
             "UPDATE payments SET status='rejected', verified_at=to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS'), verified_by=%s WHERE id=%s",
-            (session['mgr_name'], d['payment_id'])
+            (session['name'], d['payment_id'])
         )
         conn.commit()
         return jsonify({'ok': True})
@@ -1589,7 +1548,7 @@ def mark_paid():
                 "INSERT INTO payments (student_id,amount,bkash_txn,payment_date,status,screenshot_note,"
                 "verified_at,verified_by) VALUES (%s,%s,'MANUAL-MARK',%s,'verified','Manually marked paid by manager',"
                 "to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS'),%s)",
-                (student['id'], amount, date.today().isoformat(), session['mgr_name'])
+                (student['id'], amount, date.today().isoformat(), session['name'])
             )
         execute(conn,
             "UPDATE meal_orders SET payment_status='paid' WHERE student_id=%s AND payment_status IN ('pending','due')",
@@ -1618,7 +1577,7 @@ def collect_due():
                 "verified_at,verified_by) VALUES (%s,%s,'CASH-DUE-COLLECTED',%s,'verified',"
                 "'Due amount collected by manager in person',"
                 "to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS'),%s)",
-                (student['id'], amount, date.today().isoformat(), session['mgr_name'])
+                (student['id'], amount, date.today().isoformat(), session['name'])
             )
         execute(conn,
             "UPDATE meal_orders SET payment_status='paid' WHERE student_id=%s AND payment_status='due'",
@@ -1661,14 +1620,14 @@ def accept_cash():
         return jsonify({'ok': False, 'msg': 'Request not found.'})
     execute(conn,
         "UPDATE cash_payment_requests SET status='accepted', reviewed_at=to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS'), reviewed_by=%s WHERE id=%s",
-        (session['mgr_name'], req_id)
+        (session['name'], req_id)
     )
     execute(conn,
         "INSERT INTO payments (student_id,amount,bkash_txn,payment_date,status,screenshot_note,"
         "verified_at,verified_by) VALUES (%s,%s,'CASH-PAYMENT',%s,'verified',%s,"
         "to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS'),%s)",
         (req['student_id'], req['amount'], date.today().isoformat(),
-         f"Cash payment. Note: {req['note'] or 'N/A'}", session['mgr_name'])
+         f"Cash payment. Note: {req['note'] or 'N/A'}", session['name'])
     )
     execute(conn,
         "UPDATE meal_orders SET payment_status='paid' WHERE student_id=%s AND payment_status IN ('pending','due')",
@@ -1687,7 +1646,7 @@ def decline_cash():
     conn   = get_db()
     execute(conn,
         "UPDATE cash_payment_requests SET status='declined', reviewed_at=to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS'), reviewed_by=%s WHERE id=%s",
-        (session['mgr_name'], req_id)
+        (session['name'], req_id)
     )
     conn.commit()
     conn.close()
@@ -1893,7 +1852,7 @@ def manager_send_transfer():
         new_mgr_id = f"MGR{batch_num:03d}"
     execute(conn,
         "INSERT INTO manager_transfer_invites (from_manager_id, to_student_id, status, temp_password, new_manager_id) VALUES (%s,%s,%s,%s,%s)",
-        (session['mgr_name'], student_id, 'pending', temp_pass, new_mgr_id)
+        (session['name'], student_id, 'pending', temp_pass, new_mgr_id)
     )
     conn.commit()
     conn.close()
@@ -1922,7 +1881,7 @@ def active_managers():
 @app.route('/student/transfer_invites')
 @login_required('student')
 def student_transfer_invites():
-    sid  = session['stu_user_id']
+    sid  = session['user_id']
     conn = get_db()
     rows = query(conn,
         "SELECT * FROM manager_transfer_invites WHERE to_student_id=%s AND status='pending' ORDER BY created_at DESC",
@@ -1938,7 +1897,7 @@ def student_respond_transfer():
     d         = request.json
     invite_id = d.get('invite_id')
     action    = d.get('action')
-    sid       = session['stu_user_id']
+    sid       = session['user_id']
     conn      = get_db()
     invite = queryOne(conn,
         "SELECT * FROM manager_transfer_invites WHERE id=%s AND to_student_id=%s AND status='pending'",
@@ -2006,7 +1965,7 @@ def manager_change_password():
         conn = get_db()
         execute(conn,
             "UPDATE meal_managers SET password=%s, must_change_password=0, temp_password_expires=NULL WHERE id=%s",
-            (hash_pass(new_pass), session['mgr_user_id'])
+            (hash_pass(new_pass), session['user_id'])
         )
         conn.commit()
         conn.close()
@@ -2019,7 +1978,7 @@ def manager_change_password():
 @app.route('/api/meal_lock_status')
 @login_required('student')
 def meal_lock_status():
-    sid       = session['stu_user_id']
+    sid       = session['user_id']
     month_ago = (date.today() - timedelta(days=30)).isoformat()
     conn      = get_db()
     overdue   = queryOne(conn,
@@ -2033,7 +1992,7 @@ def meal_lock_status():
 @app.route('/api/ordering_lock_status')
 @login_required('student')
 def ordering_lock_status():
-    sid  = session['stu_user_id']
+    sid  = session['user_id']
     conn = get_db()
     row  = queryOne(conn, "SELECT ordering_locked FROM students WHERE id=%s", (sid,))
     conn.close()
@@ -2161,7 +2120,6 @@ def admin_login():
             session['role']      = 'admin'
             session['admin_id']  = admin_id
             session['remember']  = remember_me
-            session.modified = True  # Ensure session is saved
             print(f"[ADMIN LOGIN] ✅ Login SUCCESS for {admin_id}")
             response = redirect(url_for('admin_dashboard'))
             response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
@@ -2454,7 +2412,7 @@ def admin_list_female_students():
 @login_required('student')
 def student_request_floor_change():
     d               = request.json or {}
-    sid             = session['stu_user_id']
+    sid             = session['user_id']
     requested_floor = d.get('requested_floor')
     reason          = (d.get('reason') or '').strip()[:200]
     if not requested_floor:
@@ -2497,7 +2455,7 @@ def student_request_floor_change():
 @app.route('/student/floor_change_status')
 @login_required('student')
 def student_floor_change_status():
-    sid  = session['stu_user_id']
+    sid  = session['user_id']
     conn = get_db()
     row  = queryOne(conn,
         "SELECT * FROM floor_change_requests WHERE student_id=%s ORDER BY created_at DESC LIMIT 1", (sid,)
@@ -3184,7 +3142,7 @@ def rotation_search_students():
 @app.route('/student/duty_invites')
 @login_required('student')
 def student_duty_invites():
-    sid  = session['stu_user_id']
+    sid  = session['user_id']
     conn = get_db()
     rows = query(conn,
         "SELECT * FROM duty_invites WHERE student_id=%s ORDER BY created_at DESC", (sid,)
@@ -3198,7 +3156,7 @@ def student_duty_invites():
 def student_accept_duty():
     d         = request.json
     invite_id = d.get('invite_id')
-    sid       = session['stu_user_id']
+    sid       = session['user_id']
     conn      = get_db()
     invite = queryOne(conn,
         "SELECT * FROM duty_invites WHERE id=%s AND student_id=%s AND status='pending'",
@@ -3256,7 +3214,7 @@ def student_accept_duty():
 @app.route('/student/duty_credentials')
 @login_required('student')
 def student_duty_credentials():
-    sid  = session['stu_user_id']
+    sid  = session['user_id']
     conn = get_db()
     rows = query(conn,
         "SELECT * FROM duty_invites WHERE student_id=%s AND status='accepted' ORDER BY created_at DESC", (sid,)
@@ -3274,7 +3232,7 @@ def manager_bkash_propose():
     if not proposed_bkash or not re.match(r'^01[3-9]\d{8}$', proposed_bkash):
         return jsonify({'ok': False, 'msg': 'Valid bKash number required.'})
     conn       = get_db()
-    my_id      = session['mgr_user_id']
+    my_id      = session['user_id']
     today      = date.today()
     week_start = (today - timedelta(days=today.weekday())).isoformat()
     execute(conn,
@@ -3323,7 +3281,7 @@ def manager_bkash_vote():
     if vote not in ('approve', 'reject'):
         return jsonify({'ok': False, 'msg': "vote must be 'approve' or 'reject'."})
     conn  = get_db()
-    my_id = session['mgr_user_id']
+    my_id = session['user_id']
     proposal = queryOne(conn, "SELECT * FROM bkash_proposals WHERE id=%s AND status='pending'", (proposal_id,))
     if not proposal:
         conn.close()
@@ -3384,7 +3342,7 @@ def manager_bkash_vote():
 @login_required('manager')
 def manager_bkash_proposals():
     conn  = get_db()
-    my_id = session['mgr_user_id']
+    my_id = session['user_id']
     proposals = query(conn, """
         SELECT bp.*,
                mm.name as proposer_name, mm.manager_id as proposer_mgr_id,
@@ -3624,7 +3582,7 @@ def manager_unlock_all_ordering():
 
 @app.route('/api/non_orderers_summary')
 def api_non_orderers_summary():
-    role = session.get('mgr_role') or session.get('role')  # manager or admin
+    role = session.get('role')
     if role not in ('manager', 'admin'):
         return jsonify({'ok': False, 'msg': 'Unauthorized'}), 403
     today     = (datetime.utcnow() + timedelta(hours=6)).date()
@@ -3936,7 +3894,7 @@ def manager_decide_ordering_unlock():
     if not request_id or verdict not in ('approved', 'rejected'):
         return jsonify({'ok': False, 'msg': 'Invalid request.'})
 
-    mgr_id = session.get('mgr_user_id')
+    mgr_id = session.get('user_id')
     now    = (datetime.utcnow() + timedelta(hours=6)).strftime('%Y-%m-%d %H:%M:%S')
     conn   = get_db()
 
@@ -3974,7 +3932,7 @@ def manager_decide_ordering_unlock():
 def student_request_ordering_unlock():
     data       = request.json or {}
     reason     = (data.get('reason') or '').strip()[:500]
-    student_id = session.get('stu_user_id')
+    student_id = session.get('user_id')
     now        = (datetime.utcnow() + timedelta(hours=6)).strftime('%Y-%m-%d %H:%M:%S')
     conn       = get_db()
 
