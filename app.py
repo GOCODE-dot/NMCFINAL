@@ -24,13 +24,19 @@ _secret = os.environ.get('SECRET_KEY')
 if not _secret:
     _key_file = os.path.join(os.path.dirname(__file__), '.secret_key')
     if os.path.exists(_key_file):
-        with open(_key_file) as f:
-            _secret = f.read().strip()
-    else:
+        try:
+            with open(_key_file) as f:
+                _secret = f.read().strip()
+        except Exception:
+            pass
+    if not _secret:
         _secret = _secrets.token_hex(32)
-        with open(_key_file, 'w') as f:
-            f.write(_secret)
-        print(f"[NMMS] Generated new SECRET_KEY and saved to {_key_file}")
+        try:
+            with open(_key_file, 'w') as f:
+                f.write(_secret)
+            print(f"[NMMS] Generated new SECRET_KEY and saved to {_key_file}")
+        except Exception:
+            print("[NMMS] WARNING: Could not persist SECRET_KEY to disk (read-only fs). Sessions will reset on redeploy. Set SECRET_KEY env var to fix.")
 
 app.secret_key = _secret
 
@@ -449,20 +455,21 @@ def init_db():
         print(f"[NMMS] Cleaned up {len(demo_ids)} demo student(s) on startup.")
 
     # ── Fix female students stored with text hostel names (old form bug) ─────
-    # Old registration form sent "Campus"/"Sentu House"/"Chairman House" as text,
-    # which failed int() conversion and silently defaulted to floor=1 for everyone.
-    # This migration fixes any female student whose floor is NULL or invalid.
+    # Use a fresh connection so any failure never poisons the main conn.
     try:
-        bad_floor_females = query(conn,
+        _fc = get_db()
+        bad_floor_females = query(_fc,
             "SELECT id, name, floor FROM students WHERE gender='female' AND (floor IS NULL OR floor NOT IN (1,2,3))"
         )
         if bad_floor_females:
             for row in bad_floor_females:
-                execute(conn, "UPDATE students SET floor=1 WHERE id=%s", (row['id'],))
-            print(f"[NMMS] Fixed {len(bad_floor_females)} female student(s) with invalid hostel value (set to Campus=1). Please correct manually if needed.")
-            conn.commit()
+                execute(_fc, "UPDATE students SET floor=1 WHERE id=%s", (row['id'],))
+            _fc.commit()
+            print(f"[NMMS] Fixed {len(bad_floor_females)} female student(s) with invalid hostel value.")
+        _fc.close()
     except Exception as e:
-        conn.rollback()
+        try: _fc.rollback(); _fc.close()
+        except: pass
         print(f"[NMMS] Female floor migration skipped: {e}")
 
     conn.commit()
@@ -3961,7 +3968,13 @@ def manager_cook_sheet():
 # ── STARTUP ───────────────────────────────────────────────────────────────────
 
 with app.app_context():
-    init_db()
+    try:
+        init_db()
+    except Exception as _init_err:
+        import traceback
+        print("[NMMS] FATAL: init_db() failed:", _init_err)
+        traceback.print_exc()
+        raise
 
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('PORT', 5000)))
