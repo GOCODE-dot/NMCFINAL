@@ -43,6 +43,7 @@ _is_https = os.environ.get('HTTPS', '').lower() in ('1', 'true', 'on') or \
             os.environ.get('RENDER')
 app.config['SESSION_COOKIE_SECURE']   = bool(_is_https)
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)   # "remember me" default
+app.config['SESSION_REFRESH_EACH_REQUEST'] = True  # Keep session alive on each request
 
 limiter = Limiter(
     get_remote_address,
@@ -618,6 +619,7 @@ def student_login():
             session['stu_role']    = 'student'
             session['stu_name']    = row['name']
             session['stu_roll']    = row['roll_number']
+            session.modified = True  # Ensure session is saved
             return redirect(url_for('student_dashboard'))
         else:
             conn.close()
@@ -1288,6 +1290,7 @@ def manager_login():
             session['mgr_name']         = display_name
             session['mgr_bkash']        = row['bkash_number']
             session['must_change_pass'] = bool(row['must_change_password'])
+            session.modified = True  # Ensure session is saved
             if row['must_change_password']:
                 conn.close()
                 flash('Welcome! Please set a new password.', 'success')
@@ -2121,6 +2124,7 @@ def admin_login():
             session['role']      = 'admin'
             session['admin_id']  = admin_id
             session['remember']  = remember_me
+            session.modified = True  # Ensure session is saved
             print(f"[ADMIN LOGIN] ✅ Login SUCCESS for {admin_id}")
             response = redirect(url_for('admin_dashboard'))
             response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
