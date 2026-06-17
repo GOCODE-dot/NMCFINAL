@@ -394,11 +394,20 @@ def init_db():
     conn.commit()
 
     # ── Safe migrations (ADD COLUMN if not exists) ───────────────────────────
-    try:
-        cur.execute("ALTER TABLE students ADD COLUMN debt_blocked INTEGER DEFAULT 0")
-        conn.commit()
-    except Exception:
-        conn.rollback()   # column already exists — safe to ignore
+    # Use a fresh connection for each ALTER TABLE so a "column already exists"
+    # rollback never poisons the main connection that seeds MGR001 / DEVADMIN.
+    conn.commit()  # flush all CREATE TABLE statements first
+    for migration_sql in [
+        "ALTER TABLE students ADD COLUMN debt_blocked INTEGER DEFAULT 0",
+    ]:
+        _mc = get_db()
+        try:
+            _mc.cursor().execute(migration_sql)
+            _mc.commit()
+        except Exception:
+            _mc.rollback()   # column already exists — safe to ignore
+        finally:
+            _mc.close()
 
     # ── Seed MGR001 ─────────────────────────────────────────────────────────
     existing_mgr = queryOne(conn, "SELECT id FROM meal_managers WHERE manager_id=%s", ('MGR001',))
@@ -3802,78 +3811,13 @@ def manager_dashboard_stats():
     })
 
 
-# ── COOK SHEET ────────────────────────────────────────────────────────────────
-
-@app.route('/manager/cook_sheet')
-@login_required('manager')
-def manager_cook_sheet():
-    req_date = request.args.get('date', date.today().isoformat())
-    try:
-        datetime.fromisoformat(req_date)
-    except ValueError:
-        return jsonify({'ok': False, 'msg': 'Invalid date.'})
-    conn = get_db()
-    def gc(meal_type, gender):
-        return queryOne(conn,
-            "SELECT COUNT(*) as c FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
-            "WHERE mo.meal_date=%s AND mo.meal_type=%s AND s.gender=%s",
-            (req_date, meal_type, gender)
-        )['c']
-    lunch_total   = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE meal_date=%s AND meal_type='lunch'",  (req_date,))['c']
-    dinner_total  = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE meal_date=%s AND meal_type='dinner'", (req_date,))['c']
-    # Resolve gender counts BEFORE closing the connection
-    lunch_female  = gc('lunch',  'female')
-    lunch_male    = gc('lunch',  'male')
-    dinner_female = gc('dinner', 'female')
-    dinner_male   = gc('dinner', 'male')
-    floor_lunch   = query(conn,
-        "SELECT s.floor, COUNT(*) as count FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
-        "WHERE mo.meal_date=%s AND mo.meal_type='lunch'  AND s.gender='male' GROUP BY s.floor ORDER BY s.floor",
-        (req_date,)
-    )
-    floor_dinner  = query(conn,
-        "SELECT s.floor, COUNT(*) as count FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
-        "WHERE mo.meal_date=%s AND mo.meal_type='dinner' AND s.gender='male' GROUP BY s.floor ORDER BY s.floor",
-        (req_date,)
-    )
-    hostel_lunch  = query(conn,
-        "SELECT s.floor, COUNT(*) as count FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
-        "WHERE mo.meal_date=%s AND mo.meal_type='lunch'  AND s.gender='female' GROUP BY s.floor ORDER BY s.floor",
-        (req_date,)
-    )
-    hostel_dinner = query(conn,
-        "SELECT s.floor, COUNT(*) as count FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
-        "WHERE mo.meal_date=%s AND mo.meal_type='dinner' AND s.gender='female' GROUP BY s.floor ORDER BY s.floor",
-        (req_date,)
-    )
-    HOSTEL_NAMES = {1: 'Campus', 2: 'Sentu House', 3: 'Chairman House'}
-    conn.close()  # safe to close now — all queries done
-    return jsonify({
-        'ok': True, 'date': req_date,
-        'lunch':  {'total': lunch_total,  'female': lunch_female,  'male': lunch_male},
-        'dinner': {'total': dinner_total, 'female': dinner_female, 'male': dinner_male},
-        'floor_lunch':  [{'floor': r['floor'], 'count': r['count']} for r in floor_lunch],
-        'floor_dinner': [{'floor': r['floor'], 'count': r['count']} for r in floor_dinner],
-        'hostel_lunch':  [{'floor': r['floor'], 'name': HOSTEL_NAMES.get(r['floor'], f"Hostel {r['floor']}"), 'count': r['count']} for r in hostel_lunch],
-        'hostel_dinner': [{'floor': r['floor'], 'name': HOSTEL_NAMES.get(r['floor'], f"Hostel {r['floor']}"), 'count': r['count']} for r in hostel_dinner],
-    })
-
-# ── STARTUP ───────────────────────────────────────────────────────────────────
-
-with app.app_context():
-    init_db()
-
-if __name__ == '__main__':
-    app.run(debug=True, port=int(os.environ.get('PORT', 5000)))
-
-
 # ── ORDERING UNLOCK REQUESTS (manager-side) ───────────────────────────────────
 
 @app.route('/manager/ordering_unlock_requests')
 @login_required('manager')
 def manager_ordering_unlock_requests():
-    conn   = get_db()
-    rows   = query(conn, """
+    conn = get_db()
+    rows = query(conn, """
         SELECT ur.id, ur.reason, ur.status, ur.created_at,
                s.name, s.roll_number, s.batch, s.gender, s.floor
         FROM ordering_unlock_requests ur
@@ -3956,3 +3900,68 @@ def student_request_ordering_unlock():
     conn.commit()
     conn.close()
     return jsonify({'ok': True, 'msg': 'Unlock request sent to your manager.'})
+
+
+# ── COOK SHEET ────────────────────────────────────────────────────────────────
+
+@app.route('/manager/cook_sheet')
+@login_required('manager')
+def manager_cook_sheet():
+    req_date = request.args.get('date', date.today().isoformat())
+    try:
+        datetime.fromisoformat(req_date)
+    except ValueError:
+        return jsonify({'ok': False, 'msg': 'Invalid date.'})
+    conn = get_db()
+    def gc(meal_type, gender):
+        return queryOne(conn,
+            "SELECT COUNT(*) as c FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
+            "WHERE mo.meal_date=%s AND mo.meal_type=%s AND s.gender=%s",
+            (req_date, meal_type, gender)
+        )['c']
+    lunch_total   = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE meal_date=%s AND meal_type='lunch'",  (req_date,))['c']
+    dinner_total  = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE meal_date=%s AND meal_type='dinner'", (req_date,))['c']
+    # Resolve gender counts BEFORE closing the connection
+    lunch_female  = gc('lunch',  'female')
+    lunch_male    = gc('lunch',  'male')
+    dinner_female = gc('dinner', 'female')
+    dinner_male   = gc('dinner', 'male')
+    floor_lunch   = query(conn,
+        "SELECT s.floor, COUNT(*) as count FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
+        "WHERE mo.meal_date=%s AND mo.meal_type='lunch'  AND s.gender='male' GROUP BY s.floor ORDER BY s.floor",
+        (req_date,)
+    )
+    floor_dinner  = query(conn,
+        "SELECT s.floor, COUNT(*) as count FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
+        "WHERE mo.meal_date=%s AND mo.meal_type='dinner' AND s.gender='male' GROUP BY s.floor ORDER BY s.floor",
+        (req_date,)
+    )
+    hostel_lunch  = query(conn,
+        "SELECT s.floor, COUNT(*) as count FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
+        "WHERE mo.meal_date=%s AND mo.meal_type='lunch'  AND s.gender='female' GROUP BY s.floor ORDER BY s.floor",
+        (req_date,)
+    )
+    hostel_dinner = query(conn,
+        "SELECT s.floor, COUNT(*) as count FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
+        "WHERE mo.meal_date=%s AND mo.meal_type='dinner' AND s.gender='female' GROUP BY s.floor ORDER BY s.floor",
+        (req_date,)
+    )
+    HOSTEL_NAMES = {1: 'Campus', 2: 'Sentu House', 3: 'Chairman House'}
+    conn.close()  # safe to close now — all queries done
+    return jsonify({
+        'ok': True, 'date': req_date,
+        'lunch':  {'total': lunch_total,  'female': lunch_female,  'male': lunch_male},
+        'dinner': {'total': dinner_total, 'female': dinner_female, 'male': dinner_male},
+        'floor_lunch':  [{'floor': r['floor'], 'count': r['count']} for r in floor_lunch],
+        'floor_dinner': [{'floor': r['floor'], 'count': r['count']} for r in floor_dinner],
+        'hostel_lunch':  [{'floor': r['floor'], 'name': HOSTEL_NAMES.get(r['floor'], f"Hostel {r['floor']}"), 'count': r['count']} for r in hostel_lunch],
+        'hostel_dinner': [{'floor': r['floor'], 'name': HOSTEL_NAMES.get(r['floor'], f"Hostel {r['floor']}"), 'count': r['count']} for r in hostel_dinner],
+    })
+
+# ── STARTUP ───────────────────────────────────────────────────────────────────
+
+with app.app_context():
+    init_db()
+
+if __name__ == '__main__':
+    app.run(debug=True, port=int(os.environ.get('PORT', 5000)))
