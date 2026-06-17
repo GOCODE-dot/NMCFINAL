@@ -526,6 +526,20 @@ def get_current_weekly_bkash():
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+@app.route('/debug/session')
+def debug_session():
+    """Diagnostic endpoint — shows current session state"""
+    return jsonify({
+        'session_keys': list(session.keys()),
+        'session_data': {k: v for k, v in session.items() if k != 'password'},
+        'secret_key_hash': hash(app.secret_key) % 10000,  # Last 4 digits of SECRET_KEY
+        'browser_cookies': {k: '***' for k in request.cookies.keys()},
+        'request_headers': {
+            'User-Agent': request.headers.get('User-Agent', '')[:50],
+            'Accept': request.headers.get('Accept', '')[:50],
+        }
+    })
+
 @app.route('/')
 def index():
     return render_template('index.html')
