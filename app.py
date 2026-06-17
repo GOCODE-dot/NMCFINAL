@@ -22,15 +22,23 @@ import secrets as _secrets
 
 _secret = os.environ.get('SECRET_KEY')
 if not _secret:
+    # For development only: generate a key
+    # FOR PRODUCTION ON RAILWAY: You MUST set the SECRET_KEY environment variable!
     _key_file = os.path.join(os.path.dirname(__file__), '.secret_key')
     if os.path.exists(_key_file):
         with open(_key_file) as f:
             _secret = f.read().strip()
+        print(f"[NMMS] ✅ Loaded SECRET_KEY from .secret_key file (dev only)")
     else:
+        # Generate a temporary key for this session
         _secret = _secrets.token_hex(32)
         with open(_key_file, 'w') as f:
             f.write(_secret)
-        print(f"[NMMS] Generated new SECRET_KEY and saved to {_key_file}")
+        print(f"[NMMS] ⚠️  Generated temporary SECRET_KEY (dev mode)")
+        print(f"[NMMS] FOR PRODUCTION: Set this as a Railway environment variable:")
+        print(f"[NMMS]   SECRET_KEY={_secret}")
+else:
+    print(f"[NMMS] ✅ Using SECRET_KEY from environment variable")
 
 app.secret_key = _secret
 
