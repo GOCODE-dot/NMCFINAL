@@ -756,10 +756,15 @@ document.addEventListener('click', function(e) {
     if (typeof loadFn === 'function') loadFn();
   }
 
-  // Patch showTab to also handle primary tab active state
-  const _origShowTab = window.showTab;
-  window.showTab = function(name) {
-    if (typeof _origShowTab === 'function') _origShowTab(name);
+  // Full showTab — defined here so the overflow menu works immediately
+  // (the duplicate definition below at line ~1643 will be ignored since this runs first
+  //  and reassigns window.showTab; the later definition redefines it but that one also
+  //  handles panels correctly — see the DOMContentLoaded init below)
+  window._showTabCore = function(name) {
+    // Switch panels
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    const panel = document.getElementById('tab-' + name);
+    if (panel) panel.classList.add('active');
     // Sync primary tab highlight
     const primaryMap = { cook:'cook-tab-btn', payments:'payments-tab-btn', cash:'cash-tab-btn', verified:'verified-tab-btn', floors:'floors-tab-btn' };
     document.querySelectorAll('.tabs-primary .tab').forEach(t => t.classList.remove('active'));
@@ -774,7 +779,13 @@ document.addEventListener('click', function(e) {
       if (omItem) omItem.classList.add('active');
       document.getElementById('tab-more-btn').classList.add('open');
     }
+    // Trigger lazy-loads
+    if (name === 'cash')          { if (typeof loadCashRequests === 'function') loadCashRequests(); }
+    if (name === 'rotation')      { if (typeof loadRotation === 'function') loadRotation(); }
+    if (name === 'cook')          { setTimeout(function(){ if (typeof loadCookSheet === 'function') loadCookSheet(); }, 50); }
+    if (name === 'unpaid_orders') { if (typeof loadUnpaidOrders === 'function') loadUnpaidOrders(); }
   };
+  window.showTab = window._showTabCore;
 
   // Watch overflow notification dots and mirror to the more-badge
   function syncMoreBadge() {
@@ -1502,7 +1513,7 @@ document.addEventListener('click', function(e) {
        COOK'S DAILY SHEET TAB
        ══════════════════════════════════════════════════════════════════════ -->
   <div id="tab-cook" class="tab-panel active">
-    <div class="card section-card" style="overflow:hidden">
+    <div class="card section-card" style="overflow:hidden;border-bottom:3px solid var(--primary)">
 
       <!-- Header -->
       <div style="background:var(--primary);padding:16px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
@@ -1650,10 +1661,29 @@ function showTab(name) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   const panel = document.getElementById('tab-' + name);
   if (panel) panel.classList.add('active');
+  // Also sync the overflow/primary tab UI via the shared core
+  if (typeof window._showTabCore === 'function') {
+    // Call core but skip the panel toggle (already done above) — just reuse the highlight sync
+    const primaryMap = { cook:'cook-tab-btn', payments:'payments-tab-btn', cash:'cash-tab-btn', verified:'verified-tab-btn', floors:'floors-tab-btn' };
+    document.querySelectorAll('.tabs-primary .tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.om-item').forEach(i => i.classList.remove('active'));
+    const moreBtn = document.getElementById('tab-more-btn');
+    if (moreBtn) moreBtn.classList.remove('open');
+    if (primaryMap[name]) {
+      const btn = document.getElementById(primaryMap[name]);
+      if (btn) btn.classList.add('active');
+    } else {
+      const omItem = document.getElementById('om-' + name);
+      if (omItem) omItem.classList.add('active');
+      if (moreBtn) moreBtn.classList.add('open');
+    }
+  }
   if (name === 'cash') loadCashRequests();
   if (name === 'rotation') loadRotation();
   if (name === 'cook') setTimeout(loadCookSheet, 50);  // small delay so panel is visible first
   if (name === 'unpaid_orders') loadUnpaidOrders();
+  // Also update _showTabCore reference so selectOverflow works
+  window.showTab = showTab;
 }
 
 async function loadCashRequests() {
@@ -3317,7 +3347,9 @@ async function decideEditRequest(reqId, verdict) {
 
 // ── Cook Sheet ────────────────────────────────────────────────────────────────
 
-// Set today as default date on page load
+// Set today as default date on page load, then load the sheet — the Cook
+// tab is the active tab by default, so it must fetch data immediately
+// instead of waiting for a tab click that may never come.
 (function initCookDate() {
   const today = new Date();
   const yyyy  = today.getFullYear();
@@ -3325,6 +3357,16 @@ async function decideEditRequest(reqId, verdict) {
   const dd    = String(today.getDate()).padStart(2, '0');
   const inp   = document.getElementById('cook-date-input');
   if (inp) inp.value = `${yyyy}-${mm}-${dd}`;
+  document.addEventListener('DOMContentLoaded', function() {
+    if (typeof loadCookSheet === 'function') loadCookSheet();
+  });
+  // DOMContentLoaded may have already fired by the time this script runs
+  // (it's at the bottom of the page), so also fire immediately as a fallback.
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setTimeout(function() {
+      if (typeof loadCookSheet === 'function') loadCookSheet();
+    }, 0);
+  }
 })();
 
 function _cookFmtDate(iso) {
