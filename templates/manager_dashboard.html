@@ -1471,8 +1471,6 @@ document.addEventListener('click', function(e) {
     </div>
   </div>
 
-</div>
-
 <!-- Student Picker for Rotation -->
 <div class="modal-overlay" id="rot-picker-modal" style="z-index:400">
   <div class="modal" style="max-width:400px">
@@ -1650,6 +1648,8 @@ document.addEventListener('click', function(e) {
   </div>
   <!-- END ORDERING UNLOCK REQUESTS TAB -->
 
+</div><!-- end .container -->
+
 <script>
 function showTab(name) {
   // Scope to .tabs > .tab only — avoids collision with floor sub-tabs inside panels
@@ -1691,7 +1691,8 @@ async function loadCashRequests() {
   try {
     const r = await fetch('/manager/cash_requests');
     const d = await r.json();
-    const requests = d.requests;
+    // Filter out cancelled rows as a safety net
+    const requests = (d.requests || []).filter(req => req.status !== 'cancelled');
     const dot = document.getElementById('cash-dot');
     if (requests.length > 0) {
       dot.style.display = '';
@@ -1767,10 +1768,11 @@ window.addEventListener('load', async () => {
   try {
     const r = await fetch('/manager/cash_requests');
     const d = await r.json();
-    if (d.requests && d.requests.length > 0) {
+    const pending = (d.requests || []).filter(req => req.status !== 'cancelled');
+    if (pending.length > 0) {
       const dot = document.getElementById('cash-dot');
       dot.style.display = '';
-      dot.textContent = d.requests.length;
+      dot.textContent = pending.length;
     }
   } catch(e) {}
 });
