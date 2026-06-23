@@ -2749,6 +2749,7 @@ def _get_total_bill(bill_date):
         'male_lunch': male_lunch, 'male_dinner': male_dinner,
         'female_lunch': female_lunch, 'female_dinner': female_dinner,
         'floors': [{'floor': r['floor'], 'lunch': r['lunch'], 'dinner': r['dinner'], 'total': r['total']} for r in floor_rows],
+        'ok': True,
     }
 
 
@@ -3964,6 +3965,38 @@ def manager_cook_sheet():
         'hostel_lunch':  [{'floor': r['floor'], 'name': HOSTEL_NAMES.get(r['floor'], f"Hostel {r['floor']}"), 'count': r['count']} for r in hostel_lunch],
         'hostel_dinner': [{'floor': r['floor'], 'name': HOSTEL_NAMES.get(r['floor'], f"Hostel {r['floor']}"), 'count': r['count']} for r in hostel_dinner],
     })
+
+
+@app.route('/admin/emergency_unlock_ordering', methods=['POST'])
+@admin_required
+def admin_emergency_unlock_ordering():
+    """Emergency override: unlock ordering for all students, or one by roll."""
+    data = request.json or {}
+    roll = (data.get('roll_number') or '').strip()
+    conn = get_db()
+    try:
+        if roll:
+            student = queryOne(conn, "SELECT id, name FROM students WHERE roll_number=%s", (roll,))
+            if not student:
+                conn.close()
+                return jsonify({'ok': False, 'msg': f'Student "{roll}" not found.'})
+            execute(conn, "UPDATE students SET ordering_locked=0 WHERE id=%s", (student['id'],))
+            execute(conn, "INSERT INTO admin_reset_log (admin_id, action) VALUES (%s,%s)",
+                    (session['admin_id'], f"emergency_unlock_ordering (single): {student['name']} ({roll})"))
+            conn.commit()
+            conn.close()
+            return jsonify({'ok': True, 'msg': f'{student["name"]} ({roll}) can now order meals.'})
+        else:
+            execute(conn, "UPDATE students SET ordering_locked=0")
+            execute(conn, "INSERT INTO admin_reset_log (admin_id, action) VALUES (%s,%s)",
+                    (session['admin_id'], "emergency_unlock_ordering (ALL students)"))
+            conn.commit()
+            conn.close()
+            return jsonify({'ok': True, 'msg': 'All students can now place orders.'})
+    except Exception as e:
+        try: conn.rollback(); conn.close()
+        except: pass
+        return jsonify({'ok': False, 'msg': str(e)})
 
 # ── STARTUP ───────────────────────────────────────────────────────────────────
 
