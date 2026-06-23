@@ -534,6 +534,7 @@ document.addEventListener('click', function(e) {
       gap: 2px;
       margin-bottom: 20px;
       position: relative;
+      z-index: 100;
     }
     .tabs-primary {
       display: flex;
@@ -1516,7 +1517,7 @@ document.addEventListener('click', function(e) {
       <!-- Header -->
       <div style="background:var(--primary);padding:16px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
         <div style="display:flex;align-items:center;gap:12px">
-          <div style="width:44px;height:44px;background:rgba(255,255,255,.2);border-radius:12px;display:grid;place-items:center;font-size:20px;flex-shrink:0">🍳</div>
+          <div style="width:44px;height:44px;background:rgba(255,255,255,.2);border-radius:12px;display:grid;place-items:center;font-size:20px;flex-shrink:0"><i class="fas fa-utensils" style="color:#fff"></i></div>
           <div>
             <div style="font-size:16px;font-weight:700;color:#fff">Cook's Daily Sheet</div>
             <div style="font-size:12px;color:rgba(255,255,255,.8)" id="cook-header-subtitle">Select a date to generate the sheet</div>
@@ -1538,7 +1539,7 @@ document.addEventListener('click', function(e) {
       <!-- Sheet body -->
       <div style="padding:20px 24px" id="cook-sheet-body">
         <div style="text-align:center;color:var(--text-muted);padding:40px 0">
-          <div style="font-size:36px;margin-bottom:12px">🍳</div>
+          <i class="fas fa-utensils" style="font-size:36px;margin-bottom:12px;display:block;color:var(--primary);opacity:.4"></i>
           <div style="font-weight:700;margin-bottom:4px">Pick a date above</div>
           <div style="font-size:13px">Today's sheet loads automatically.</div>
         </div>
@@ -3349,27 +3350,7 @@ async function decideEditRequest(reqId, verdict) {
 
 // ── Cook Sheet ────────────────────────────────────────────────────────────────
 
-// Set today as default date on page load, then load the sheet — the Cook
-// tab is the active tab by default, so it must fetch data immediately
-// instead of waiting for a tab click that may never come.
-(function initCookDate() {
-  const today = new Date();
-  const yyyy  = today.getFullYear();
-  const mm    = String(today.getMonth() + 1).padStart(2, '0');
-  const dd    = String(today.getDate()).padStart(2, '0');
-  const inp   = document.getElementById('cook-date-input');
-  if (inp) inp.value = `${yyyy}-${mm}-${dd}`;
-  document.addEventListener('DOMContentLoaded', function() {
-    if (typeof loadCookSheet === 'function') loadCookSheet();
-  });
-  // DOMContentLoaded may have already fired by the time this script runs
-  // (it's at the bottom of the page), so also fire immediately as a fallback.
-  if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    setTimeout(function() {
-      if (typeof loadCookSheet === 'function') loadCookSheet();
-    }, 0);
-  }
-})();
+// Cook date picker initialised AFTER loadCookSheet is defined (see below).
 
 function _cookFmtDate(iso) {
   const d = new Date(iso + 'T00:00:00');
@@ -3487,10 +3468,10 @@ async function loadCookSheet() {
   }
 
   body.innerHTML = `
-      ${mealBlock('Lunch', '🌤️', lunch, floor_lunch)}
-      ${mealBlock('Dinner', '🌙', dinner, floor_dinner)}
+      ${mealBlock('Lunch', '<i class="fas fa-sun" style="color:var(--accent)"></i>', lunch, floor_lunch)}
+      ${mealBlock('Dinner', '<i class="fas fa-moon" style="color:#7c3aed"></i>', dinner, floor_dinner)}
       <div style="display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,var(--primary),var(--primary-light));color:#fff;border-radius:var(--radius-sm);padding:16px 20px;margin-top:4px">
-        <span style="font-size:15px;font-weight:700;opacity:.95">🍽️ Grand Total Meals</span>
+        <span style="font-size:15px;font-weight:700;opacity:.95"><i class="fas fa-utensils"></i> Grand Total Meals</span>
         <span style="font-size:34px;font-weight:800">${grandTotal}</span>
       </div>
       <div style="margin-top:12px;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px">
@@ -3498,6 +3479,19 @@ async function loadCookSheet() {
       </div>`;
 }
 
+
+// ── Cook sheet auto-init — runs AFTER loadCookSheet is defined ────────────────
+(function initCookDate() {
+  const today = new Date();
+  const yyyy  = today.getFullYear();
+  const mm    = String(today.getMonth() + 1).padStart(2, '0');
+  const dd    = String(today.getDate()).padStart(2, '0');
+  const todayStr = `${yyyy}-${mm}-${dd}`;
+  const inp = document.getElementById('cook-date-input');
+  if (inp) inp.value = todayStr;
+  // Fire immediately (script is at bottom of page, DOM is ready)
+  setTimeout(loadCookSheet, 0);
+})();
 
 function printCookSheet() {
   const d = _cookData;
