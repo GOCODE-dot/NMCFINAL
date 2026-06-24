@@ -1076,6 +1076,14 @@ def submit_payment():
         return jsonify({'ok': False, 'msg': 'Transaction ID is required.'})
     conn = get_db()
     try:
+        # ── DUPLICATE GUARD 0: student has a pending cancel request ──────────
+        pending_cancel = queryOne(conn,
+            "SELECT id FROM meal_edit_requests WHERE student_id=%s AND action='cancel' AND status='pending'", (sid,)
+        )
+        if pending_cancel:
+            return jsonify({'ok': False,
+                'msg': 'You have a pending meal cancellation request. Wait for the manager to approve or reject it before submitting a payment.'})
+
         # ── DUPLICATE GUARD 1: student already has a pending payment ─────────
         existing_pending = queryOne(conn,
             "SELECT id, bkash_txn FROM payments WHERE student_id=%s AND status='pending_verification'", (sid,)
@@ -1124,6 +1132,13 @@ def request_cash_payment():
     if amount <= 0:
         conn.close()
         return jsonify({'ok': False, 'msg': 'No unpaid meals found.'})
+    # Guard: pending cancel request
+    pending_cancel = queryOne(conn,
+        "SELECT id FROM meal_edit_requests WHERE student_id=%s AND action='cancel' AND status='pending'", (sid,)
+    )
+    if pending_cancel:
+        conn.close()
+        return jsonify({'ok': False, 'msg': 'You have a pending meal cancellation request. Wait for the manager to resolve it before submitting a payment.'})
     existing = queryOne(conn, "SELECT id FROM cash_payment_requests WHERE student_id=%s AND status='pending'", (sid,))
     if existing:
         conn.close()
