@@ -378,6 +378,41 @@
   .tab { flex: 1; padding: 9px; border-radius: 7px; border: none; background: transparent; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer; color: var(--text-muted); transition: all .2s; }
   .tab.active { background: #fff; color: var(--primary); box-shadow: 0 1px 4px rgba(0,0,0,.1); }
   .tab-panel { display: none; }
+  .mh-day-group { margin-bottom: 18px; }
+  .mh-day-label {
+    font-size: 12px; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: .5px;
+    margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border);
+  }
+  .mh-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; border-radius: var(--radius-sm);
+    background: #f8fafc; border: 1px solid var(--border);
+    margin-bottom: 6px; gap: 10px; flex-wrap: wrap;
+  }
+  .mh-row-left { display: flex; align-items: center; gap: 10px; }
+  .mh-meal-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    display: grid; place-items: center; font-size: 14px; flex-shrink: 0;
+  }
+  .mh-meal-icon.lunch  { background: #fff8e6; color: #b07800; }
+  .mh-meal-icon.dinner { background: #e6f0ff; color: #3b5fe2; }
+  .mh-meal-name { font-size: 13px; font-weight: 700; color: var(--text); text-transform: capitalize; }
+  .mh-amount { font-size: 13px; font-weight: 700; color: var(--text); }
+  .mh-status-pill { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+  .mh-status-pill.paid    { background: var(--primary-pale); color: var(--primary); }
+  .mh-status-pill.pending { background: var(--accent-light); color: #b07800; }
+  .mh-status-pill.due     { background: var(--danger-light); color: var(--danger); }
+  .mh-summary-strip {
+    display: flex; flex-wrap: wrap; gap: 0;
+    background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 14px 18px; margin-bottom: 20px;
+  }
+  .mh-summary-stat { padding-right: 20px; margin-right: 20px; border-right: 1px solid var(--border); }
+  .mh-summary-stat:last-child { border-right: none; padding-right: 0; margin-right: 0; }
+  .mh-summary-n { font-size: 18px; font-weight: 800; color: var(--text); }
+  .mh-summary-lbl { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .3px; }
+  @media(max-width:480px) { .mh-summary-strip { gap: 12px; } .mh-summary-stat { border-right: none; padding-right: 0; margin-right: 0; flex: 1 1 40%; } }
   .tab-panel.active { display: block; }
   /* Payment modal */
   .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:200; display:none; align-items:center; justify-content:center; padding:20px; }
@@ -634,6 +669,7 @@
   <!-- Tabs -->
   <div class="tabs">
     <button class="tab active" onclick="showTab('order')"><i class="fas fa-calendar-check"></i> Order Meals</button>
+    <button class="tab" onclick="showTab('mealhistory')"><i class="fas fa-history"></i> Meal History</button>
     <button class="tab" onclick="showTab('history')"><i class="fas fa-receipt"></i> Payment Proofs</button>
     <button class="tab" id="tab-invite-btn" onclick="showTab('invite')"><i class="fas fa-user-tie"></i> Manager Invite <span id="invite-badge" style="display:none;background:#e53e3e;color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:4px">!</span></button>
     <button class="tab" onclick="showTab('account')"><i class="fas fa-user-cog"></i> My Account <span id="floor-badge" style="display:none;background:#e53e3e;color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:4px">!</span></button>
@@ -745,6 +781,25 @@
       </div>
     </div>
   </div>
+
+  <!-- MEAL HISTORY TAB (last 30 days) -->
+  <div id="tab-mealhistory" class="tab-panel">
+    <div class="card" style="overflow:hidden;margin-bottom:32px">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div class="section-title" style="margin:0"><i class="fas fa-history" style="color:var(--primary)"></i> Meal History — Last 30 Days</div>
+        <button class="btn btn-outline btn-sm" onclick="loadMealHistory()">
+          <i class="fas fa-sync-alt"></i> Refresh
+        </button>
+      </div>
+      <div style="padding:20px 24px" id="mealHistoryBody">
+        <div style="text-align:center;color:var(--text-muted);padding:40px 0">
+          <i class="fas fa-spinner fa-spin" style="font-size:22px;margin-bottom:10px;display:block"></i>
+          Loading…
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- END MEAL HISTORY TAB -->
 
   <!-- HISTORY / PROOF TAB -->
   <div id="tab-history" class="tab-panel">
@@ -1340,12 +1395,88 @@ updatePayModalAmounts();
 })();
 
 function showTab(name) {
-  const names = ['order','history','invite','account'];
+  const names = ['order','mealhistory','history','invite','account'];
   document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', names[i]===name));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
+  if (name === 'mealhistory') loadMealHistory();
   if (name === 'invite') loadInvites();
   if (name === 'account') loadFloorStatus();
+}
+
+// ── Meal History (last 30 days) ─────────────────────────────────────────────
+
+async function loadMealHistory() {
+  const body = document.getElementById('mealHistoryBody');
+  body.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:40px 0">
+    <i class="fas fa-spinner fa-spin" style="font-size:22px;margin-bottom:10px;display:block"></i>Loading…</div>`;
+
+  let data;
+  try {
+    const res = await fetch('/student/meal_history');
+    data = await res.json();
+  } catch (e) {
+    body.innerHTML = `<div style="text-align:center;color:var(--danger);padding:32px 0">
+      <i class="fas fa-exclamation-triangle"></i> Could not load history. Check your connection.
+      <div style="margin-top:12px"><button class="btn btn-primary btn-sm" onclick="loadMealHistory()"><i class="fas fa-sync-alt"></i> Retry</button></div>
+    </div>`;
+    return;
+  }
+
+  if (!data.ok) {
+    body.innerHTML = `<div style="text-align:center;color:var(--danger);padding:32px 0">${data.msg || 'Failed to load history.'}</div>`;
+    return;
+  }
+
+  const { orders, summary } = data;
+
+  const summaryHtml = `
+    <div class="mh-summary-strip">
+      <div class="mh-summary-stat"><div class="mh-summary-n">${summary.total_meals}</div><div class="mh-summary-lbl">Meals Ordered</div></div>
+      <div class="mh-summary-stat"><div class="mh-summary-n">৳${Math.round(summary.total_amount)}</div><div class="mh-summary-lbl">Total Value</div></div>
+      <div class="mh-summary-stat"><div class="mh-summary-n" style="color:var(--primary)">৳${Math.round(summary.paid_amount)}</div><div class="mh-summary-lbl">Paid</div></div>
+      <div class="mh-summary-stat"><div class="mh-summary-n" style="color:var(--danger)">৳${Math.round(summary.due_amount)}</div><div class="mh-summary-lbl">Due</div></div>
+    </div>`;
+
+  if (!orders || !orders.length) {
+    body.innerHTML = summaryHtml + `
+      <div style="text-align:center;color:var(--text-muted);padding:40px 0">
+        <div style="font-size:40px;margin-bottom:12px">🍽️</div>
+        <div>No meals ordered in the last 30 days.</div>
+      </div>`;
+    return;
+  }
+
+  const groups = {};
+  const dateOrder = [];
+  orders.forEach(o => {
+    if (!groups[o.meal_date]) { groups[o.meal_date] = []; dateOrder.push(o.meal_date); }
+    groups[o.meal_date].push(o);
+  });
+
+  const fmtDate = ds => {
+    const d = new Date(ds + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+
+  const statusLabel = { paid: 'Paid', pending: 'Pending', due: 'Due (overdue)' };
+
+  const groupsHtml = dateOrder.map(ds => {
+    const rows = groups[ds].map(o => `
+      <div class="mh-row">
+        <div class="mh-row-left">
+          <div class="mh-meal-icon ${o.meal_type}"><i class="fas fa-${o.meal_type === 'lunch' ? 'sun' : 'moon'}"></i></div>
+          <div class="mh-meal-name">${o.meal_type}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="mh-amount">৳${Math.round(o.amount)}</span>
+          <span class="mh-status-pill ${o.payment_status}">${statusLabel[o.payment_status] || o.payment_status}</span>
+        </div>
+      </div>`).join('');
+    return `<div class="mh-day-group"><div class="mh-day-label">${fmtDate(ds)}</div>${rows}</div>`;
+  }).join('');
+
+  body.innerHTML = summaryHtml + groupsHtml;
 }
 
 // ── FLOOR CHANGE ──────────────────────────────────────────────────────────────

@@ -1,0 +1,222 @@
+<!--
+══════════════════════════════════════════════════════════════════════
+  student_dashboard.html — "Meal History" tab (last 30 days)
+══════════════════════════════════════════════════════════════════════
+
+  Requires the backend route from app_history_profile_additions.py:
+    GET /student/meal_history
+
+  4 edits, all inside student_dashboard.html:
+
+    EDIT 1 — add a new tab button          (in the .tabs block, ~line 635)
+    EDIT 2 — add the new tab panel         (right after tab-order panel, ~line 749)
+    EDIT 3 — update showTab()'s names[]    (~line 1342)
+    EDIT 4 — add the loadMealHistory() JS  (anywhere in the <script> block)
+══════════════════════════════════════════════════════════════════════
+-->
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     EDIT 1 — FIND (around line 635):
+
+       <div class="tabs">
+         <button class="tab active" onclick="showTab('order')"><i class="fas fa-calendar-check"></i> Order Meals</button>
+         <button class="tab" onclick="showTab('history')"><i class="fas fa-receipt"></i> Payment Proofs</button>
+         ...
+
+     INSERT a new button BETWEEN "Order Meals" and "Payment Proofs":
+     ══════════════════════════════════════════════════════════════════ -->
+
+<button class="tab" onclick="showTab('mealhistory')"><i class="fas fa-history"></i> Meal History</button>
+
+<!--
+  So the tabs block becomes:
+
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('order')"><i class="fas fa-calendar-check"></i> Order Meals</button>
+      <button class="tab" onclick="showTab('mealhistory')"><i class="fas fa-history"></i> Meal History</button>
+      <button class="tab" onclick="showTab('history')"><i class="fas fa-receipt"></i> Payment Proofs</button>
+      <button class="tab" id="tab-invite-btn" onclick="showTab('invite')">...</button>
+      <button class="tab" onclick="showTab('account')">...</button>
+    </div>
+-->
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     EDIT 2 — INSERT this entire panel right AFTER the closing </div>
+     of  <div id="tab-order" class="tab-panel active"> ... </div>
+     and BEFORE  <div id="tab-history" class="tab-panel"> (Payment Proofs).
+     ══════════════════════════════════════════════════════════════════ -->
+
+<style>
+  .mh-day-group { margin-bottom: 18px; }
+  .mh-day-label {
+    font-size: 12px; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: .5px;
+    margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border);
+  }
+  .mh-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; border-radius: var(--radius-sm);
+    background: #f8fafc; border: 1px solid var(--border);
+    margin-bottom: 6px; gap: 10px; flex-wrap: wrap;
+  }
+  .mh-row-left { display: flex; align-items: center; gap: 10px; }
+  .mh-meal-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    display: grid; place-items: center; font-size: 14px; flex-shrink: 0;
+  }
+  .mh-meal-icon.lunch  { background: #fff8e6; color: #b07800; }
+  .mh-meal-icon.dinner { background: #e6f0ff; color: #3b5fe2; }
+  .mh-meal-name { font-size: 13px; font-weight: 700; color: var(--text); text-transform: capitalize; }
+  .mh-amount { font-size: 13px; font-weight: 700; color: var(--text); }
+  .mh-status-pill { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+  .mh-status-pill.paid    { background: var(--primary-pale); color: var(--primary); }
+  .mh-status-pill.pending { background: var(--accent-light); color: #b07800; }
+  .mh-status-pill.due     { background: var(--danger-light); color: var(--danger); }
+  .mh-summary-strip {
+    display: flex; flex-wrap: wrap; gap: 0;
+    background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 14px 18px; margin-bottom: 20px;
+  }
+  .mh-summary-stat { padding-right: 20px; margin-right: 20px; border-right: 1px solid var(--border); }
+  .mh-summary-stat:last-child { border-right: none; padding-right: 0; margin-right: 0; }
+  .mh-summary-n { font-size: 18px; font-weight: 800; color: var(--text); }
+  .mh-summary-lbl { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .3px; }
+  @media(max-width:480px) { .mh-summary-strip { gap: 12px; } .mh-summary-stat { border-right: none; padding-right: 0; margin-right: 0; flex: 1 1 40%; } }
+</style>
+
+<!-- MEAL HISTORY TAB (last 30 days) -->
+<div id="tab-mealhistory" class="tab-panel">
+  <div class="card" style="overflow:hidden;margin-bottom:32px">
+    <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div class="section-title" style="margin:0"><i class="fas fa-history" style="color:var(--primary)"></i> Meal History — Last 30 Days</div>
+      <button class="btn btn-outline btn-sm" onclick="loadMealHistory()">
+        <i class="fas fa-sync-alt"></i> Refresh
+      </button>
+    </div>
+    <div style="padding:20px 24px" id="mealHistoryBody">
+      <div style="text-align:center;color:var(--text-muted);padding:40px 0">
+        <i class="fas fa-spinner fa-spin" style="font-size:22px;margin-bottom:10px;display:block"></i>
+        Loading…
+      </div>
+    </div>
+  </div>
+</div>
+<!-- END MEAL HISTORY TAB -->
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     EDIT 3 — REPLACE the existing showTab() function:
+
+       function showTab(name) {
+         const names = ['order','history','invite','account'];
+         document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', names[i]===name));
+         document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+         document.getElementById('tab-'+name).classList.add('active');
+         if (name === 'invite') loadInvites();
+         if (name === 'account') loadFloorStatus();
+       }
+
+     WITH:
+     ══════════════════════════════════════════════════════════════════ -->
+
+<script>
+function showTab(name) {
+  const names = ['order','mealhistory','history','invite','account'];
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', names[i]===name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  if (name === 'mealhistory') loadMealHistory();
+  if (name === 'invite') loadInvites();
+  if (name === 'account') loadFloorStatus();
+}
+</script>
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     EDIT 4 — ADD this function anywhere in the page's <script> block
+     (e.g. right above or below showTab()).
+     ══════════════════════════════════════════════════════════════════ -->
+
+<script>
+// ── Meal History (last 30 days) ─────────────────────────────────────────────
+
+let _mealHistoryLoaded = false;
+
+async function loadMealHistory() {
+  const body = document.getElementById('mealHistoryBody');
+  body.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:40px 0">
+    <i class="fas fa-spinner fa-spin" style="font-size:22px;margin-bottom:10px;display:block"></i>Loading…</div>`;
+
+  let data;
+  try {
+    const res = await fetch('/student/meal_history');
+    data = await res.json();
+  } catch (e) {
+    body.innerHTML = `<div style="text-align:center;color:var(--danger);padding:32px 0">
+      <i class="fas fa-exclamation-triangle"></i> Could not load history. Check your connection.
+      <div style="margin-top:12px"><button class="btn btn-primary btn-sm" onclick="loadMealHistory()"><i class="fas fa-sync-alt"></i> Retry</button></div>
+    </div>`;
+    return;
+  }
+
+  if (!data.ok) {
+    body.innerHTML = `<div style="text-align:center;color:var(--danger);padding:32px 0">${data.msg || 'Failed to load history.'}</div>`;
+    return;
+  }
+
+  _mealHistoryLoaded = true;
+  const { orders, summary } = data;
+
+  // Summary strip
+  const summaryHtml = `
+    <div class="mh-summary-strip">
+      <div class="mh-summary-stat"><div class="mh-summary-n">${summary.total_meals}</div><div class="mh-summary-lbl">Meals Ordered</div></div>
+      <div class="mh-summary-stat"><div class="mh-summary-n">৳${Math.round(summary.total_amount)}</div><div class="mh-summary-lbl">Total Value</div></div>
+      <div class="mh-summary-stat"><div class="mh-summary-n" style="color:var(--primary)">৳${Math.round(summary.paid_amount)}</div><div class="mh-summary-lbl">Paid</div></div>
+      <div class="mh-summary-stat"><div class="mh-summary-n" style="color:var(--danger)">৳${Math.round(summary.due_amount)}</div><div class="mh-summary-lbl">Due</div></div>
+    </div>`;
+
+  if (!orders || !orders.length) {
+    body.innerHTML = summaryHtml + `
+      <div style="text-align:center;color:var(--text-muted);padding:40px 0">
+        <div style="font-size:40px;margin-bottom:12px">🍽️</div>
+        <div>No meals ordered in the last 30 days.</div>
+      </div>`;
+    return;
+  }
+
+  // Group orders by meal_date, most recent date first (already ordered DESC from server)
+  const groups = {};
+  const dateOrder = [];
+  orders.forEach(o => {
+    if (!groups[o.meal_date]) { groups[o.meal_date] = []; dateOrder.push(o.meal_date); }
+    groups[o.meal_date].push(o);
+  });
+
+  const fmtDate = ds => {
+    const d = new Date(ds + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+
+  const statusLabel = { paid: 'Paid', pending: 'Pending', due: 'Due (overdue)' };
+
+  const groupsHtml = dateOrder.map(ds => {
+    const rows = groups[ds].map(o => `
+      <div class="mh-row">
+        <div class="mh-row-left">
+          <div class="mh-meal-icon ${o.meal_type}"><i class="fas fa-${o.meal_type === 'lunch' ? 'sun' : 'moon'}"></i></div>
+          <div class="mh-meal-name">${o.meal_type}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="mh-amount">৳${Math.round(o.amount)}</span>
+          <span class="mh-status-pill ${o.payment_status}">${statusLabel[o.payment_status] || o.payment_status}</span>
+        </div>
+      </div>`).join('');
+    return `<div class="mh-day-group"><div class="mh-day-label">${fmtDate(ds)}</div>${rows}</div>`;
+  }).join('');
+
+  body.innerHTML = summaryHtml + groupsHtml;
+}
+</script>

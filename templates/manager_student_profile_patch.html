@@ -1,0 +1,284 @@
+<!--
+══════════════════════════════════════════════════════════════════════════════
+  manager_students.html — Clickable Student Rows → Full Profile Modal
+══════════════════════════════════════════════════════════════════════════════
+
+  WHAT THIS ADDS:
+  ─────────────────
+  Clicking any student row on the "All Students" page opens a modal showing
+  that student's COMPLETE history — every meal order, every payment, every
+  cash request, every phone-change request — plus summary totals. No date
+  limit (unlike the student's own 30-day "Meal History" tab).
+
+  Requires the backend route from app_history_profile_additions.py:
+    GET /manager/student_profile/<id>
+
+  This same openStudentProfile(id) function can be pasted into
+  manager_dashboard.html too (e.g. on the students-due list or the
+  "Ordered But Not Paid" panel) — just call it with a student's id from
+  any row that already has one available.
+
+  3 edits, all inside manager_students.html:
+
+    EDIT 1 — make each student <tr> clickable   (~line where <tr data-floor...> is)
+    EDIT 2 — add the modal HTML + CSS            (anywhere before {% endblock %})
+    EDIT 3 — add the JS                          (anywhere before {% endblock %})
+══════════════════════════════════════════════════════════════════════════════
+-->
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     EDIT 1 — FIND this line inside the student rows loop:
+
+       <tr data-floor="{{ s.floor }}" data-batch="{{ s.batch }}" data-roll="{{ s.roll_number }}">
+
+     REPLACE WITH:
+     ══════════════════════════════════════════════════════════════════ -->
+
+<!--
+  <tr data-floor="{{ s.floor }}" data-batch="{{ s.batch }}" data-roll="{{ s.roll_number }}"
+      class="student-profile-row" onclick="openStudentProfile({{ s.id }})"
+      style="cursor:pointer" title="Click to view full profile">
+-->
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     EDIT 2 — PASTE this CSS + modal HTML anywhere before {% endblock %}
+     (e.g. right after the closing </div> of the .card that wraps #stbl).
+     ══════════════════════════════════════════════════════════════════ -->
+
+<style>
+  .student-profile-row:hover td { background: var(--primary-pale) !important; }
+
+  .sp-modal-overlay {
+    display: none;
+    position: fixed; inset: 0; z-index: 2000;
+    background: rgba(15,23,42,.55);
+    align-items: flex-start; justify-content: center;
+    padding: 32px 16px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .sp-modal-overlay.open { display: flex; }
+  .sp-modal {
+    background: #fff; border-radius: var(--radius);
+    width: 100%; max-width: 720px;
+    box-shadow: var(--shadow-lg);
+    animation: spFadeIn .2s ease both;
+    overflow: hidden;
+  }
+  @keyframes spFadeIn { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+
+  .sp-header {
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    color: #fff; padding: 22px 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  }
+  .sp-header h2 { font-size: 19px; font-weight: 800; margin-bottom: 4px; }
+  .sp-header p { font-size: 13px; opacity: .9; }
+  .sp-close-btn {
+    background: rgba(255,255,255,.2); border: none; color: #fff;
+    width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+    font-size: 16px; display: grid; place-items: center; flex-shrink: 0;
+    transition: background .15s;
+  }
+  .sp-close-btn:hover { background: rgba(255,255,255,.35); }
+
+  .sp-summary-strip {
+    display: flex; flex-wrap: wrap;
+    background: #f8fafc; border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+  }
+  .sp-summary-stat { padding-right: 22px; margin-right: 22px; border-right: 1px solid var(--border); }
+  .sp-summary-stat:last-child { border-right: none; padding-right: 0; margin-right: 0; }
+  .sp-summary-n { font-size: 19px; font-weight: 800; color: var(--text); }
+  .sp-summary-lbl { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .3px; }
+
+  .sp-tabs { display: flex; gap: 2px; padding: 0 24px; background: #fff; border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .sp-tab { padding: 12px 14px; font-size: 13px; font-weight: 700; color: var(--text-muted); background: none; border: none; border-bottom: 3px solid transparent; cursor: pointer; white-space: nowrap; }
+  .sp-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+  .sp-body { padding: 20px 24px; max-height: 50vh; overflow-y: auto; }
+  .sp-panel { display: none; }
+  .sp-panel.active { display: block; }
+
+  .sp-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+    padding: 10px 14px; border-radius: var(--radius-sm);
+    background: #f8fafc; border: 1px solid var(--border); margin-bottom: 6px;
+  }
+  .sp-row-left { font-size: 13px; color: var(--text); }
+  .sp-row-left .sp-date { font-weight: 700; margin-right: 8px; }
+  .sp-pill { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+  .sp-pill.paid, .sp-pill.verified, .sp-pill.approved { background: var(--primary-pale); color: var(--primary); }
+  .sp-pill.pending, .sp-pill.pending_verification { background: var(--accent-light); color: #b07800; }
+  .sp-pill.due, .sp-pill.rejected { background: var(--danger-light); color: var(--danger); }
+
+  .sp-empty { text-align: center; color: var(--text-muted); padding: 32px 0; font-size: 13px; }
+
+  @media(max-width:600px) {
+    .sp-modal-overlay { padding: 0; align-items: flex-end; }
+    .sp-modal { border-radius: 20px 20px 0 0; max-height: 92vh; overflow-y: auto; }
+    .sp-summary-strip { gap: 10px; }
+    .sp-summary-stat { flex: 1 1 40%; border-right: none; padding-right: 0; margin-right: 0; }
+  }
+</style>
+
+<!-- ── STUDENT PROFILE MODAL ────────────────────────────────────────────── -->
+<div class="sp-modal-overlay" id="spModalOverlay" onclick="if(event.target===this) closeStudentProfile()">
+  <div class="sp-modal">
+
+    <div class="sp-header">
+      <div>
+        <h2 id="spName">—</h2>
+        <p id="spSub">—</p>
+      </div>
+      <button class="sp-close-btn" onclick="closeStudentProfile()"><i class="fas fa-times"></i></button>
+    </div>
+
+    <div class="sp-summary-strip" id="spSummaryStrip"></div>
+
+    <div class="sp-tabs">
+      <button class="sp-tab active" data-sp="orders" onclick="spShowTab('orders')"><i class="fas fa-utensils"></i> Meal Orders</button>
+      <button class="sp-tab" data-sp="payments" onclick="spShowTab('payments')"><i class="fas fa-mobile-alt"></i> bKash Payments</button>
+      <button class="sp-tab" data-sp="cash" onclick="spShowTab('cash')"><i class="fas fa-money-bill-wave"></i> Cash Requests</button>
+      <button class="sp-tab" data-sp="phone" onclick="spShowTab('phone')"><i class="fas fa-phone"></i> Phone Changes</button>
+    </div>
+
+    <div class="sp-body">
+      <div class="sp-panel active" id="sp-panel-orders"></div>
+      <div class="sp-panel" id="sp-panel-payments"></div>
+      <div class="sp-panel" id="sp-panel-cash"></div>
+      <div class="sp-panel" id="sp-panel-phone"></div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     EDIT 3 — PASTE this <script> block anywhere before {% endblock %}
+     ══════════════════════════════════════════════════════════════════ -->
+
+<script>
+// ── Student Profile Modal ───────────────────────────────────────────────────
+
+const HOSTEL_NAMES_SP = { 1: 'Campus', 2: 'Sentu House', 3: 'Chairman House' };
+
+function _spEsc(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function openStudentProfile(studentId) {
+  const overlay = document.getElementById('spModalOverlay');
+  overlay.classList.add('open');
+  document.getElementById('spName').textContent = 'Loading…';
+  document.getElementById('spSub').textContent = '';
+  document.getElementById('spSummaryStrip').innerHTML = '';
+  ['orders','payments','cash','phone'].forEach(t => {
+    document.getElementById('sp-panel-' + t).innerHTML =
+      '<div class="sp-empty"><i class="fas fa-spinner fa-spin"></i> Loading…</div>';
+  });
+  spShowTab('orders');
+
+  let data;
+  try {
+    const res = await fetch('/manager/student_profile/' + studentId);
+    data = await res.json();
+  } catch (e) {
+    document.getElementById('spName').textContent = 'Error';
+    document.getElementById('spSub').textContent = 'Network error — could not load profile.';
+    return;
+  }
+
+  if (!data.ok) {
+    document.getElementById('spName').textContent = 'Error';
+    document.getElementById('spSub').textContent = data.msg || 'Failed to load profile.';
+    return;
+  }
+
+  const s = data.student;
+  const floorLabel = s.gender === 'male'
+    ? (s.floor ? 'Floor ' + s.floor : '—')
+    : (HOSTEL_NAMES_SP[s.floor] || (s.floor ? 'Hostel ' + s.floor : '—'));
+
+  document.getElementById('spName').innerHTML =
+    `<i class="fas fa-${s.gender === 'female' ? 'venus' : 'mars'}"></i> ${_spEsc(s.name)}`;
+  document.getElementById('spSub').textContent =
+    `Roll ${s.roll_number} · Batch ${s.batch} · ${floorLabel} · bKash: ${s.bkash_number}`;
+
+  const sum = data.summary;
+  document.getElementById('spSummaryStrip').innerHTML = `
+    <div class="sp-summary-stat"><div class="sp-summary-n">${sum.total_meals}</div><div class="sp-summary-lbl">Total Meals</div></div>
+    <div class="sp-summary-stat"><div class="sp-summary-n">৳${Math.round(sum.total_amount)}</div><div class="sp-summary-lbl">Total Value</div></div>
+    <div class="sp-summary-stat"><div class="sp-summary-n" style="color:var(--primary)">৳${Math.round(sum.paid_amount)}</div><div class="sp-summary-lbl">Paid</div></div>
+    <div class="sp-summary-stat"><div class="sp-summary-n" style="color:var(--danger)">৳${Math.round(sum.due_amount)}</div><div class="sp-summary-lbl">Due</div></div>
+  `;
+
+  // ── Meal orders panel ──────────────────────────────────────────────────
+  const statusLabel = { paid: 'Paid', pending: 'Pending', due: 'Due' };
+  const ordersHtml = (data.orders || []).length
+    ? data.orders.map(o => `
+        <div class="sp-row">
+          <div class="sp-row-left"><span class="sp-date">${o.meal_date}</span>${_spEsc(o.meal_type)}</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span>৳${Math.round(o.amount)}</span>
+            <span class="sp-pill ${o.payment_status}">${statusLabel[o.payment_status] || o.payment_status}</span>
+          </div>
+        </div>`).join('')
+    : '<div class="sp-empty">No meal orders yet.</div>';
+  document.getElementById('sp-panel-orders').innerHTML = ordersHtml;
+
+  // ── Payments panel ──────────────────────────────────────────────────────
+  const payLabel = { paid: 'Paid', verified: 'Verified', pending_verification: 'Awaiting Verification', rejected: 'Rejected' };
+  const paymentsHtml = (data.payments || []).length
+    ? data.payments.map(p => `
+        <div class="sp-row">
+          <div class="sp-row-left"><span class="sp-date">${(p.created_at || '').slice(0,10)}</span>
+            ৳${Math.round(p.amount)} — <span style="font-family:monospace">${_spEsc(p.bkash_txn || '—')}</span>
+          </div>
+          <span class="sp-pill ${p.status}">${payLabel[p.status] || p.status}</span>
+        </div>`).join('')
+    : '<div class="sp-empty">No bKash payments submitted yet.</div>';
+  document.getElementById('sp-panel-payments').innerHTML = paymentsHtml;
+
+  // ── Cash requests panel ──────────────────────────────────────────────────
+  const cashHtml = (data.cash_requests || []).length
+    ? data.cash_requests.map(c => `
+        <div class="sp-row">
+          <div class="sp-row-left"><span class="sp-date">${(c.requested_at || '').slice(0,10)}</span>
+            ৳${Math.round(c.amount)}${c.note ? ' — ' + _spEsc(c.note) : ''}
+          </div>
+          <span class="sp-pill ${c.status}">${c.status}</span>
+        </div>`).join('')
+    : '<div class="sp-empty">No cash payment requests yet.</div>';
+  document.getElementById('sp-panel-cash').innerHTML = cashHtml;
+
+  // ── Phone change requests panel ──────────────────────────────────────────
+  const phoneHtml = (data.phone_requests || []).length
+    ? data.phone_requests.map(p => `
+        <div class="sp-row">
+          <div class="sp-row-left"><span class="sp-date">${(p.created_at || '').slice(0,10)}</span>
+            ${_spEsc(p.old_bkash)} → ${_spEsc(p.new_bkash)}
+          </div>
+          <span class="sp-pill ${p.status}">${p.status}</span>
+        </div>`).join('')
+    : '<div class="sp-empty">No phone/bKash change requests.</div>';
+  document.getElementById('sp-panel-phone').innerHTML = phoneHtml;
+}
+
+function spShowTab(name) {
+  document.querySelectorAll('.sp-tab').forEach(t => t.classList.toggle('active', t.dataset.sp === name));
+  document.querySelectorAll('.sp-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('sp-panel-' + name).classList.add('active');
+}
+
+function closeStudentProfile() {
+  document.getElementById('spModalOverlay').classList.remove('open');
+}
+
+// Close on Escape key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeStudentProfile();
+});
+</script>
