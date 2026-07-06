@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, make_response
-import os, re
+import os, re, uuid, requests
 from datetime import datetime, timedelta, date
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -126,6 +126,113 @@ def execute(conn, sql, params=()):
     cur = conn.cursor()
     cur.execute(sql, params)
     return cur
+
+# ── bKash Payment Gateway (PGW) config ────────────────────────────────────────
+# Set these as real environment variables once you have a bKash Merchant/PGW
+# account. Until then BKASH_MOCK_MODE defaults ON so the whole flow (redirect
+# out, "pay", redirect back, order confirmed) can be tested with no bKash
+# account and no public HTTPS domain.
+BKASH_MOCK_MODE    = os.environ.get('BKASH_MOCK_MODE', '1') == '1'
+BKASH_BASE_URL     = os.environ.get('BKASH_BASE_URL', 'https://tokenized.sandbox.bka.sh/v1.2.0-beta')
+BKASH_APP_KEY      = os.environ.get('BKASH_APP_KEY', '')
+BKASH_APP_SECRET   = os.environ.get('BKASH_APP_SECRET', '')
+BKASH_USERNAME     = os.environ.get('BKASH_USERNAME', '')
+BKASH_PASSWORD     = os.environ.get('BKASH_PASSWORD', '')
+BKASH_CALLBACK_URL = os.environ.get('BKASH_CALLBACK_URL', 'http://localhost:5000/student/bkash/callback')
+
+# Simple in-memory token cache. Fine for a single-process/single-worker app.
+# If you run with multiple gunicorn workers, move this to a DB table or Redis
+# so workers share one token instead of each granting its own.
+_bkash_token_cache = {'token': None, 'refresh_token': None, 'expires_at': None}
+
+
+def _bkash_grant_token():
+    """Get a valid bKash access token, granting or refreshing as needed."""
+    now = datetime.utcnow()
+
+    if _bkash_token_cache['token'] and _bkash_token_cache['expires_at'] and now < _bkash_token_cache['expires_at']:
+        return _bkash_token_cache['token']
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'username': BKASH_USERNAME,
+        'password': BKASH_PASSWORD,
+    }
+
+    if _bkash_token_cache['refresh_token']:
+        body = {
+            'app_key': BKASH_APP_KEY,
+            'app_secret': BKASH_APP_SECRET,
+            'refresh_token': _bkash_token_cache['refresh_token'],
+        }
+        url = f'{BKASH_BASE_URL}/tokenized/checkout/token/refresh'
+    else:
+        body = {'app_key': BKASH_APP_KEY, 'app_secret': BKASH_APP_SECRET}
+        url = f'{BKASH_BASE_URL}/tokenized/checkout/token/grant'
+
+    resp = requests.post(url, json=body, headers=headers, timeout=15)
+    data = resp.json()
+
+    if 'id_token' not in data:
+        raise RuntimeError(f'bKash token grant failed: {data}')
+
+    _bkash_token_cache['token']         = data['id_token']
+    _bkash_token_cache['refresh_token'] = data.get('refresh_token')
+    _bkash_token_cache['expires_at']    = now + timedelta(seconds=int(data.get('expires_in', 3300)) - 120)
+
+    return _bkash_token_cache['token']
+
+
+def _bkash_headers():
+    return {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': _bkash_grant_token(),
+        'X-APP-Key': BKASH_APP_KEY,
+    }
+
+
+def bkash_create_payment(amount, invoice_number):
+    """Create a bKash checkout session. Returns dict with 'bkashURL' and 'paymentID'."""
+    if BKASH_MOCK_MODE:
+        fake_payment_id = 'MOCK' + uuid.uuid4().hex[:16].upper()
+        return {
+            'paymentID': fake_payment_id,
+            'bkashURL': f'/student/bkash/mock_checkout?payment_id={fake_payment_id}&invoice={invoice_number}&amount={amount}',
+        }
+
+    body = {
+        'mode': '0011',
+        'payerReference': invoice_number,
+        'callbackURL': BKASH_CALLBACK_URL,
+        'amount': f'{amount:.2f}',
+        'currency': 'BDT',
+        'intent': 'sale',
+        'merchantInvoiceNumber': invoice_number,
+    }
+    resp = requests.post(f'{BKASH_BASE_URL}/tokenized/checkout/create',
+                          json=body, headers=_bkash_headers(), timeout=15)
+    data = resp.json()
+    if 'bkashURL' not in data:
+        raise RuntimeError(f'bKash create payment failed: {data}')
+    return data
+
+
+def bkash_execute_payment(payment_id):
+    """Finalize the payment after the user completes it on bKash's page."""
+    if BKASH_MOCK_MODE:
+        return {
+            'statusCode': '0000',
+            'statusMessage': 'Successful',
+            'trxID': 'MOCKTRX' + uuid.uuid4().hex[:10].upper(),
+            'paymentID': payment_id,
+        }
+
+    body = {'paymentID': payment_id}
+    resp = requests.post(f'{BKASH_BASE_URL}/tokenized/checkout/execute',
+                          json=body, headers=_bkash_headers(), timeout=15)
+    return resp.json()
 
 # ── Schema init ───────────────────────────────────────────────────────────────
 
@@ -394,6 +501,20 @@ def init_db():
             decided_by TEXT DEFAULT NULL,
             decided_at TEXT DEFAULT NULL,
             created_at TEXT DEFAULT (to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'))
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS bkash_gateway_sessions (
+            id             SERIAL PRIMARY KEY,
+            student_id     INTEGER NOT NULL,
+            payment_id     TEXT NOT NULL,
+            invoice_number TEXT NOT NULL,
+            amount         REAL NOT NULL,
+            status         TEXT DEFAULT 'initiated',
+            trx_id         TEXT DEFAULT NULL,
+            created_at     TEXT DEFAULT (to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')),
+            completed_at   TEXT DEFAULT NULL
         )
     """)
 
@@ -1116,6 +1237,181 @@ def submit_payment():
         return jsonify({'ok': True, 'msg': 'Payment proof submitted! Awaiting manager verification.'})
     finally:
         conn.close()
+
+
+# ── bKash Payment Gateway — automatic checkout (replaces manual TxnID entry) ──
+
+@app.route('/student/bkash/pay', methods=['POST'])
+@login_required('student')
+def student_bkash_pay():
+    """Student taps 'Pay with bKash' — compute the real due amount server-side,
+    open a bKash checkout session, and hand back the URL to redirect to."""
+    sid  = session['user_id']
+    conn = get_db()
+
+    pending_cancel = queryOne(conn,
+        "SELECT id FROM meal_edit_requests WHERE student_id=%s AND action='cancel' AND status='pending'", (sid,)
+    )
+    if pending_cancel:
+        conn.close()
+        return jsonify({'ok': False, 'msg': 'You have a pending meal cancellation request. Wait for the manager to resolve it before paying.'})
+
+    due_row = queryOne(conn,
+        "SELECT COALESCE(SUM(amount),0) as total FROM meal_orders "
+        "WHERE student_id=%s AND payment_status IN ('pending','due')", (sid,)
+    )
+    amount = float(due_row['total'] or 0)
+    if amount <= 0:
+        conn.close()
+        return jsonify({'ok': False, 'msg': 'You have no unpaid meals right now.'})
+
+    invoice_number = f'NMMS-{sid}-{int(datetime.utcnow().timestamp())}'
+
+    try:
+        result = bkash_create_payment(amount, invoice_number)
+    except Exception as e:
+        conn.close()
+        return jsonify({'ok': False, 'msg': f'Could not start bKash checkout: {e}'})
+
+    execute(conn,
+        "INSERT INTO bkash_gateway_sessions (student_id, payment_id, invoice_number, amount, status) "
+        "VALUES (%s,%s,%s,%s,'initiated')",
+        (sid, result['paymentID'], invoice_number, amount)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True, 'bkashURL': result['bkashURL']})
+
+
+@app.route('/student/bkash/callback')
+@login_required('student')
+def student_bkash_callback():
+    """bKash sends the browser back here with ?paymentID=...&status=success|failure|cancel.
+    We execute the payment, mark meal orders as paid, and send the student back
+    to their dashboard with a clear result banner."""
+    payment_id   = request.args.get('paymentID', '')
+    bkash_status = request.args.get('status', '')
+    sid  = session['user_id']
+    conn = get_db()
+
+    sess_row = queryOne(conn,
+        "SELECT * FROM bkash_gateway_sessions WHERE payment_id=%s AND student_id=%s",
+        (payment_id, sid)
+    )
+
+    if not sess_row:
+        conn.close()
+        return redirect(url_for('student_dashboard', pay_result='notfound'))
+
+    if sess_row['status'] == 'completed':
+        conn.close()
+        return redirect(url_for('student_dashboard', pay_result='already', amount=int(sess_row['amount'])))
+
+    if bkash_status != 'success':
+        execute(conn,
+            "UPDATE bkash_gateway_sessions SET status=%s WHERE payment_id=%s",
+            ('cancelled' if bkash_status == 'cancel' else 'failed', payment_id)
+        )
+        conn.commit()
+        conn.close()
+        return redirect(url_for('student_dashboard', pay_result='cancelled'))
+
+    try:
+        exec_result = bkash_execute_payment(payment_id)
+    except Exception:
+        conn.close()
+        return redirect(url_for('student_dashboard', pay_result='error'))
+
+    if exec_result.get('statusCode') != '0000':
+        execute(conn,
+            "UPDATE bkash_gateway_sessions SET status='failed' WHERE payment_id=%s",
+            (payment_id,)
+        )
+        conn.commit()
+        conn.close()
+        return redirect(url_for('student_dashboard', pay_result='failed'))
+
+    trx_id = exec_result.get('trxID', '')
+    now    = datetime.utcnow().isoformat(timespec='seconds')
+    amount = sess_row['amount']
+    weekly = get_current_weekly_bkash()
+
+    # bKash has already confirmed this in real time, so it's recorded as
+    # verified immediately — no manual manager verification step needed.
+    execute(conn,
+        "INSERT INTO payments (student_id, amount, bkash_txn, payment_date, status, manager_bkash, verified_at, verified_by) "
+        "VALUES (%s,%s,%s,%s,'verified',%s,%s,'bkash_gateway')",
+        (sid, amount, trx_id, date.today().isoformat(), weekly['bkash_number'], now)
+    )
+
+    # Mark unpaid meal orders as paid, oldest first, up to the paid amount
+    unpaid = query(conn,
+        "SELECT id, amount FROM meal_orders WHERE student_id=%s AND payment_status IN ('pending','due') "
+        "ORDER BY meal_date ASC",
+        (sid,)
+    )
+    remaining = amount
+    for row in unpaid:
+        if remaining <= 0:
+            break
+        execute(conn, "UPDATE meal_orders SET payment_status='paid' WHERE id=%s", (row['id'],))
+        remaining -= row['amount']
+
+    execute(conn,
+        "UPDATE bkash_gateway_sessions SET status='completed', trx_id=%s, completed_at=%s WHERE payment_id=%s",
+        (trx_id, now, payment_id)
+    )
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for('student_dashboard', pay_result='success', amount=int(amount), trx=trx_id))
+
+
+@app.route('/student/bkash/mock_checkout')
+@login_required('student')
+def student_bkash_mock_checkout():
+    """Simulated bKash hosted page — only reachable while BKASH_MOCK_MODE=1.
+    Lets you test the full leave-the-site-and-come-back flow with no real
+    bKash merchant account."""
+    if not BKASH_MOCK_MODE:
+        return "Mock checkout is disabled (BKASH_MOCK_MODE=0).", 404
+
+    payment_id = request.args.get('payment_id', '')
+    invoice    = request.args.get('invoice', '')
+    amount     = request.args.get('amount', '0')
+
+    return f"""
+    <html><head><title>bKash (Mock Checkout)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+      body {{ font-family: system-ui, sans-serif; background:#e51c6d; min-height:100vh;
+              display:flex; align-items:center; justify-content:center; margin:0; }}
+      .card {{ background:#fff; border-radius:16px; padding:32px; max-width:360px; width:90%;
+                text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.3); }}
+      .logo {{ font-size:28px; font-weight:800; color:#e51c6d; margin-bottom:4px; }}
+      .tag  {{ font-size:12px; color:#999; margin-bottom:20px; }}
+      .amt  {{ font-size:32px; font-weight:800; color:#222; margin-bottom:4px; }}
+      .inv  {{ font-size:12px; color:#888; margin-bottom:24px; }}
+      button {{ width:100%; padding:14px; border-radius:10px; border:none; font-size:15px;
+                font-weight:700; margin-bottom:10px; cursor:pointer; }}
+      .pay {{ background:#e51c6d; color:#fff; }}
+      .cancel {{ background:#f1f1f1; color:#555; }}
+    </style></head>
+    <body>
+      <div class="card">
+        <div class="logo">bKash</div>
+        <div class="tag">⚠️ MOCK CHECKOUT — for local testing only, no real money moves</div>
+        <div class="amt">৳{amount}</div>
+        <div class="inv">Invoice: {invoice}</div>
+        <button class="pay" onclick="location.href='/student/bkash/callback?paymentID={payment_id}&status=success'">
+          Simulate Successful Payment
+        </button>
+        <button class="cancel" onclick="location.href='/student/bkash/callback?paymentID={payment_id}&status=cancel'">
+          Simulate Cancel
+        </button>
+      </div>
+    </body></html>
+    """
 
 
 @app.route('/student/request_cash_payment', methods=['POST'])
@@ -1981,125 +2277,6 @@ def manager_search_student():
     return jsonify({'students': [dict(r) for r in rows]})
 
 
-@app.route('/manager/send_transfer', methods=['POST'])
-@login_required('manager')
-def manager_send_transfer():
-    d          = request.json
-    student_id = d.get('student_id')
-    conn       = get_db()
-    existing = queryOne(conn,
-        "SELECT id FROM manager_transfer_invites WHERE to_student_id=%s AND status='pending'", (student_id,)
-    )
-    if existing:
-        conn.close()
-        return jsonify({'ok': False, 'msg': 'This student already has a pending transfer invite.'})
-    student = queryOne(conn, "SELECT * FROM students WHERE id=%s", (student_id,))
-    if not student:
-        conn.close()
-        return jsonify({'ok': False, 'msg': 'Student not found.'})
-    temp_pass  = generate_temp_password()
-    batch_num  = queryOne(conn, "SELECT COUNT(*) as c FROM meal_managers")['c'] + 1
-    new_mgr_id = f"MGR{batch_num:03d}"
-    while queryOne(conn, "SELECT id FROM meal_managers WHERE manager_id=%s", (new_mgr_id,)):
-        batch_num += 1
-        new_mgr_id = f"MGR{batch_num:03d}"
-    execute(conn,
-        "INSERT INTO manager_transfer_invites (from_manager_id, to_student_id, status, temp_password, new_manager_id) VALUES (%s,%s,%s,%s,%s)",
-        (session['name'], student_id, 'pending', temp_pass, new_mgr_id)
-    )
-    conn.commit()
-    conn.close()
-    return jsonify({'ok': True, 'msg': f'Transfer invite sent to {student["name"]}.'})
-
-
-@app.route('/manager/transfer_history')
-@login_required('manager')
-def manager_transfer_history():
-    conn = get_db()
-    rows = query(conn, "SELECT * FROM manager_history ORDER BY tenure_start DESC")
-    conn.close()
-    return jsonify({'history': [dict(r) for r in rows]})
-
-
-@app.route('/manager/active_managers')
-@login_required('manager')
-def active_managers():
-    conn = get_db()
-    rows = query(conn, "SELECT manager_id, name, bkash_number, created_at FROM meal_managers WHERE is_active=1")
-    conn.close()
-    return jsonify({'managers': [dict(r) for r in rows]})
-
-# ── STUDENT TRANSFER INVITES ──────────────────────────────────────────────────
-
-@app.route('/student/transfer_invites')
-@login_required('student')
-def student_transfer_invites():
-    sid  = session['user_id']
-    conn = get_db()
-    rows = query(conn,
-        "SELECT * FROM manager_transfer_invites WHERE to_student_id=%s AND status='pending' ORDER BY created_at DESC",
-        (sid,)
-    )
-    conn.close()
-    return jsonify({'invites': [dict(r) for r in rows]})
-
-
-@app.route('/student/respond_transfer', methods=['POST'])
-@login_required('student')
-def student_respond_transfer():
-    d         = request.json
-    invite_id = d.get('invite_id')
-    action    = d.get('action')
-    sid       = session['user_id']
-    conn      = get_db()
-    invite = queryOne(conn,
-        "SELECT * FROM manager_transfer_invites WHERE id=%s AND to_student_id=%s AND status='pending'",
-        (invite_id, sid)
-    )
-    if not invite:
-        conn.close()
-        return jsonify({'ok': False, 'msg': 'Invite not found or already responded.'})
-    if action == 'decline':
-        execute(conn,
-            "UPDATE manager_transfer_invites SET status='declined', responded_at=to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS') WHERE id=%s",
-            (invite_id,)
-        )
-        conn.commit()
-        conn.close()
-        return jsonify({'ok': True, 'msg': 'You declined the manager transfer.'})
-    student   = queryOne(conn, "SELECT * FROM students WHERE id=%s", (sid,))
-    temp_pass = invite['temp_password']
-    new_mgr_id = invite['new_manager_id']
-    expires   = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
-    old_mgrs  = query(conn, "SELECT * FROM meal_managers WHERE is_active=1")
-    for mgr in old_mgrs:
-        mgr_roll = None
-        if mgr['student_id']:
-            s_row = queryOne(conn, "SELECT roll_number FROM students WHERE id=%s", (mgr['student_id'],))
-            if s_row:
-                mgr_roll = s_row['roll_number']
-        execute(conn,
-            "INSERT INTO manager_history (manager_id, student_name, roll_number, batch, floor, assigned_by, tenure_start, tenure_end) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS'))",
-            (mgr['manager_id'], mgr['name'], mgr_roll, None, None, invite['from_manager_id'], mgr['created_at'])
-        )
-        execute(conn, "UPDATE meal_managers SET is_active=0 WHERE id=%s", (mgr['id'],))
-    execute(conn,
-        "INSERT INTO meal_managers (manager_id, name, password, bkash_number, is_active, student_id, temp_password_expires, must_change_password) "
-        "VALUES (%s,%s,%s,%s,1,%s,%s,1)",
-        (new_mgr_id, student['name'], hash_pass(temp_pass), student['bkash_number'], sid, expires)
-    )
-    execute(conn,
-        "UPDATE manager_transfer_invites SET status='accepted', responded_at=to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS') WHERE id=%s",
-        (invite_id,)
-    )
-    conn.commit()
-    conn.close()
-    return jsonify({
-        'ok': True, 'manager_id': new_mgr_id, 'temp_password': temp_pass,
-        'expires': expires, 'msg': f'You are now the meal manager! Login with ID: {new_mgr_id}'
-    })
-
 # ── MANAGER CHANGE PASSWORD ───────────────────────────────────────────────────
 
 @app.route('/manager/change_password', methods=['GET', 'POST'])
@@ -2751,105 +2928,6 @@ def admin_list_managers():
     return jsonify({'managers': [dict(m) for m in managers]})
 
 
-@app.route('/admin/remove_rotation_manager', methods=['POST'])
-@admin_required
-def admin_remove_rotation_manager():
-    data       = request.json or {}
-    manager_id = data.get('manager_id', '').strip().upper()
-    if not manager_id:
-        return jsonify({'ok': False, 'msg': 'No manager_id provided.'}), 400
-    if manager_id == 'MGR001':
-        return jsonify({'ok': False, 'msg': 'MGR001 cannot be removed via this action.'}), 400
-    conn = get_db()
-    mgr  = queryOne(conn, "SELECT * FROM meal_managers WHERE manager_id=%s", (manager_id,))
-    if not mgr:
-        conn.close()
-        return jsonify({'ok': False, 'msg': f'Manager {manager_id} not found.'}), 404
-    if not mgr['is_active']:
-        conn.close()
-        return jsonify({'ok': False, 'msg': f'{manager_id} is already inactive.'}), 400
-    execute(conn, "UPDATE meal_managers SET is_active=0 WHERE manager_id=%s", (manager_id,))
-    execute(conn, "INSERT INTO admin_reset_log (admin_id, action) VALUES (%s,%s)",
-            (session['admin_id'], f"remove_rotation_manager: {manager_id} deactivated"))
-    conn.commit()
-    conn.close()
-    return jsonify({'ok': True, 'msg': f'Manager {manager_id} deactivated.'})
-
-
-@app.route('/admin/transfer_manager', methods=['POST'])
-@admin_required
-def admin_transfer_manager():
-    data           = request.json
-    roll           = data.get('roll_number', '').strip()
-    new_manager_id = data.get('new_manager_id', '').strip().upper()
-    temp_password  = data.get('temp_password', '').strip()
-    if not roll or not new_manager_id or not temp_password or len(temp_password) < 6:
-        return jsonify({'ok': False, 'msg': 'Roll number, new manager ID, and temp password (min 6 chars) required.'})
-    conn    = get_db()
-    student = queryOne(conn, "SELECT id, name, bkash_number FROM students WHERE roll_number=%s", (roll,))
-    if not student:
-        conn.close()
-        return jsonify({'ok': False, 'msg': f'No student found with roll "{roll}".'})
-    if queryOne(conn, "SELECT id FROM meal_managers WHERE manager_id=%s", (new_manager_id,)):
-        conn.close()
-        return jsonify({'ok': False, 'msg': f'Manager ID "{new_manager_id}" is already taken.'})
-    active_mgrs = query(conn, "SELECT * FROM meal_managers WHERE is_active=1")
-    for mgr in active_mgrs:
-        mgr_roll = None
-        if mgr['student_id']:
-            s_row = queryOne(conn, "SELECT roll_number FROM students WHERE id=%s", (mgr['student_id'],))
-            if s_row:
-                mgr_roll = s_row['roll_number']
-        execute(conn,
-            "INSERT INTO manager_history (manager_id, student_name, roll_number, batch, floor, assigned_by, tenure_start, tenure_end) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS'))",
-            (mgr['manager_id'], mgr['name'], mgr_roll, None, None, session['admin_id'], mgr['created_at'])
-        )
-        execute(conn, "UPDATE meal_managers SET is_active=0 WHERE id=%s", (mgr['id'],))
-    expires = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
-    execute(conn,
-        "INSERT INTO meal_managers (manager_id, name, password, bkash_number, is_active, student_id, temp_password_expires, must_change_password) VALUES (%s,%s,%s,%s,1,%s,%s,1)",
-        (new_manager_id, student['name'], hash_pass(temp_password), student['bkash_number'], student['id'], expires)
-    )
-    execute(conn, "INSERT INTO admin_reset_log (admin_id, action) VALUES (%s,%s)",
-            (session['admin_id'], f"admin_transfer_manager: {student['name']} ({roll}) -> {new_manager_id}"))
-    conn.commit()
-    conn.close()
-    return jsonify({'ok': True, 'msg': f'Manager role transferred to {student["name"]} ({roll}). Login ID: {new_manager_id}.'})
-
-
-@app.route('/admin/add_manager', methods=['POST'])
-@admin_required
-def admin_add_manager():
-    data           = request.json or {}
-    roll           = (data.get('roll_number') or '').strip()
-    new_manager_id = (data.get('new_manager_id') or '').strip().upper()
-    temp_password  = (data.get('temp_password') or '').strip()
-    if not roll or not new_manager_id or not temp_password or len(temp_password) < 6:
-        return jsonify({'ok': False, 'msg': 'Roll, Manager ID, and temp password (min 6 chars) required.'})
-    conn    = get_db()
-    student = queryOne(conn, "SELECT id, name, bkash_number FROM students WHERE roll_number=%s", (roll,))
-    if not student:
-        conn.close()
-        return jsonify({'ok': False, 'msg': f'No student found with roll "{roll}".'})
-    if queryOne(conn, "SELECT id FROM meal_managers WHERE manager_id=%s", (new_manager_id,)):
-        conn.close()
-        return jsonify({'ok': False, 'msg': f'Manager ID "{new_manager_id}" is already taken.'})
-    active_count = queryOne(conn, "SELECT COUNT(*) as c FROM meal_managers WHERE is_active=1")['c']
-    if active_count >= 4:
-        conn.close()
-        return jsonify({'ok': False, 'msg': 'Maximum 4 active managers allowed.'})
-    expires = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
-    execute(conn,
-        "INSERT INTO meal_managers (manager_id, name, password, bkash_number, is_active, student_id, temp_password_expires, must_change_password) VALUES (%s,%s,%s,%s,1,%s,%s,1)",
-        (new_manager_id, student['name'], hash_pass(temp_password), student['bkash_number'], student['id'], expires)
-    )
-    execute(conn, "INSERT INTO admin_reset_log (admin_id, action) VALUES (%s,%s)",
-            (session['admin_id'], f"add_manager: {student['name']} ({roll}) -> {new_manager_id}"))
-    conn.commit()
-    conn.close()
-    return jsonify({'ok': True, 'msg': f'Manager {new_manager_id} created for {student["name"]}.'})
-
 # ── TOTAL BILL ────────────────────────────────────────────────────────────────
 
 def _get_total_bill(bill_date):
@@ -3214,168 +3292,6 @@ def admin_set_cutoff_override():
                      'deadlines apply.')
     })
 
-# ── MANAGER ROTATION ──────────────────────────────────────────────────────────
-
-@app.route('/manager/rotation')
-@login_required('manager')
-def manager_get_rotation():
-    today      = date.today()
-    week_start = (today - timedelta(days=today.weekday())).isoformat()
-    next_week  = (today - timedelta(days=today.weekday()) + timedelta(weeks=1)).isoformat()
-    conn       = get_db()
-    def fetch_week(ws):
-        rows = query(conn, "SELECT * FROM manager_rotation WHERE week_start=%s ORDER BY slot", (ws,))
-        return [dict(r) for r in rows]
-    result = {
-        'week_start': week_start, 'next_week_start': next_week,
-        'this_week': fetch_week(week_start), 'next_week': fetch_week(next_week),
-        'today': today.isoformat(), 'weekday': today.weekday(),
-    }
-    conn.close()
-    return jsonify(result)
-
-
-@app.route('/manager/rotation/save', methods=['POST'])
-@login_required('manager')
-def manager_save_rotation():
-    data       = request.json
-    week_start = data.get('week_start')
-    slots      = data.get('slots', [])
-    if not week_start or not slots:
-        return jsonify({'ok': False, 'msg': 'week_start and slots are required.'})
-    conn     = get_db()
-    short_ws = week_start.replace('-', '')[2:]
-    execute(conn, "DELETE FROM manager_rotation WHERE week_start=%s", (week_start,))
-    for s in slots:
-        execute(conn,
-            "INSERT INTO manager_rotation (week_start, slot, student_id, student_name, roll_number, day_from, day_to, note) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-            (week_start, s.get('slot'), s.get('student_id'), s.get('student_name'),
-             s.get('roll_number'), s.get('day_from', 1), s.get('day_to', 7), s.get('note', ''))
-        )
-    execute(conn, "DELETE FROM duty_invites WHERE week_start=%s AND status='pending'", (week_start,))
-    first_duty_id = None
-    for s in slots:
-        sid          = s.get('student_id')
-        student_name = (s.get('student_name') or '').strip()
-        slot         = s.get('slot', 1)
-        if sid:
-            first_name   = student_name.split()[0] if student_name else f's{slot}'
-            name_slug    = ''.join(c for c in first_name.lower() if c.isalnum())[:12] or f's{slot}'
-            base_id      = f"DUTY-{short_ws}-{name_slug}"
-            slot_duty_id = base_id
-            suffix_n     = 2
-            while queryOne(conn, "SELECT id FROM meal_managers WHERE manager_id=%s AND is_active=1", (slot_duty_id,)):
-                slot_duty_id = f"{base_id}{suffix_n}"
-                suffix_n    += 1
-            slot_duty_pw = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
-            if first_duty_id is None:
-                first_duty_id = slot_duty_id
-            execute(conn,
-                "INSERT INTO duty_invites (week_start, student_id, slot, duty_id, duty_password, status) VALUES (%s,%s,%s,%s,%s,'pending')",
-                (week_start, sid, slot, slot_duty_id, slot_duty_pw)
-            )
-    conn.commit()
-    conn.close()
-    return jsonify({'ok': True, 'msg': 'Rotation saved.', 'duty_id': first_duty_id or f"DUTY-{short_ws}-s1"})
-
-
-@app.route('/manager/rotation/search_students')
-@login_required('manager')
-def rotation_search_students():
-    q    = request.args.get('q', '').strip()
-    conn = get_db()
-    rows = query(conn,
-        "SELECT id, name, roll_number, batch FROM students WHERE name LIKE %s OR roll_number LIKE %s LIMIT 12",
-        (f'%{q}%', f'%{q}%')
-    )
-    conn.close()
-    return jsonify({'students': [dict(r) for r in rows]})
-
-# ── STUDENT DUTY INVITES ──────────────────────────────────────────────────────
-
-@app.route('/student/duty_invites')
-@login_required('student')
-def student_duty_invites():
-    sid  = session['user_id']
-    conn = get_db()
-    rows = query(conn,
-        "SELECT * FROM duty_invites WHERE student_id=%s ORDER BY created_at DESC", (sid,)
-    )
-    conn.close()
-    return jsonify({'invites': [dict(r) for r in rows]})
-
-
-@app.route('/student/accept_duty', methods=['POST'])
-@login_required('student')
-def student_accept_duty():
-    d         = request.json
-    invite_id = d.get('invite_id')
-    sid       = session['user_id']
-    conn      = get_db()
-    invite = queryOne(conn,
-        "SELECT * FROM duty_invites WHERE id=%s AND student_id=%s AND status='pending'",
-        (invite_id, sid)
-    )
-    if not invite:
-        conn.close()
-        return jsonify({'ok': False, 'msg': 'Invite not found or already responded.'})
-    duty_id  = invite['duty_id']
-    duty_pw  = invite['duty_password']
-    week_str = invite['week_start']
-    student  = queryOne(conn, "SELECT * FROM students WHERE id=%s", (sid,))
-    bkash    = student['bkash_number'] if student else '01000000000'
-    already_exists = queryOne(conn, "SELECT id FROM meal_managers WHERE manager_id=%s", (duty_id,))
-    if already_exists:
-        execute(conn,
-            "UPDATE duty_invites SET status='accepted', accepted_at=to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS') WHERE id=%s",
-            (invite_id,)
-        )
-        conn.commit()
-        conn.close()
-        return jsonify({'ok': True, 'duty_id': duty_id, 'duty_password': duty_pw,
-                        'week_start': week_str, 'slot': invite['slot']})
-    week_accepted_count = queryOne(conn,
-        "SELECT COUNT(*) as c FROM duty_invites WHERE week_start=%s AND status='accepted'", (week_str,)
-    )['c']
-    if week_accepted_count == 0:
-        old_mgrs = query(conn, "SELECT * FROM meal_managers WHERE is_active=1")
-        for mgr in old_mgrs:
-            mgr_roll = None
-            if mgr['student_id']:
-                s_row = queryOne(conn, "SELECT roll_number FROM students WHERE id=%s", (mgr['student_id'],))
-                if s_row:
-                    mgr_roll = s_row['roll_number']
-            execute(conn,
-                "INSERT INTO manager_history (manager_id, student_name, roll_number, batch, floor, assigned_by, tenure_start, tenure_end) "
-                "VALUES (%s,%s,%s,%s,%s,'duty_rotation',%s,to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS'))",
-                (mgr['manager_id'], mgr['name'], mgr_roll, None, None, mgr['created_at'])
-            )
-            execute(conn, "UPDATE meal_managers SET is_active=0 WHERE id=%s", (mgr['id'],))
-    execute(conn,
-        "INSERT INTO meal_managers (manager_id, name, password, bkash_number, is_active, student_id, must_change_password) VALUES (%s,%s,%s,%s,1,%s,0)",
-        (duty_id, student['name'] if student else 'Duty Manager', hash_pass(duty_pw), bkash, sid)
-    )
-    execute(conn,
-        "UPDATE duty_invites SET status='accepted', accepted_at=to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS') WHERE id=%s",
-        (invite_id,)
-    )
-    conn.commit()
-    conn.close()
-    return jsonify({'ok': True, 'duty_id': duty_id, 'duty_password': duty_pw,
-                    'week_start': week_str, 'slot': invite['slot']})
-
-
-@app.route('/student/duty_credentials')
-@login_required('student')
-def student_duty_credentials():
-    sid  = session['user_id']
-    conn = get_db()
-    rows = query(conn,
-        "SELECT * FROM duty_invites WHERE student_id=%s AND status='accepted' ORDER BY created_at DESC", (sid,)
-    )
-    conn.close()
-    return jsonify({'credentials': [dict(r) for r in rows]})
-
 # ── BKASH PROPOSAL ────────────────────────────────────────────────────────────
 
 @app.route('/manager/bkash_propose', methods=['POST'])
@@ -3570,43 +3486,6 @@ def emergency_reset():
         f'<p><a href="/manager/login">Go to Manager Login →</a></p>'
         f'<p style="color:red"><strong>Important:</strong> Remove EMERGENCY_KEY from env now.</p>'
     ), 200
-
-# ── ROTATION CLEAR ────────────────────────────────────────────────────────────
-
-@app.route('/manager/rotation/clear', methods=['POST'])
-@login_required('manager')
-def manager_clear_rotation():
-    data       = request.json or {}
-    week_start = data.get('week_start', '').strip()
-    if not week_start:
-        return jsonify({'ok': False, 'msg': 'week_start is required.'})
-    conn = get_db()
-    execute(conn, "DELETE FROM manager_rotation WHERE week_start=%s", (week_start,))
-    execute(conn, "DELETE FROM duty_invites WHERE week_start=%s AND status='pending'", (week_start,))
-    conn.commit()
-    conn.close()
-    return jsonify({'ok': True, 'msg': f'Rotation for week {week_start} cleared.'})
-
-
-@app.route('/admin/rotation/clear', methods=['POST'])
-@admin_required
-def admin_clear_rotation():
-    data       = request.json or {}
-    week_start = data.get('week_start', '').strip()
-    conn       = get_db()
-    if week_start:
-        execute(conn, "DELETE FROM manager_rotation WHERE week_start=%s", (week_start,))
-        execute(conn, "DELETE FROM duty_invites WHERE week_start=%s AND status='pending'", (week_start,))
-        msg = f'Rotation for week {week_start} cleared.'
-    else:
-        execute(conn, "DELETE FROM manager_rotation")
-        execute(conn, "DELETE FROM duty_invites WHERE status='pending'")
-        msg = 'All rotation schedules cleared.'
-    execute(conn, "INSERT INTO admin_reset_log (admin_id, action) VALUES (%s,%s)",
-            (session['admin_id'], f"clear_rotation: {msg}"))
-    conn.commit()
-    conn.close()
-    return jsonify({'ok': True, 'msg': msg})
 
 # ── OVERDUE / NON-ORDERERS ────────────────────────────────────────────────────
 
