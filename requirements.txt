@@ -3,3 +3,4 @@ flask-limiter
 psycopg2-binary
 werkzeug
 gunicorn
+requests
