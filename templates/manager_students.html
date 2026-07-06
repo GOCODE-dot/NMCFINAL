@@ -339,6 +339,14 @@ if (el) el.textContent = d.toLocaleDateString('en-US', {weekday:'long', year:'nu
     transition: background .15s;
   }
   .sp-close-btn:hover { background: rgba(255,255,255,.35); }
+  .sp-print-btn {
+    background: rgba(255,255,255,.2); border: none; color: #fff;
+    width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+    font-size: 14px; display: grid; place-items: center; flex-shrink: 0;
+    transition: background .15s;
+  }
+  .sp-print-btn:hover { background: rgba(255,255,255,.35); }
+  .sp-print-btn:disabled { opacity: .5; cursor: not-allowed; }
 
   .sp-summary-strip {
     display: flex; flex-wrap: wrap;
@@ -388,7 +396,12 @@ if (el) el.textContent = d.toLocaleDateString('en-US', {weekday:'long', year:'nu
         <h2 id="spName">—</h2>
         <p id="spSub">—</p>
       </div>
-      <button class="sp-close-btn" onclick="closeStudentProfile()"><i class="fas fa-times"></i></button>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+        <button class="sp-print-btn" onclick="printStudentProfile()" id="spPrintBtn" disabled title="Print this student's profile">
+          <i class="fas fa-print"></i>
+        </button>
+        <button class="sp-close-btn" onclick="closeStudentProfile()"><i class="fas fa-times"></i></button>
+      </div>
     </div>
 
     <div class="sp-summary-strip" id="spSummaryStrip"></div>
@@ -414,6 +427,7 @@ if (el) el.textContent = d.toLocaleDateString('en-US', {weekday:'long', year:'nu
 // ── Student Profile Modal ───────────────────────────────────────────────────
 
 const HOSTEL_NAMES_SP = { 1: 'Campus', 2: 'Sentu House', 3: 'Chairman House' };
+let _spCurrentData = null;   // cached full profile response, used for printing
 
 function _spEsc(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -421,7 +435,10 @@ function _spEsc(str) {
 
 async function openStudentProfile(studentId) {
   const overlay = document.getElementById('spModalOverlay');
+  const printBtn = document.getElementById('spPrintBtn');
   overlay.classList.add('open');
+  _spCurrentData = null;
+  if (printBtn) printBtn.disabled = true;
   document.getElementById('spName').textContent = 'Loading…';
   document.getElementById('spSub').textContent = '';
   document.getElementById('spSummaryStrip').innerHTML = '';
@@ -446,6 +463,9 @@ async function openStudentProfile(studentId) {
     document.getElementById('spSub').textContent = data.msg || 'Failed to load profile.';
     return;
   }
+
+  _spCurrentData = data;
+  if (printBtn) printBtn.disabled = false;
 
   const s = data.student;
   const floorLabel = s.gender === 'male'
@@ -521,6 +541,117 @@ function spShowTab(name) {
 
 function closeStudentProfile() {
   document.getElementById('spModalOverlay').classList.remove('open');
+  _spCurrentData = null;
+  const printBtn = document.getElementById('spPrintBtn');
+  if (printBtn) printBtn.disabled = true;
+}
+
+function printStudentProfile() {
+  if (!_spCurrentData) {
+    toast('Please wait for the profile to load first.', 'error');
+    return;
+  }
+  const { student: s, summary: sum, orders, payments, cash_requests, phone_requests } = _spCurrentData;
+
+  const floorLabel = s.gender === 'male'
+    ? (s.floor ? 'Floor ' + s.floor : '—')
+    : (HOSTEL_NAMES_SP[s.floor] || (s.floor ? 'Hostel ' + s.floor : '—'));
+
+  const statusLabel  = { paid: 'Paid', pending: 'Pending', due: 'Due' };
+  const payLabel     = { paid: 'Paid', verified: 'Verified', pending_verification: 'Awaiting Verification', rejected: 'Rejected' };
+
+  const section = (title, rows) => `
+    <h3>${title}</h3>
+    <table>
+      <thead><tr><th>Date</th><th>Details</th><th style="text-align:right">Amount</th><th style="text-align:right">Status</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="4" style="text-align:center;color:#a0aec0;padding:16px">No records.</td></tr>`}</tbody>
+    </table>`;
+
+  const ordersRows = (orders || []).map(o => `
+    <tr><td>${o.meal_date}</td><td style="text-transform:capitalize">${o.meal_type}</td>
+    <td style="text-align:right">৳${Math.round(o.amount)}</td>
+    <td style="text-align:right">${statusLabel[o.payment_status] || o.payment_status}</td></tr>`).join('');
+
+  const paymentsRows = (payments || []).map(p => `
+    <tr><td>${(p.created_at || '').slice(0,10)}</td><td style="font-family:monospace">${p.bkash_txn || '—'}</td>
+    <td style="text-align:right">৳${Math.round(p.amount)}</td>
+    <td style="text-align:right">${payLabel[p.status] || p.status}</td></tr>`).join('');
+
+  const cashRows = (cash_requests || []).map(c => `
+    <tr><td>${(c.requested_at || '').slice(0,10)}</td><td>${c.note || '—'}</td>
+    <td style="text-align:right">৳${Math.round(c.amount)}</td>
+    <td style="text-align:right">${c.status}</td></tr>`).join('');
+
+  const phoneRows = (phone_requests || []).map(p => `
+    <tr><td>${(p.created_at || '').slice(0,10)}</td><td>${p.old_bkash} → ${p.new_bkash}</td>
+    <td style="text-align:right">—</td>
+    <td style="text-align:right">${p.status}</td></tr>`).join('');
+
+  const generatedAt = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+
+  const printWindow = window.open('', '_blank', 'width=850,height=950');
+  if (!printWindow) {
+    toast('Please allow pop-ups to print this profile.', 'error');
+    return;
+  }
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Student Profile — ${s.name}</title>
+      <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a202c; padding: 32px; max-width: 800px; margin: 0 auto; }
+        .sph-header { display:flex; align-items:center; justify-content:space-between; border-bottom: 2px solid #1a6b3a; padding-bottom: 14px; margin-bottom: 18px; }
+        .sph-header h1 { font-size: 20px; color: #1a6b3a; margin: 0 0 4px; }
+        .sph-header p { font-size: 13px; color: #718096; margin: 0; }
+        .sph-meta { text-align: right; font-size: 12px; color: #718096; }
+        .sp-summary { display:flex; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 24px; overflow:hidden; }
+        .sp-summary div { flex:1; padding: 12px 16px; border-right: 1px solid #e2e8f0; text-align:center; }
+        .sp-summary div:last-child { border-right:none; }
+        .sp-summary .n { font-size: 18px; font-weight: 800; }
+        .sp-summary .l { font-size: 11px; color: #718096; text-transform: uppercase; letter-spacing: .4px; margin-top: 2px; }
+        h3 { font-size: 14px; color: #1a6b3a; margin: 22px 0 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-bottom: 4px; }
+        th { text-align: left; background: #f8fafc; padding: 7px 10px; border-bottom: 2px solid #e2e8f0; font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; color: #718096; }
+        td { padding: 7px 10px; border-bottom: 1px solid #e2e8f0; }
+        .sph-footer { margin-top: 26px; font-size: 11px; color: #a0aec0; text-align: center; }
+        @media print { body { padding: 0; } .no-print { display: none; } }
+        .print-btn-row { text-align:center; margin-bottom: 20px; }
+        .print-btn-row button { background:#1a6b3a; color:#fff; border:none; padding:10px 24px; border-radius:8px; font-size:14px; font-weight:700; cursor:pointer; }
+      </style>
+    </head>
+    <body>
+      <div class="print-btn-row no-print">
+        <button onclick="window.print()">Print / Save as PDF</button>
+      </div>
+      <div class="sph-header">
+        <div>
+          <h1>${s.name}</h1>
+          <p>Roll ${s.roll_number} · Batch ${s.batch} · ${floorLabel} · bKash: ${s.bkash_number}</p>
+        </div>
+        <div class="sph-meta">
+          Netrokona Medical<br>Meal Management System<br>Generated: ${generatedAt}
+        </div>
+      </div>
+      <div class="sp-summary">
+        <div><div class="n">${sum.total_meals}</div><div class="l">Total Meals</div></div>
+        <div><div class="n">৳${Math.round(sum.total_amount)}</div><div class="l">Total Value</div></div>
+        <div><div class="n" style="color:#1a6b3a">৳${Math.round(sum.paid_amount)}</div><div class="l">Paid</div></div>
+        <div><div class="n" style="color:#e53e3e">৳${Math.round(sum.due_amount)}</div><div class="l">Due</div></div>
+      </div>
+      ${section('Meal Orders', ordersRows)}
+      ${section('bKash Payments', paymentsRows)}
+      ${section('Cash Requests', cashRows)}
+      ${section('Phone / bKash Change Requests', phoneRows)}
+      <div class="sph-footer">System-generated record — Netrokona Medical Meal Management System.</div>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.onload = () => { printWindow.focus(); };
 }
 
 document.addEventListener('keydown', function(e) {

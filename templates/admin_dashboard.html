@@ -991,59 +991,6 @@
         </div>
       </div>
 
-      <!-- Add Manager (keep existing) -->
-      <div class="dark-card" style="padding:24px;margin-top:16px">
-        <div class="section-label"><i class="fas fa-user-plus"></i> Add Additional Manager (Keep Existing Active)</div>
-        <p style="color:#8b949e;font-size:13px;margin-bottom:14px">Adds a new manager account without deactivating current managers. Up to <strong style="color:#e6edf3">4 managers</strong> can be active at once. Use <em>Transfer Manager</em> below to replace all current managers.</p>
-        <input type="text" class="pw-input" id="add-mgr-roll"     placeholder="Student roll number (e.g. 3-12)">
-        <input type="text" class="pw-input" id="add-mgr-id"       placeholder="New Manager ID (e.g. MGR002)">
-        <input type="password" class="pw-input" id="add-mgr-pass" placeholder="Temp password (min 6 chars)">
-        <button class="btn btn-admin-safe btn-sm" onclick="addManagerKeepExisting()">
-          <i class="fas fa-user-plus"></i> Add Manager
-        </button>
-        <div id="add-mgr-result" style="margin-top:10px;font-size:13px;display:none"></div>
-      </div>
-
-      <!-- Transfer Manager (Admin-forced, no student acceptance needed) -->
-      <div class="dark-card" style="padding:24px;margin-top:16px;border:1px solid #d97706">
-        <div class="section-label"><i class="fas fa-exchange-alt" style="color:#d97706"></i> Transfer Manager Role (Admin Override)</div>
-        <p style="color:#8b949e;font-size:13px;margin-bottom:6px">Immediately deactivates <strong style="color:#e6edf3">all current managers</strong> and assigns the role to a new student. No student acceptance required — admin-forced. The student gets a 7-day temp password and must change it on first login.</p>
-        <div style="background:rgba(217,119,6,.08);border:1px solid rgba(217,119,6,.25);border-radius:8px;padding:10px 14px;font-size:12px;color:#fbbf24;margin-bottom:14px;display:flex;gap:8px;align-items:flex-start">
-          <i class="fas fa-triangle-exclamation" style="flex-shrink:0;margin-top:1px"></i>
-          <span>This will <strong>deactivate all current managers</strong>. Use "Add Manager" above if you want to keep existing managers active alongside the new one.</span>
-        </div>
-        <input type="text" class="pw-input" id="xfer-mgr-roll"  placeholder="Student roll number (e.g. 5-22)">
-        <input type="text" class="pw-input" id="xfer-mgr-id"    placeholder="New Manager ID (e.g. MGR003)">
-        <input type="password" class="pw-input" id="xfer-mgr-pass" placeholder="Temp password (min 6 chars)">
-        <button class="btn btn-admin-warn btn-sm" onclick="transferManagerRole()">
-          <i class="fas fa-exchange-alt"></i> Transfer Role (Deactivates All Current)
-        </button>
-        <div id="xfer-mgr-result" style="margin-top:10px;font-size:13px;display:none"></div>
-      </div>
-
-      <!-- Remove Rotation Manager (Safety) -->
-      <div class="dark-card" style="padding:24px;margin-top:16px;border:1.5px solid #da3633">
-        <div class="section-label"><i class="fas fa-user-minus" style="color:#da3633"></i> Remove Rotation Manager <span style="background:rgba(218,54,51,.18);color:#da3633;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;margin-left:6px">SAFETY</span></div>
-        <p style="color:#8b949e;font-size:13px;margin-bottom:14px">Immediately deactivate a specific active manager (e.g. a rotation manager who should no longer have access). <strong style="color:#e6edf3">MGR001 cannot be removed here</strong> — use the Reset Manager options for that. This logs the action for audit purposes.</p>
-        <select id="remove-rot-mgr-sel" style="background:#0d1117;border:1.5px solid #30363d;border-radius:8px;color:#e6edf3;padding:9px 14px;font-family:inherit;font-size:13px;width:100%;margin-bottom:10px">
-          <option value="">⏳ Loading active managers…</option>
-        </select>
-        <button class="btn btn-admin-danger btn-sm" onclick="removeRotationManager()">
-          <i class="fas fa-user-minus"></i> Remove Selected Manager
-        </button>
-        <div id="remove-rot-mgr-result" style="margin-top:10px;font-size:13px;display:none"></div>
-      </div>
-
-      <!-- Clear Duty Rotation -->
-      <div class="dark-card" style="padding:24px;margin-top:16px">
-        <div class="section-label"><i class="fas fa-broom"></i> Clear Duty Rotation Schedule</div>
-        <p style="color:#8b949e;font-size:13px;margin-bottom:14px">Remove assigned students from the duty rotation schedule. Enter a week start date (Monday) to clear that specific week, or leave blank to clear <strong style="color:#e6edf3">all weeks</strong>. Pending duty invites for cleared weeks are also removed.</p>
-        <input type="date" class="pw-input" id="clear-rot-week" placeholder="Week start (leave blank for ALL weeks)" style="background:#0d1117;border:1.5px solid #30363d;border-radius:8px;color:#e6edf3;padding:9px 14px;font-family:inherit;font-size:13px;width:100%;margin-bottom:10px">
-        <button class="btn btn-sm" style="background:#da3633;color:#fff;border:none" onclick="adminClearRotation()">
-          <i class="fas fa-broom"></i> Clear Rotation
-        </button>
-        <div id="clear-rot-result" style="margin-top:10px;font-size:13px;display:none"></div>
-      </div>
 
       <!-- Total Bill Calculator -->
       <div class="dark-card" style="padding:24px;margin-top:16px">
@@ -1159,22 +1106,6 @@ async function resetManagerPass() {
     });
     if (!d.managers || d.managers.length === 0) {
       sel.innerHTML = '<option value="">No managers found</option>';
-    }
-    // Also populate the remove-rotation manager dropdown (active only, excl. MGR001)
-    const rmSel = document.getElementById('remove-rot-mgr-sel');
-    if (rmSel) {
-      const active = (d.managers || []).filter(m => m.is_active && m.manager_id !== 'MGR001');
-      if (active.length === 0) {
-        rmSel.innerHTML = '<option value="">No removable active managers found</option>';
-      } else {
-        rmSel.innerHTML = '<option value="">— Select a manager to remove —</option>';
-        active.forEach(m => {
-          const opt = document.createElement('option');
-          opt.value = m.manager_id;
-          opt.textContent = `${m.manager_id}  —  ${m.name}`;
-          rmSel.appendChild(opt);
-        });
-      }
     }
   } catch(e) {
     const sel = document.getElementById('reset-code-mgr-id');
@@ -1419,35 +1350,6 @@ function renderAdminBill(d) {
   `;
 }
 
-// ── ADD MANAGER (KEEP EXISTING) ───────────────────────────────────────────────
-async function addManagerKeepExisting() {
-  const roll    = document.getElementById('add-mgr-roll').value.trim();
-  const mgrId   = document.getElementById('add-mgr-id').value.trim();
-  const pass    = document.getElementById('add-mgr-pass').value.trim();
-  const result  = document.getElementById('add-mgr-result');
-  if (!roll || !mgrId || !pass) { showToast('❌ All three fields are required', '#da3633'); return; }
-  if (pass.length < 6) { showToast('❌ Temp password must be at least 6 characters', '#da3633'); return; }
-  if (!confirm(`Add new manager "${mgrId}" for student roll "${roll}"?\nExisting managers will stay active.`)) return;
-  result.style.display = 'none';
-  try {
-    const r = await fetch('/admin/add_manager', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({roll_number: roll, new_manager_id: mgrId, temp_password: pass})
-    });
-    const d = await r.json();
-    result.style.display = 'block';
-    result.style.color = d.ok ? '#3fb950' : '#e94560';
-    result.textContent = (d.ok ? '✅ ' : '❌ ') + d.msg;
-    if (d.ok) {
-      document.getElementById('add-mgr-roll').value = '';
-      document.getElementById('add-mgr-id').value = '';
-      document.getElementById('add-mgr-pass').value = '';
-      showToast('✅ Manager added!', '#238636');
-      setTimeout(() => location.reload(), 2500);
-    }
-  } catch(e) { showToast('❌ Request failed', '#da3633'); }
-}
 
 // ── PRINT ADMIN BILL (popup window — no full-page print) ──────────────────────
 function printAdminBill() {
@@ -1532,134 +1434,6 @@ function _buildPrintBillHTML(src) {
     }
   }
   return html || src.innerText;
-}
-
-// ── TRANSFER MANAGER ROLE (Admin Override) ────────────────────────────────────
-async function transferManagerRole() {
-  const roll   = document.getElementById('xfer-mgr-roll').value.trim();
-  const mgrId  = document.getElementById('xfer-mgr-id').value.trim();
-  const pass   = document.getElementById('xfer-mgr-pass').value.trim();
-  const result = document.getElementById('xfer-mgr-result');
-  if (!roll || !mgrId || !pass) { showToast('❌ All three fields are required', '#da3633'); return; }
-  if (pass.length < 6) { showToast('❌ Temp password must be at least 6 characters', '#da3633'); return; }
-  if (!confirm(`Transfer manager role to student roll "${roll}" as "${mgrId}"?\n\n⚠️ ALL current managers will be deactivated immediately.`)) return;
-  const second = confirm('⚠️ SECOND CONFIRMATION\n\nAll current active managers will be logged out and deactivated. The new manager will receive a 7-day temp password. Continue?');
-  if (!second) return;
-  result.style.display = 'none';
-  showToast('⏳ Transferring role...', '#d97706');
-  try {
-    const r = await fetch('/admin/transfer_manager', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({roll_number: roll, new_manager_id: mgrId, temp_password: pass})
-    });
-    const d = await r.json();
-    result.style.display = 'block';
-    result.style.color = d.ok ? '#3fb950' : '#e94560';
-    result.innerHTML = (d.ok ? '✅ ' : '❌ ') + d.msg;
-    if (d.ok) {
-      document.getElementById('xfer-mgr-roll').value = '';
-      document.getElementById('xfer-mgr-id').value = '';
-      document.getElementById('xfer-mgr-pass').value = '';
-      showToast('✅ Manager role transferred!', '#238636');
-      setTimeout(() => location.reload(), 3000);
-    } else {
-      showToast('❌ ' + d.msg, '#da3633');
-    }
-  } catch(e) { showToast('❌ Request failed: ' + e.message, '#da3633'); }
-}
-
-async function adminClearRotation() {
-  const weekInput = document.getElementById('clear-rot-week').value.trim();
-  const result    = document.getElementById('clear-rot-result');
-  const label     = weekInput ? `week starting ${weekInput}` : 'ALL rotation weeks';
-  if (!confirm(`Clear duty rotation schedule for ${label}?\n\nPending duty invites for the cleared week(s) will also be removed.`)) return;
-  result.style.display = 'none';
-  showToast('⏳ Clearing...', '#d97706');
-  try {
-    const body = weekInput ? { week_start: weekInput } : {};
-    const r = await fetch('/admin/rotation/clear', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(body)
-    });
-    const d = await r.json();
-    result.style.display = 'block';
-    result.style.color = d.ok ? '#3fb950' : '#e94560';
-    result.innerHTML = (d.ok ? '✅ ' : '❌ ') + d.msg;
-    if (d.ok) {
-      document.getElementById('clear-rot-week').value = '';
-      showToast('✅ Rotation cleared!', '#238636');
-    } else {
-      showToast('❌ ' + d.msg, '#da3633');
-    }
-  } catch(e) { showToast('❌ Request failed: ' + e.message, '#da3633'); }
-}
-
-async function removeRotationManager() {
-  const sel    = document.getElementById('remove-rot-mgr-sel');
-  const mgrId  = sel.value;
-  const result = document.getElementById('remove-rot-mgr-result');
-  if (!mgrId) { showToast('❌ Please select a manager to remove', '#da3633'); return; }
-  const mgrLabel = sel.options[sel.selectedIndex].textContent;
-  if (!confirm(`⚠️ REMOVE ROTATION MANAGER\n\n${mgrLabel}\n\nThis will immediately deactivate this manager account. They will no longer be able to log in. This action is logged for audit.\n\nAre you sure?`)) return;
-  result.style.display = 'none';
-  showToast('⏳ Removing manager...', '#d97706');
-  try {
-    const r = await fetch('/admin/remove_rotation_manager', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ manager_id: mgrId })
-    });
-    const d = await r.json();
-    result.style.display = 'block';
-    result.style.color = d.ok ? '#3fb950' : '#e94560';
-    result.innerHTML = (d.ok ? '✅ ' : '❌ ') + d.msg;
-    if (d.ok) {
-      showToast('✅ Manager removed successfully', '#238636');
-      // Refresh both manager dropdowns
-      loadManagerDropdowns();
-    } else {
-      showToast('❌ ' + d.msg, '#da3633');
-    }
-  } catch(e) { showToast('❌ Request failed: ' + e.message, '#da3633'); }
-}
-
-// Populate ALL manager dropdowns (existing + remove-rotation)
-async function loadManagerDropdowns() {
-  try {
-    const r = await fetch('/admin/list_managers');
-    const d = await r.json();
-    // Existing reset-code dropdown
-    const sel = document.getElementById('reset-code-mgr-sel');
-    if (sel) {
-      sel.innerHTML = '<option value="">— Select a manager —</option>';
-      (d.managers || []).forEach(m => {
-        const opt = document.createElement('option');
-        const status = m.is_active ? 'Active' : 'Inactive';
-        opt.value = m.manager_id;
-        opt.textContent = m.manager_id + '  —  ' + m.name + '  (' + status + ')';
-        sel.appendChild(opt);
-      });
-      if (!d.managers || d.managers.length === 0) sel.innerHTML = '<option value="">No managers found</option>';
-    }
-    // Remove-rotation dropdown (active only, excluding MGR001)
-    const rmSel = document.getElementById('remove-rot-mgr-sel');
-    if (rmSel) {
-      const active = (d.managers || []).filter(m => m.is_active && m.manager_id !== 'MGR001');
-      if (active.length === 0) {
-        rmSel.innerHTML = '<option value="">No removable active managers found</option>';
-      } else {
-        rmSel.innerHTML = '<option value="">— Select a manager to remove —</option>';
-        active.forEach(m => {
-          const opt = document.createElement('option');
-          opt.value = m.manager_id;
-          opt.textContent = m.manager_id + '  —  ' + m.name;
-          rmSel.appendChild(opt);
-        });
-      }
-    }
-  } catch(e) { console.error('Failed to load managers:', e); }
 }
 
 function showToast(msg, bg) {

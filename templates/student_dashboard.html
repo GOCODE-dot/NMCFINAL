@@ -613,8 +613,8 @@
 
       {% if due > 0 %}
       <div style="display:flex;gap:5px;margin-top:8px">
-        <button class="btn btn-sm" style="background:rgba(255,255,255,.25);color:#fff;border:1.5px solid rgba(255,255,255,.5);padding:4px 10px;font-size:11px;flex:1;justify-content:center" onclick="openPayModal()">
-          <i class="fas fa-mobile-alt"></i> bKash
+        <button class="btn btn-sm" style="background:rgba(255,255,255,.25);color:#fff;border:1.5px solid rgba(255,255,255,.5);padding:4px 10px;font-size:11px;flex:1;justify-content:center" onclick="payWithBkash(this)">
+          <i class="fas fa-mobile-alt"></i> Pay with bKash
         </button>
         <button class="btn btn-sm" style="background:rgba(255,255,255,.18);color:#fff;border:1.5px solid rgba(255,255,255,.4);padding:4px 10px;font-size:11px;flex:1;justify-content:center" onclick="openCashModal()">
           <i class="fas fa-money-bill-wave"></i> Cash
@@ -671,7 +671,6 @@
     <button class="tab active" onclick="showTab('order')"><i class="fas fa-calendar-check"></i> Order Meals</button>
     <button class="tab" onclick="showTab('mealhistory')"><i class="fas fa-history"></i> Meal History</button>
     <button class="tab" onclick="showTab('history')"><i class="fas fa-receipt"></i> Payment Proofs</button>
-    <button class="tab" id="tab-invite-btn" onclick="showTab('invite')"><i class="fas fa-user-tie"></i> Manager Invite <span id="invite-badge" style="display:none;background:#e53e3e;color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:4px">!</span></button>
     <button class="tab" onclick="showTab('account')"><i class="fas fa-user-cog"></i> My Account <span id="floor-badge" style="display:none;background:#e53e3e;color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:4px">!</span></button>
   </div>
 
@@ -787,9 +786,14 @@
     <div class="card" style="overflow:hidden;margin-bottom:32px">
       <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
         <div class="section-title" style="margin:0"><i class="fas fa-history" style="color:var(--primary)"></i> Meal History — Last 30 Days</div>
-        <button class="btn btn-outline btn-sm" onclick="loadMealHistory()">
-          <i class="fas fa-sync-alt"></i> Refresh
-        </button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-outline btn-sm" onclick="printMealHistory()" id="mealHistoryPrintBtn" disabled>
+            <i class="fas fa-print"></i> Print
+          </button>
+          <button class="btn btn-outline btn-sm" onclick="loadMealHistory()">
+            <i class="fas fa-sync-alt"></i> Refresh
+          </button>
+        </div>
       </div>
       <div style="padding:20px 24px" id="mealHistoryBody">
         <div style="text-align:center;color:var(--text-muted);padding:40px 0">
@@ -806,8 +810,8 @@
     <div class="card" style="overflow:hidden;margin-bottom:32px">
       <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
         <div class="section-title" style="margin:0"><i class="fas fa-receipt" style="color:var(--primary)"></i> Payment Proofs Submitted</div>
-        <button class="btn btn-primary btn-sm" onclick="openPayModal()">
-          <i class="fas fa-plus"></i> Submit New Payment
+        <button class="btn btn-primary btn-sm" onclick="payWithBkash(this)">
+          <i class="fas fa-mobile-alt"></i> Pay with bKash
         </button>
       </div>
       <div style="padding:20px 24px">
@@ -855,56 +859,12 @@
           <div style="text-align:center;color:var(--text-muted);padding:40px 0">
             <div style="font-size:40px;margin-bottom:12px">📭</div>
             <div>No payment proofs submitted yet.</div>
-            <button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="openPayModal()">Submit Your First Payment</button>
+            <button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="payWithBkash(this)">Pay with bKash</button>
           </div>
         {% endif %}
       </div>
     </div>
   </div>
-  <!-- MANAGER INVITE TAB -->
-  <div id="tab-invite" class="tab-panel">
-
-    <!-- ── DUTY ROTATION SECTION ─────────────────────────────────────────── -->
-    <div class="card" style="overflow:hidden;margin-bottom:20px">
-      <div style="padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-        <div>
-          <div class="section-title" style="margin-bottom:2px"><i class="fas fa-rotate" style="color:var(--accent)"></i> Weekly Duty Notifications</div>
-          <p style="font-size:13px;color:var(--text-muted)">When the manager assigns you to the weekly duty roster, you will get a notification here.</p>
-        </div>
-      </div>
-
-      <!-- Pending duty invites -->
-      <div id="duty-pending-area" style="padding:0"></div>
-
-      <!-- Accepted duty credentials (permanent) -->
-      <div id="duty-creds-area" style="padding:0"></div>
-
-      <!-- Empty state -->
-      <div id="duty-empty" style="text-align:center;padding:36px 20px;display:none">
-        <div style="font-size:38px;margin-bottom:10px">📋</div>
-        <div style="font-weight:700;color:var(--text);margin-bottom:6px">No Duty Assignments Yet</div>
-        <div style="font-size:13px;color:var(--text-muted);max-width:300px;margin:0 auto;line-height:1.6">
-          When the meal manager adds you to the weekly duty roster, your notification and login credentials will appear here.
-        </div>
-      </div>
-    </div>
-
-    <!-- ── MANAGER TRANSFER SECTION ──────────────────────────────────────── -->
-    <div class="card" style="overflow:hidden;margin-bottom:32px">
-      <div style="padding:18px 24px;border-bottom:1px solid var(--border)">
-        <div class="section-title" style="margin-bottom:2px"><i class="fas fa-user-tie" style="color:var(--primary)"></i> Manager Role Transfer</div>
-        <p style="font-size:13px;color:var(--text-muted)">If the admin or current manager transfers the full manager role to you, you will be notified here.</p>
-      </div>
-      <div style="padding:20px 24px" id="invite-list-area">
-        <div style="text-align:center;padding:30px 0" id="invite-empty">
-          <div style="font-size:36px;margin-bottom:10px">🔒</div>
-          <div style="font-weight:700;color:var(--text);margin-bottom:6px">No Pending Role Transfers</div>
-          <div style="font-size:13px;color:var(--text-muted);max-width:300px;margin:0 auto;line-height:1.6">Manager role transfers are made by the system admin. You will be notified if selected.</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- ACCOUNT TAB -->
   <div id="tab-account" class="tab-panel">
     <!-- Floor Info Card -->
@@ -1219,66 +1179,6 @@ async function loadBkashHistory() {
   </div>
 </div>
 
-<!-- bKash Payment Modal -->
-<div class="modal-overlay" id="pay-modal">
-  <div class="modal">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-      <h3><i class="fas fa-mobile-alt" style="color:#e51c6d"></i> Submit bKash Payment</h3>
-      <button onclick="closePayModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted)">×</button>
-    </div>
-    <!-- Send to info -->
-    <div style="display:flex;align-items:center;gap:10px;background:#fce4ec;border:1.5px solid #e91e63;border-radius:10px;padding:11px 14px;margin-bottom:14px">
-      <i class="fas fa-mobile-alt" style="color:#c2185b;font-size:18px;flex-shrink:0"></i>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:10px;color:#880e4f;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:1px">Send bKash to</div>
-        <div style="font-size:18px;font-weight:800;color:#880e4f;letter-spacing:1px" id="modal-bkash-num">{{ mgr_bkash }}</div>
-      </div>
-    </div>
-
-    <!-- Auto-calculated amount breakdown -->
-    <div style="background:#f8fafc;border:1.5px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:var(--text-muted);margin-bottom:10px"><i class="fas fa-calculator"></i> Amount to Send</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <span style="font-size:13px;color:var(--text-muted)">Your total due</span>
-        <span style="font-size:15px;font-weight:700;color:var(--text)">৳<span id="modal-due-amount">{{ "%.0f"|format(due) }}</span></span>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px" id="fee-row">
-        <span style="font-size:13px;color:var(--text-muted)">bKash fee <span id="fee-note" style="font-size:11px;opacity:.7"></span></span>
-        <span style="font-size:14px;font-weight:600;color:#e53e3e" id="fee-display"></span>
-      </div>
-      <div style="border-top:1.5px dashed var(--border);padding-top:10px;display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:13px;font-weight:700;color:var(--text)">Total to send</span>
-        <div style="text-align:right">
-          <div style="font-size:22px;font-weight:800;color:#e51c6d" id="total-display"></div>
-          <div style="font-size:10px;color:var(--text-muted);margin-top:1px">Type this exact amount in bKash</div>
-        </div>
-      </div>
-    </div>
-
-    <div style="background:#fff8e6;border:1px solid #fcd97d;border-radius:8px;padding:10px 14px;font-size:13px;color:#7c5f00;margin-bottom:16px">
-      <i class="fas fa-info-circle"></i> Use roll number <strong>{{ session.roll }}</strong> as bKash reference/note.
-    </div>
-    <div class="form-group">
-      <label>bKash Transaction ID</label>
-      <input type="text" id="txn-input" placeholder="e.g. 8JA7KL2M3N" style="text-transform:uppercase">
-    </div>
-    <div class="form-group" style="display:none">
-      <input type="hidden" id="amount-input" value="{{ "%.0f"|format(due) }}">
-      <div id="amount-display" style="display:none">{{ "%.0f"|format(due) }}</div>
-    </div>
-    <div class="form-group">
-      <label>Note (optional)</label>
-      <input type="text" id="note-input" placeholder="e.g. Payment for this week's meals">
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="submitPayment()">
-        <i class="fas fa-paper-plane"></i> Submit Proof
-      </button>
-      <button class="btn btn-outline" onclick="closePayModal()">Cancel</button>
-    </div>
-  </div>
-</div>
-
 <!-- Cash Payment Modal -->
 <div class="modal-overlay" id="cash-modal">
   <div class="modal">
@@ -1376,6 +1276,39 @@ function updatePayModalAmounts() {
 // Run on page load
 updatePayModalAmounts();
 
+// ── bKash Gateway result banner ───────────────────────────────────────────────
+// After bKash redirects back via /student/bkash/callback, that route redirects
+// here with ?pay_result=... so we can show a clear toast without needing a
+// server-side flash-message block on this page.
+(function showBkashPayResult() {
+  const params = new URLSearchParams(window.location.search);
+  const result  = params.get('pay_result');
+  if (!result) return;
+
+  const amount = params.get('amount');
+  const trx    = params.get('trx');
+
+  if (result === 'success') {
+    toast(`✅ Payment of ৳${amount} confirmed!${trx ? ' TxnID: ' + trx : ''}`, 'success');
+    setTimeout(() => location.reload(), 1500);
+  } else if (result === 'already') {
+    toast(`✅ This payment (৳${amount}) was already confirmed.`, 'success');
+  } else if (result === 'cancelled') {
+    toast('Payment was cancelled. You can try again anytime.', 'error');
+  } else if (result === 'failed') {
+    toast('bKash could not confirm the payment. Please try again.', 'error');
+  } else if (result === 'notfound') {
+    toast('Payment session not found. If money was deducted, contact your Meal Manager.', 'error');
+  } else if (result === 'error') {
+    toast('Could not confirm payment with bKash. If money was deducted, contact your Meal Manager.', 'error');
+  }
+
+  // Clean the query params out of the URL so a refresh doesn't re-show this.
+  params.delete('pay_result'); params.delete('amount'); params.delete('trx');
+  const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+  window.history.replaceState({}, '', newUrl);
+})();
+
 // Real-time day names and today highlight
 (function() {
   const DAY_ABBR = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -1395,19 +1328,23 @@ updatePayModalAmounts();
 })();
 
 function showTab(name) {
-  const names = ['order','mealhistory','history','invite','account'];
+  const names = ['order','mealhistory','history','account'];
   document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', names[i]===name));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
   if (name === 'mealhistory') loadMealHistory();
-  if (name === 'invite') loadInvites();
   if (name === 'account') loadFloorStatus();
 }
 
 // ── Meal History (last 30 days) ─────────────────────────────────────────────
 
+let _mealHistoryData = null;   // cached { orders, summary } for printing
+
 async function loadMealHistory() {
   const body = document.getElementById('mealHistoryBody');
+  const printBtn = document.getElementById('mealHistoryPrintBtn');
+  _mealHistoryData = null;
+  if (printBtn) printBtn.disabled = true;
   body.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:40px 0">
     <i class="fas fa-spinner fa-spin" style="font-size:22px;margin-bottom:10px;display:block"></i>Loading…</div>`;
 
@@ -1429,6 +1366,8 @@ async function loadMealHistory() {
   }
 
   const { orders, summary } = data;
+  _mealHistoryData = { orders: orders || [], summary };
+  if (printBtn) printBtn.disabled = false;
 
   const summaryHtml = `
     <div class="mh-summary-strip">
@@ -1477,6 +1416,98 @@ async function loadMealHistory() {
   }).join('');
 
   body.innerHTML = summaryHtml + groupsHtml;
+}
+
+function printMealHistory() {
+  if (!_mealHistoryData) {
+    toast('Please wait for history to load first.', 'error');
+    return;
+  }
+  const { orders, summary } = _mealHistoryData;
+
+  const fmtDate = ds => {
+    const d = new Date(ds + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+  };
+  const statusLabel = { paid: 'Paid', pending: 'Pending', due: 'Due (overdue)' };
+
+  const rowsHtml = (orders || []).length
+    ? orders.map(o => `
+        <tr>
+          <td>${fmtDate(o.meal_date)}</td>
+          <td style="text-transform:capitalize">${o.meal_type}</td>
+          <td style="text-align:right">৳${Math.round(o.amount)}</td>
+          <td style="text-align:right">${statusLabel[o.payment_status] || o.payment_status}</td>
+        </tr>`).join('')
+    : `<tr><td colspan="4" style="text-align:center;color:#718096;padding:24px">No meals ordered in the last 30 days.</td></tr>`;
+
+  const generatedAt = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+
+  const printWindow = window.open('', '_blank', 'width=800,height=900');
+  if (!printWindow) {
+    toast('Please allow pop-ups to print your meal history.', 'error');
+    return;
+  }
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Meal History — {{ session.name }}</title>
+      <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a202c; padding: 32px; max-width: 720px; margin: 0 auto; }
+        .ph-header { display:flex; align-items:center; justify-content:space-between; border-bottom: 2px solid #1a6b3a; padding-bottom: 14px; margin-bottom: 18px; }
+        .ph-header h1 { font-size: 20px; color: #1a6b3a; margin: 0 0 4px; }
+        .ph-header p { font-size: 13px; color: #718096; margin: 0; }
+        .ph-meta { text-align: right; font-size: 12px; color: #718096; }
+        .ph-summary { display:flex; gap: 0; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 20px; overflow:hidden; }
+        .ph-summary div { flex:1; padding: 12px 16px; border-right: 1px solid #e2e8f0; text-align:center; }
+        .ph-summary div:last-child { border-right:none; }
+        .ph-summary .n { font-size: 18px; font-weight: 800; }
+        .ph-summary .l { font-size: 11px; color: #718096; text-transform: uppercase; letter-spacing: .4px; margin-top: 2px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { text-align: left; background: #f8fafc; padding: 8px 10px; border-bottom: 2px solid #e2e8f0; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: #718096; }
+        td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; }
+        .ph-footer { margin-top: 24px; font-size: 11px; color: #a0aec0; text-align: center; }
+        @media print {
+          body { padding: 0; }
+          .no-print { display: none; }
+        }
+        .print-btn-row { text-align:center; margin-bottom: 20px; }
+        .print-btn-row button { background:#1a6b3a; color:#fff; border:none; padding:10px 24px; border-radius:8px; font-size:14px; font-weight:700; cursor:pointer; }
+      </style>
+    </head>
+    <body>
+      <div class="print-btn-row no-print">
+        <button onclick="window.print()"><i class="fas fa-print"></i> Print / Save as PDF</button>
+      </div>
+      <div class="ph-header">
+        <div>
+          <h1>🍽️ Meal History — Last 30 Days</h1>
+          <p>{{ session.name }} · Roll {{ session.roll }}</p>
+        </div>
+        <div class="ph-meta">
+          Netrokona Medical<br>Meal Management System<br>Generated: ${generatedAt}
+        </div>
+      </div>
+      <div class="ph-summary">
+        <div><div class="n">${summary.total_meals}</div><div class="l">Meals</div></div>
+        <div><div class="n">৳${Math.round(summary.total_amount)}</div><div class="l">Total Value</div></div>
+        <div><div class="n" style="color:#1a6b3a">৳${Math.round(summary.paid_amount)}</div><div class="l">Paid</div></div>
+        <div><div class="n" style="color:#e53e3e">৳${Math.round(summary.due_amount)}</div><div class="l">Due</div></div>
+      </div>
+      <table>
+        <thead><tr><th>Date</th><th>Meal</th><th style="text-align:right">Amount</th><th style="text-align:right">Status</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+      <div class="ph-footer">This is a system-generated record for your personal reference. Contact your Meal Manager for any discrepancies.</div>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.onload = () => { printWindow.focus(); };
 }
 
 // ── FLOOR CHANGE ──────────────────────────────────────────────────────────────
@@ -1904,7 +1935,7 @@ async function confirmMealAction() {
       const banner = document.getElementById('due-banner');
       if (banner) banner.style.display = 'none';
       // Disable both payment buttons in the due box
-      document.querySelectorAll('[onclick="openPayModal()"]').forEach(b => b.disabled = true);
+      document.querySelectorAll('[onclick="payWithBkash(this)"]').forEach(b => b.disabled = true);
       document.querySelectorAll('[onclick="openCashModal()"]').forEach(b => b.disabled = true);
     } else {
       toast('📩 Cancel request sent to manager for approval.', 'success');
@@ -2162,78 +2193,42 @@ async function markDue() {
   if (d.ok) { toast(d.msg); setTimeout(()=>location.reload(), 1000); }
 }
 
-async function openPayModal() {
-  // ── Guard 1: block if a cash request is already pending ──────────────────
+// ── bKash Payment Gateway checkout (replaces the old manual TxnID modal) ─────
+async function payWithBkash(btn) {
+  // ── Guard: block if a cash request is already pending ─────────────────────
   try {
     const cr = await fetch('/student/cash_request_status');
     const cd = await cr.json();
     if (cd.request && cd.request.status === 'pending') {
-      toast('⚠️ You already have a pending cash payment request. Cancel it first before submitting a bKash payment.', 'error');
+      toast('⚠️ You already have a pending cash payment request. Cancel it first before paying with bKash.', 'error');
       return;
     }
   } catch(_) { /* network hiccup — allow through, backend will catch */ }
 
-  // ── Guard 2: block if a bKash payment is already pending ─────────────────
-  const existingBkash = await getPendingBkash();
-  if (existingBkash) {
-    const txn = existingBkash.bkash_txn || '—';
-    const amt = existingBkash.amount ? '৳' + existingBkash.amount : '';
-    toast(`⚠️ You already submitted bKash TxnID ${txn}${amt ? ' (' + amt + ')' : ''} — it's pending manager verification. You cannot submit another payment until this one is reviewed.`, 'error');
-    return;
-  }
+  const originalHTML = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Opening bKash…';
 
-  // ── Safe to open ──────────────────────────────────────────────────────────
-  const num = document.getElementById('mgr-bkash-num').textContent.trim();
-  const modalNum = document.getElementById('modal-bkash-num');
-  if (modalNum && num) modalNum.textContent = num;
-  updatePayModalAmounts();
-  // Clear any leftover TxnID from a previous open
-  const txnInput = document.getElementById('txn-input');
-  if (txnInput) txnInput.value = '';
-  document.getElementById('pay-modal').classList.add('open');
-}
-function closePayModal() {
-  document.getElementById('pay-modal').classList.remove('open');
-}
+  try {
+    const res  = await fetch('/student/bkash/pay', { method: 'POST' });
+    const data = await res.json();
 
-// Track last submitted TxnID in-session to prevent same-tab double-submit
-let _lastSubmittedTxn = null;
+    if (!data.ok) {
+      toast(data.msg || 'Could not start payment.', 'error');
+      btn.disabled  = false;
+      btn.innerHTML = originalHTML;
+      return;
+    }
 
-async function submitPayment() {
-  const txnInput = document.getElementById('txn-input');
-  const txn = txnInput.value.trim().toUpperCase();
-  const note = document.getElementById('note-input').value.trim();
+    // Leave the dashboard and go to bKash's checkout page. The student is
+    // sent back to /student/bkash/callback (which redirects here again)
+    // once they finish paying, and the banner below shows the result.
+    window.location.href = data.bkashURL;
 
-  if (!txn) { toast('Enter your bKash transaction ID', 'error'); return; }
-
-  // ── Duplicate TxnID guard ─────────────────────────────────────────────────
-  if (_lastSubmittedTxn && _lastSubmittedTxn === txn) {
-    toast('⚠️ You already submitted this Transaction ID. Do not re-submit the same TxnID.', 'error');
-    return;
-  }
-  if (txn.length < 6) {
-    toast('Transaction ID looks too short — please double-check.', 'error');
-    return;
-  }
-
-  // Disable button while in-flight to prevent double-tap
-  const submitBtn = document.querySelector('#pay-modal .btn-primary');
-  if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting…'; }
-
-  const r = await fetch('/student/submit_payment', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({bkash_txn: txn, note})
-  });
-  const d = await r.json();
-
-  if (d.ok) {
-    _lastSubmittedTxn = txn;
-    toast(d.msg);
-    closePayModal();
-    setTimeout(()=>location.reload(), 1200);
-  } else {
-    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Proof'; }
-    toast(d.msg, 'error');
+  } catch (err) {
+    toast('Network error — please try again.', 'error');
+    btn.disabled  = false;
+    btn.innerHTML = originalHTML;
   }
 }
 
@@ -2265,9 +2260,6 @@ function capitalize(s) { return s.charAt(0).toUpperCase()+s.slice(1); }
 // Close modals on overlay click
 document.getElementById('meal-confirm-modal').addEventListener('click', function(e) {
   if (e.target === this) closeMealConfirm();
-});
-document.getElementById('pay-modal').addEventListener('click', function(e) {
-  if (e.target === this) closePayModal();
 });
 document.getElementById('cash-modal').addEventListener('click', function(e) {
   if (e.target === this) closeCashModal();
@@ -2596,22 +2588,8 @@ function copyCredsAndClose() {
   closeAcceptModal();
 }
 
-// Check for pending invites on load and show badge
-async function checkInviteBadge() {
-  try {
-    let hasPending = false;
-    const r1 = await fetch('/student/transfer_invites');
-    const d1 = await r1.json();
-    if (d1.invites && d1.invites.length > 0) hasPending = true;
-
-    const r2 = await fetch('/student/duty_invites');
-    const d2 = await r2.json();
-    if (d2.invites && d2.invites.some(i => i.status === 'pending')) hasPending = true;
-
-    document.getElementById('invite-badge').style.display = hasPending ? 'inline' : 'none';
-  } catch(e) {}
-}
-checkInviteBadge();
+// Manager Invite tab (duty rotation notices + manager role transfer) was
+// removed from the dashboard, so its badge-check call has been removed too.
 
 // ── Live ordering-lock + cutoff-override polling ──────────────────────────────
 // Polls every 15 s. Reloads the page if the manager's lock state changes,

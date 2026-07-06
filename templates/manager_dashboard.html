@@ -502,25 +502,9 @@ document.addEventListener('click', function(e) {
   </div>
   <!-- Due payments are no longer available: banner removed -->
 
-  <!-- DUTY ROSTER SUMMARY CARD -->
-  <div class="card" id="duty-roster-card" style="overflow:hidden;margin-bottom:20px;border-left:4px solid var(--primary)">
-    <div style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-      <div style="display:flex;align-items:center;gap:10px">
-        <span style="font-size:20px">🗓️</span>
-        <div>
-          <div style="font-weight:700;font-size:14px;color:var(--text)">This Week's Duty Roster</div>
-          <div style="font-size:12px;color:var(--text-muted)" id="roster-week-label">Loading…</div>
-        </div>
-      </div>
-      <button class="btn btn-outline btn-sm" onclick="showTab('rotation');loadRotation()"><i class="fas fa-pencil"></i> Edit Schedule</button>
-    </div>
-    <div id="duty-roster-slots" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0;border-top:1px solid var(--border)">
-      <!-- filled by JS -->
-    </div>
-    <div id="duty-on-today" style="display:none;background:var(--primary-pale);border-top:1px solid #b7e4c7;padding:11px 20px;font-size:13px;color:var(--primary);font-weight:600">
-      <i class="fas fa-user-check"></i> <span id="duty-on-today-text"></span>
-    </div>
-  </div>
+  <!-- ── bKash Collection Number change/voting panel removed ──────────────────
+       bKash number is now fixed via the bKash Merchant account, so managers
+       can no longer change it from the dashboard. ─────────────────────────── -->
 
   <!-- TABS — primary actions always visible, overflow in ⋯ menu -->
   <style>
@@ -714,10 +698,6 @@ document.addEventListener('click', function(e) {
         <i class="fas fa-clock"></i> Ordered, Not Paid
         <span class="om-badge" id="unpaid-dot" style="display:none">0</span>
       </button>
-      <div class="om-separator"></div>
-      <button class="om-item" id="om-rotation"   onclick="selectOverflow('rotation', function(){ loadRotation(); loadBkashProposals(); })">
-        <i class="fas fa-rotate"></i> Duty Rotation
-      </button>
     </div>
   </div>
 
@@ -782,7 +762,6 @@ document.addEventListener('click', function(e) {
     }
     // Trigger lazy-loads
     if (name === 'cash')            { if (typeof loadCashRequests === 'function') loadCashRequests(); }
-    if (name === 'rotation')        { if (typeof loadRotation === 'function') loadRotation(); if (typeof loadBkashProposals === 'function') loadBkashProposals(); }
     if (name === 'cook')            { setTimeout(function(){ if (typeof loadCookSheet === 'function') loadCookSheet(); }, 50); }
     if (name === 'unpaid_orders')   { if (typeof loadUnpaidOrders === 'function') loadUnpaidOrders(); }
     if (name === 'edit_requests')   { if (typeof loadEditRequests === 'function') loadEditRequests(); }
@@ -1380,115 +1359,6 @@ document.addEventListener('click', function(e) {
     </div>
   </div><!-- end tab-weekly_orders -->
 
-  <!-- DUTY ROTATION TAB -->
-  <div id="tab-rotation" class="tab-panel">
-
-    <!-- ── bKash Collection Number (merged into Duty Rotation tab) ─────── -->
-    <div class="my-bkash-card" style="margin-bottom:24px">
-      <div class="my-bkash-card-header">
-        <div class="icon"><i class="fas fa-mobile-alt"></i></div>
-        <div>
-          <div style="font-size:15px;font-weight:700;color:var(--text)">Change bKash Collection Number</div>
-          <div style="font-size:13px;color:var(--text-muted);margin-top:2px">
-            Current: <strong id="currentBkashHeader" style="color:#e2136e">{{ mgr_bkash }}</strong>
-            &nbsp;·&nbsp; If you are the only active manager, it changes instantly.
-            With multiple managers, only 2 approvals are needed.
-          </div>
-        </div>
-      </div>
-      <div class="bkash-body">
-        <div class="bkash-propose-form">
-          <div class="field">
-            <label>New bKash Number</label>
-            <input type="tel" id="newBkashInput" placeholder="01XXXXXXXXX" maxlength="11">
-          </div>
-          <button id="bkashProposeBtn" onclick="proposeBkash()">
-            <i class="fas fa-paper-plane"></i> Send / Apply
-          </button>
-        </div>
-        <p style="font-size:12px;color:var(--text-muted);margin-top:-10px">
-          <i class="fas fa-info-circle"></i>
-          Solo manager → changes immediately. Multiple managers → goes to a vote below.
-        </p>
-      </div>
-    </div>
-
-    <div class="bkash-panel" style="margin-bottom:24px">
-      <div class="bkash-panel-header">
-        <div class="bkash-panel-title">
-          <div class="bkash-icon"><i class="fas fa-vote-yea"></i></div>
-          <div>
-            <h3>Change Requests & Voting</h3>
-            <p>Any 2 active managers must approve a bKash change</p>
-          </div>
-        </div>
-        <div class="bkash-current-badge">
-          <i class="fas fa-circle" style="font-size:8px;color:#e2136e"></i>
-          Active: <span id="currentBkash">{{ mgr_bkash }}</span>
-        </div>
-      </div>
-      <div class="bkash-body">
-        <div class="proposals-title">Pending Votes</div>
-        <div id="bkashProposalsList">
-          <div class="bkash-empty"><i class="fas fa-inbox"></i>Loading...</div>
-        </div>
-        <div id="resolvedSection" style="display:none">
-          <div class="bkash-divider"></div>
-          <div class="proposals-title">Recent History</div>
-          <div class="resolved-list" id="resolvedList"></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card" style="overflow:hidden;margin-bottom:24px">
-      <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-        <div class="section-title" style="margin:0"><i class="fas fa-rotate" style="color:var(--primary)"></i> Weekly Duty Rotation — 4 Managers × 7 Days</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-outline btn-sm" id="rotBtnThis" onclick="rotShowWeek('this')" style="font-weight:700"><i class="fas fa-calendar-check"></i> This Week</button>
-          <button class="btn btn-outline btn-sm" id="rotBtnNext" onclick="rotShowWeek('next')"><i class="fas fa-calendar-plus"></i> Next Week</button>
-          <button class="btn btn-primary btn-sm" onclick="saveRotation()"><i class="fas fa-save"></i> Save Schedule</button>
-          <button class="btn btn-sm" style="background:var(--danger-light);color:var(--danger);border:1px solid #feb2b2" onclick="clearRotationWeek()"><i class="fas fa-broom"></i> Clear Schedule</button>
-        </div>
-      </div>
-      <div style="padding:20px 24px">
-        <div id="rot-week-label" style="font-size:14px;font-weight:700;color:var(--text-muted);margin-bottom:16px"></div>
-        <div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;min-width:560px">
-            <thead>
-              <tr>
-                <th style="width:44px;text-align:center">Slot</th>
-                <th>Assigned Student</th>
-                <th style="width:130px;text-align:center">Days (Mon–Sun)</th>
-                <th style="width:170px">Note</th>
-                <th style="width:44px"></th>
-              </tr>
-            </thead>
-            <tbody id="rotation-tbody"></tbody>
-          </table>
-        </div>
-        <p style="font-size:12px;color:var(--text-muted);margin-top:12px"><i class="fas fa-info-circle"></i> Assign up to 4 students as duty managers. Day 1 = Monday, Day 7 = Sunday. Each slot covers a range of days within the week.</p>
-        <div id="rot-today-box" style="display:none;margin-top:20px;background:var(--primary-pale);border:1.5px solid #b7e4c7;border-radius:var(--radius-sm);padding:14px 18px">
-          <div style="font-size:12px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px"><i class="fas fa-calendar-day"></i> On Duty Today</div>
-          <div id="rot-today-name" style="font-size:17px;font-weight:700"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-<!-- Student Picker for Rotation -->
-<div class="modal-overlay" id="rot-picker-modal" style="z-index:400">
-  <div class="modal" style="max-width:400px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <h3 style="font-size:17px"><i class="fas fa-user-plus" style="color:var(--primary)"></i> Pick a Student</h3>
-      <button onclick="closeRotPicker()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted)">×</button>
-    </div>
-    <input type="text" id="rot-search-input" placeholder="Search name or roll…" oninput="rotSearch(this.value)"
-      style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;margin-bottom:10px">
-    <div id="rot-search-results" style="max-height:280px;overflow-y:auto"></div>
-  </div>
-</div>
-
-
 <!-- ── bKASH TAB ──────────────────────────────────────────────────────────── -->
 
 
@@ -1683,7 +1553,6 @@ function showTab(name) {
     }
   }
   if (name === 'cash') loadCashRequests();
-  if (name === 'rotation') { loadRotation(); loadBkashProposals(); }
   if (name === 'cook') setTimeout(loadCookSheet, 50);  // small delay so panel is visible first
   if (name === 'unpaid_orders') loadUnpaidOrders();
   if (name === 'edit_requests') loadEditRequests();
@@ -2647,6 +2516,9 @@ function printBill() {
 }
 // Bill modal overlay close + initial panel loads
 // (DOMContentLoaded may have already fired at this point in the page — use immediate call)
+(function initBkashPanel() {
+  // bKash change/voting panel removed — number is fixed via bKash Merchant now.
+})();
 (function initOnReady() {
   const bm = document.getElementById('bill-modal');
   if (bm) bm.addEventListener('click', function(e) { if (e.target === this) closeBillModal(); });
@@ -2847,289 +2719,6 @@ function renderBill(d) {
     `}
   `;
 }
-
-// ── DUTY ROTATION ──────────────────────────────────────────────────────────────
-const DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-let _rotData     = null;   // full data from /manager/rotation
-let _rotWeek     = 'this'; // 'this' or 'next'
-let _rotSlots    = [];     // working copy [{slot, student_id, student_name, roll_number, day_from, day_to, note}, ...]
-let _rotPickSlot = null;   // which slot is being edited
-
-function rotAddDays(isoDate, days) {
-  const d = new Date(isoDate + 'T00:00:00');
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0,10);
-}
-
-function rotFormatWeekLabel(weekStart) {
-  const d0 = new Date(weekStart + 'T00:00:00');
-  const d6 = new Date(weekStart + 'T00:00:00');
-  d6.setDate(d6.getDate() + 6);
-  const opts = {month:'short', day:'numeric'};
-  return `Week of ${d0.toLocaleDateString('en-US', opts)} – ${d6.toLocaleDateString('en-US', opts)}`;
-}
-
-async function loadRotation() {
-  try {
-    const r = await fetch('/manager/rotation');
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    _rotData = await r.json();
-    _rotSlots = buildDefaultSlots(_rotData[_rotWeek === 'this' ? 'this_week' : 'next_week']);
-    renderRotation();
-    renderDutyRosterCard();
-  } catch(e) {
-    toast('Failed to load duty rotation data.', 'error');
-    console.error('loadRotation error:', e);
-  }
-}
-
-function buildDefaultSlots(existing) {
-  // Start with 4 empty slots
-  const slots = [1,2,3,4].map(slot => ({
-    slot, student_id: null, student_name: '', roll_number: '', day_from: 1, day_to: 7, note: ''
-  }));
-  // Fill in any existing
-  if (existing) {
-    existing.forEach(row => {
-      const s = slots.find(s => s.slot === row.slot);
-      if (s) Object.assign(s, {
-        student_id: row.student_id, student_name: row.student_name || '',
-        roll_number: row.roll_number || '', day_from: row.day_from, day_to: row.day_to, note: row.note || ''
-      });
-    });
-  }
-  return slots;
-}
-
-function renderRotation() {
-  const weekStart = _rotWeek === 'this' ? _rotData.week_start : _rotData.next_week_start;
-  document.getElementById('rot-week-label').textContent =
-    (_rotWeek === 'this' ? '📅 This Week — ' : '📅 Next Week — ') + rotFormatWeekLabel(weekStart);
-
-  const tbody = document.getElementById('rotation-tbody');
-  tbody.innerHTML = _rotSlots.map((s, i) => {
-    const slotColors = ['#1a6b3a','#f0a500','#3b5fe2','#c2185b'];
-    const c = slotColors[i];
-    const dayFromLabel = DAY_NAMES[s.day_from - 1] || 'Mon';
-    const dayToLabel   = DAY_NAMES[s.day_to   - 1] || 'Sun';
-    return `
-    <tr>
-      <td style="text-align:center">
-        <span style="background:${c};color:#fff;width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">${s.slot}</span>
-      </td>
-      <td>
-        ${s.student_name
-          ? `<div style="font-weight:700;font-size:14px">${s.student_name}</div>
-             <div style="font-size:12px;color:var(--text-muted)">${s.roll_number}</div>`
-          : `<span style="color:var(--text-muted);font-size:13px;font-style:italic">— Not assigned —</span>`}
-        <button class="btn btn-outline btn-sm" style="margin-top:6px;font-size:12px;padding:5px 10px"
-          onclick="openRotPicker(${i})"><i class="fas fa-user-pen"></i> ${s.student_name ? 'Change' : 'Assign'}</button>
-        ${s.student_name ? `<button class="btn btn-sm" style="margin-top:6px;margin-left:4px;font-size:12px;padding:5px 10px;background:var(--danger-light);color:var(--danger);border:1px solid #feb2b2" onclick="clearRotSlot(${i})"><i class="fas fa-times"></i></button>` : ''}
-      </td>
-      <td style="text-align:center">
-        <div style="display:flex;align-items:center;gap:4px;justify-content:center">
-          <select onchange="_rotSlots[${i}].day_from=parseInt(this.value);renderRotation()" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit">
-            ${DAY_NAMES.map((n,di) => `<option value="${di+1}" ${di+1===s.day_from?'selected':''}>${n}</option>`).join('')}
-          </select>
-          <span style="font-size:11px;color:var(--text-muted)">to</span>
-          <select onchange="_rotSlots[${i}].day_to=parseInt(this.value);renderRotation()" style="padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit">
-            ${DAY_NAMES.map((n,di) => `<option value="${di+1}" ${di+1===s.day_to?'selected':''}>${n}</option>`).join('')}
-          </select>
-        </div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:3px">${dayFromLabel}–${dayToLabel}</div>
-      </td>
-      <td>
-        <input type="text" value="${s.note || ''}" placeholder="e.g. Evening only"
-          oninput="_rotSlots[${i}].note=this.value"
-          style="width:100%;padding:6px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit">
-      </td>
-      <td></td>
-    </tr>`;
-  }).join('');
-
-  // Today highlight (only for current week)
-  const todayBox = document.getElementById('rot-today-box');
-  if (_rotWeek === 'this' && _rotData) {
-    const todayDayNum = _rotData.weekday + 1; // weekday 0=Mon → dayNum 1
-    const onDuty = _rotSlots.filter(s => s.student_name && s.day_from <= todayDayNum && s.day_to >= todayDayNum);
-    if (onDuty.length > 0) {
-      document.getElementById('rot-today-name').textContent =
-        onDuty.map(s => `${s.student_name} (${s.roll_number})`).join(' & ');
-      todayBox.style.display = '';
-    } else {
-      todayBox.style.display = 'none';
-    }
-  } else {
-    todayBox.style.display = 'none';
-  }
-}
-
-function rotShowWeek(dir) {
-  _rotWeek = dir === 'next' ? 'next' : 'this';
-  _rotSlots = buildDefaultSlots(_rotData[_rotWeek === 'this' ? 'this_week' : 'next_week']);
-  // Update button highlight
-  document.getElementById('rotBtnThis').style.fontWeight = _rotWeek === 'this' ? '700' : '500';
-  document.getElementById('rotBtnThis').style.borderColor = _rotWeek === 'this' ? 'var(--primary)' : '';
-  document.getElementById('rotBtnThis').style.color = _rotWeek === 'this' ? 'var(--primary)' : '';
-  document.getElementById('rotBtnNext').style.fontWeight = _rotWeek === 'next' ? '700' : '500';
-  document.getElementById('rotBtnNext').style.borderColor = _rotWeek === 'next' ? 'var(--primary)' : '';
-  document.getElementById('rotBtnNext').style.color = _rotWeek === 'next' ? 'var(--primary)' : '';
-  renderRotation();
-}
-
-async function saveRotation() {
-  const weekStart = _rotWeek === 'this' ? _rotData.week_start : _rotData.next_week_start;
-  const r = await fetch('/manager/rotation/save', {
-    method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ week_start: weekStart, slots: _rotSlots.filter(s => s.student_name) })
-  });
-  const d = await r.json();
-  if (d.ok) { toast('Rotation schedule saved! ✅'); loadRotation(); }
-  else { toast(d.msg, 'error'); }
-}
-
-async function clearRotationWeek() {
-  // Guard: rotation data must be loaded first
-  if (!_rotData) {
-    try { await loadRotation(); } catch(e) { toast('Failed to load rotation data', 'error'); return; }
-  }
-  const weekStart = _rotWeek === 'this' ? _rotData.week_start : _rotData.next_week_start;
-  const weekLabel = _rotWeek === 'this' ? 'this week' : 'next week';
-  if (!weekStart) { toast('Could not determine week — please reload the page', 'error'); return; }
-  if (!confirm(`Clear the entire rotation schedule for ${weekLabel}? Pending duty invites will also be removed.`)) return;
-  try {
-    const r = await fetch('/manager/rotation/clear', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ week_start: weekStart })
-    });
-    if (!r.ok) throw new Error('Server error ' + r.status);
-    const d = await r.json();
-    if (d.ok) {
-      // Reset local working copy immediately so UI clears without waiting for reload
-      _rotSlots = [1,2,3,4].map(slot => ({
-        slot, student_id: null, student_name: '', roll_number: '', day_from: 1, day_to: 7, note: ''
-      }));
-      renderRotation();
-      toast('Rotation cleared ✅');
-      loadRotation(); // re-sync with server in background
-    } else {
-      toast(d.msg || 'Clear failed', 'error');
-    }
-  } catch(e) {
-    toast('Clear failed: ' + e.message, 'error');
-  }
-}
-
-// Student picker
-let _rotSearchTimeout = null;
-function openRotPicker(slotIdx) {
-  _rotPickSlot = slotIdx;
-  document.getElementById('rot-search-input').value = '';
-  document.getElementById('rot-search-results').innerHTML = '';
-  document.getElementById('rot-picker-modal').classList.add('open');
-  document.getElementById('rot-search-input').focus();
-}
-function closeRotPicker() {
-  document.getElementById('rot-picker-modal').classList.remove('open');
-  _rotPickSlot = null;
-}
-function rotSearch(q) {
-  clearTimeout(_rotSearchTimeout);
-  if (!q.trim()) { document.getElementById('rot-search-results').innerHTML = ''; return; }
-  _rotSearchTimeout = setTimeout(async () => {
-    const r = await fetch('/manager/rotation/search_students?q=' + encodeURIComponent(q));
-    const d = await r.json();
-    const el = document.getElementById('rot-search-results');
-    if (!d.students || d.students.length === 0) {
-      el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">No students found</div>';
-      return;
-    }
-    el.innerHTML = d.students.map(s => `
-      <div onclick="pickRotStudent(${s.id},'${s.name.replace(/'/g,"\\'")}','${s.roll_number}')"
-        style="padding:10px 14px;cursor:pointer;border-radius:8px;display:flex;justify-content:space-between;align-items:center;transition:background .15s"
-        onmouseover="this.style.background='var(--primary-pale)'" onmouseout="this.style.background=''">
-        <div>
-          <div style="font-weight:700;font-size:14px">${s.name}</div>
-          <div style="font-size:12px;color:var(--text-muted)">Roll: ${s.roll_number} · Batch ${s.batch}</div>
-        </div>
-        <i class="fas fa-plus" style="color:var(--primary)"></i>
-      </div>`).join('');
-  }, 250);
-}
-function pickRotStudent(id, name, roll) {
-  if (_rotPickSlot === null) return;
-  _rotSlots[_rotPickSlot].student_id   = id;
-  _rotSlots[_rotPickSlot].student_name = name;
-  _rotSlots[_rotPickSlot].roll_number  = roll;
-  closeRotPicker();
-  renderRotation();
-  renderDutyRosterCard();
-}
-function clearRotSlot(i) {
-  if (!_rotSlots[i]) return;
-  _rotSlots[i].student_id   = null;
-  _rotSlots[i].student_name = '';
-  _rotSlots[i].roll_number  = '';
-  _rotSlots[i].note         = '';
-  renderRotation();
-  renderDutyRosterCard();
-}
-function renderDutyRosterCard() {
-  if (!_rotData) return;
-  const thisWeekSlots = buildDefaultSlots(_rotData.this_week);
-  const slotColors = ['#1a6b3a','#f0a500','#3b5fe2','#c2185b'];
-  const slotBg     = ['#e8f5ee','#fff8e6','#eef2ff','#fff0f5'];
-  const todayNum   = _rotData.weekday + 1; // 1=Mon…7=Sun
-
-  // Week label
-  const ws = _rotData.week_start;
-  const d0 = new Date(ws + 'T00:00:00'), d6 = new Date(ws + 'T00:00:00');
-  d6.setDate(d6.getDate() + 6);
-  const fmt = {month:'short', day:'numeric'};
-  document.getElementById('roster-week-label').textContent =
-    d0.toLocaleDateString('en-US', fmt) + ' – ' + d6.toLocaleDateString('en-US', fmt);
-
-  const container = document.getElementById('duty-roster-slots');
-  container.innerHTML = thisWeekSlots.map((s, i) => {
-    const assigned = !!s.student_name;
-    const onDutyNow = assigned && s.day_from <= todayNum && s.day_to >= todayNum;
-    const dayLabel  = s.day_from === s.day_to
-      ? DAY_NAMES[s.day_from - 1]
-      : DAY_NAMES[s.day_from - 1] + '–' + DAY_NAMES[s.day_to - 1];
-    return `<div style="padding:14px 18px;border-right:1px solid var(--border);${onDutyNow ? 'background:'+slotBg[i]+';' : ''}">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <span style="background:${slotColors[i]};color:#fff;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">${s.slot}</span>
-        <span style="font-size:11px;color:var(--text-muted);font-weight:600">${dayLabel}</span>
-        ${onDutyNow ? '<span style="background:'+slotColors[i]+';color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px">TODAY</span>' : ''}
-      </div>
-      ${assigned
-        ? `<div style="font-weight:700;font-size:14px;color:var(--text)">${s.student_name}</div>
-           <div style="font-size:12px;color:var(--text-muted)">Roll: ${s.roll_number}</div>
-           ${s.note ? '<div style="font-size:11px;color:var(--text-muted);margin-top:3px;font-style:italic">'+s.note+'</div>' : ''}`
-        : `<div style="font-size:13px;color:var(--text-muted);font-style:italic">— Not assigned —</div>`}
-    </div>`;
-  }).join('');
-
-  // Today on-duty banner
-  const onDutyToday = thisWeekSlots.filter(s => s.student_name && s.day_from <= todayNum && s.day_to >= todayNum);
-  const todayBox = document.getElementById('duty-on-today');
-  if (onDutyToday.length > 0) {
-    document.getElementById('duty-on-today-text').textContent =
-      'On duty today: ' + onDutyToday.map(s => `${s.student_name} (${s.roll_number})`).join(' & ');
-    todayBox.style.display = '';
-  } else {
-    todayBox.style.display = 'none';
-  }
-}
-
-// Auto-load rotation summary on dashboard load (immediate — DOMContentLoaded already fired)
-(function initRotation() {
-  fetch('/manager/rotation').then(r => r.json()).then(data => {
-    _rotData = data;
-    _rotSlots = buildDefaultSlots(data.this_week);
-    renderDutyRosterCard();
-  }).catch(() => {});
-})();
 
 // ── bKash Proposal Panel ──────────────────────────────────────────────────────
 let _myManagerId = null;

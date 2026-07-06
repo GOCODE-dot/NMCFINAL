@@ -1,0 +1,104 @@
+<!--
+══════════════════════════════════════════════════════════════════════════════
+  student_dashboard.html — bKash Payment Gateway Patch
+  Replaces the manual "open modal → type TxnID → submit" flow with a real
+  one-tap redirect to bKash's checkout page, and automatic confirmation when
+  the student is sent back.
+
+  Requires the backend routes from app_bkash_gateway_additions.py.
+
+  3 edits, all inside student_dashboard.html:
+
+    EDIT 1 — replace the "bKash" button's onclick (was: openPayModal())
+    EDIT 2 — REPLACE openPayModal() and everything related to the manual
+              TxnID modal with payWithBkash() below
+    EDIT 3 — add the "payment confirmed" banner handler (reads ?paid=1)
+══════════════════════════════════════════════════════════════════════════════
+-->
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     EDIT 1 — FIND every button that currently does:
+       onclick="openPayModal()"
+
+     REPLACE with:
+     ══════════════════════════════════════════════════════════════════ -->
+
+<!--
+  <button class="btn btn-sm" style="background:rgba(255,255,255,.25);color:#fff;border:1px solid rgba(255,255,255,.5);padding:4px 10px;font-size:11px" onclick="payWithBkash(this)">
+    <i class="fas fa-mobile-alt"></i> Pay with bKash
+  </button>
+-->
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     EDIT 2 — REPLACE openPayModal() (and you can now delete the old
+     #pay-modal HTML entirely, along with submitPayment() / the TxnID
+     input — none of that is needed anymore since bKash confirms the
+     payment for you in real time).
+     ══════════════════════════════════════════════════════════════════ -->
+
+<script>
+async function payWithBkash(btn) {
+  const originalHTML = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Opening bKash…';
+
+  try {
+    const res  = await fetch('/student/bkash/pay', { method: 'POST' });
+    const data = await res.json();
+
+    if (!data.ok) {
+      toast(data.msg || 'Could not start payment.', 'error');
+      btn.disabled  = false;
+      btn.innerHTML = originalHTML;
+      return;
+    }
+
+    // Leave the dashboard and go to bKash's checkout page.
+    // The student will be sent right back to /student/bkash/callback
+    // (which redirects here again) once they finish paying.
+    window.location.href = data.bkashURL;
+
+  } catch (err) {
+    toast('Network error — please try again.', 'error');
+    btn.disabled  = false;
+    btn.innerHTML = originalHTML;
+  }
+}
+</script>
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     EDIT 3 — ADD this near the top of the page's <script> block (or
+     right after DOMContentLoaded fires). It shows a friendly confirmation
+     banner when the student lands back on the dashboard after a
+     successful bKash payment (i.e. URL has ?paid=1), and also surfaces
+     the flash message the backend already sets via flash(...).
+
+     Your base.html already has a flashed-messages block that will show
+     the flash('✅ Payment confirmed...') automatically if your dashboard
+     template renders {% with msgs = get_flashed_messages(...) %} like
+     your other pages do — check student_dashboard.html for that block.
+     If it's missing there, add it near the top of the page body:
+
+       {% with msgs = get_flashed_messages(with_categories=true) %}
+         {% for cat, msg in msgs %}
+           <div class="alert alert-{{ cat }}">{{ msg }}</div>
+         {% endfor %}
+       {% endwith %}
+
+     This extra JS just cleans the ?paid=1 out of the URL bar so a page
+     refresh doesn't look like a repeat confirmation.
+     ══════════════════════════════════════════════════════════════════ -->
+
+<script>
+(function cleanPaidQueryParam() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('paid') === '1') {
+    params.delete('paid');
+    const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+    window.history.replaceState({}, '', newUrl);
+  }
+})();
+</script>
