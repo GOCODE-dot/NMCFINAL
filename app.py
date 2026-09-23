@@ -271,9 +271,14 @@ RUPANTORPAY_BASE_URL  = os.environ.get('RUPANTORPAY_BASE_URL', 'https://payment.
 
 
 def _rupantorpay_headers():
+    # RupantorPay documents X-CLIENT for checkout requests.  Sending the
+    # public host here also helps the gateway associate the request with the
+    # domain registered in the merchant panel.
+    host = request.host if request else ''
     return {
         'Content-Type': 'application/json',
         'X-API-KEY': RUPANTORPAY_API_KEY,
+        'X-CLIENT': host,
     }
 
 
@@ -339,16 +344,19 @@ def rupantorpay_verify_payment(transaction_id):
     # like UddoktaPay-style BD gateways, whose real (documented) API expects
     # 'invoice_id' here — not 'transaction_id'. Sending both covers either
     # naming without risking anything if one of them is simply ignored.
+    # IMPORTANT: RupantorPay's current API requires `transaction_id`.
+    # Our old code also sent `invoice_id`, which caused verification to be
+    # performed against our internal NMMS invoice instead of the gateway's
+    # transaction ID in some return flows.
     resp = requests.post(f'{RUPANTORPAY_BASE_URL}/payment/verify-payment',
-                          json={'invoice_id': transaction_id, 'transaction_id': transaction_id},
+                          json={'transaction_id': transaction_id},
                           headers=_rupantorpay_headers(), timeout=15)
     try:
         result = resp.json()
     except Exception:
         result = {'status': 'unknown', 'raw_text': resp.text[:300]}
 
-    # DEBUG: same as above — check Railway logs to confirm the exact shape.
-    print(f'[RupantorPay] verify-payment raw response for id={transaction_id}: {result}')
+    print(f'[RupantorPay] verify-payment response for id={transaction_id}: {result}')
     return result
 
 
@@ -1755,18 +1763,31 @@ def _rupantorpay_finalize(invoice_number, sid, conn, gateway_ref=None):
     if sess_row['status'] == 'completed':
         return True, sess_row['amount'], sess_row['trx_id']
 
-    verify_id = gateway_ref or sess_row.get('gateway_invoice_id') or invoice_number
+    # Never verify using our internal invoice number. RupantorPay returns
+    # `transactionId` on the success redirect; that is the identifier their
+    # verify API expects.
+    verify_id = gateway_ref or sess_row.get('gateway_invoice_id')
+    if not verify_id:
+        return False, 0, None
+
     try:
         verify_result = rupantorpay_verify_payment(verify_id)
-    except Exception:
+    except Exception as exc:
+        print(f'[RupantorPay] verification request failed: {exc}')
         return False, 0, None
 
     if not _rupantorpay_is_success(verify_result):
-        execute(conn, "UPDATE rupantorpay_sessions SET status='failed' WHERE invoice_number=%s", (invoice_number,))
+        # Do not permanently mark an ambiguous gateway response as failed.
+        # The webhook or a later retry can still confirm it.
+        execute(conn, "UPDATE rupantorpay_sessions SET status='pending_verification' WHERE invoice_number=%s AND status <> 'completed'", (invoice_number,))
         conn.commit()
         return False, 0, None
 
-    trx_id = verify_result.get('transaction_id') or verify_result.get('trx_id') or invoice_number
+    data = verify_result.get('data') if isinstance(verify_result, dict) else {}
+    data = data if isinstance(data, dict) else {}
+    trx_id = (verify_result.get('transaction_id') or verify_result.get('transactionId')
+              or verify_result.get('trx_id') or data.get('transaction_id')
+              or data.get('transactionId') or data.get('trx_id') or verify_id)
     now    = datetime.utcnow().isoformat(timespec='seconds')
     amount = sess_row['amount']
     weekly = get_current_weekly_bkash()
@@ -1818,13 +1839,24 @@ def student_rupantorpay_return():
         conn.close()
         return redirect(url_for('student_dashboard', pay_result='cancelled'))
 
-    gateway_ref = (request.args.get('invoice_id') or request.args.get('transaction_id')
-                   or request.args.get('trx_id') or request.args.get('txn_id'))
+    # RupantorPay's documented success redirect uses camelCase
+    # `transactionId`, plus a `status` parameter. Accept the documented name
+    # and a few legacy spellings for compatibility.
+    gateway_ref = (request.args.get('transactionId') or request.args.get('transaction_id')
+                   or request.args.get('trx_id') or request.args.get('txn_id')
+                   or request.args.get('invoice_id'))
+    gateway_status = (request.args.get('status') or '').strip().upper()
+    if gateway_status in ('PENDING', 'ERROR'):
+        execute(conn, "UPDATE rupantorpay_sessions SET status='pending_verification' WHERE invoice_number=%s AND status <> 'completed'", (invoice_number,))
+        conn.commit()
+        conn.close()
+        return redirect(url_for('student_dashboard', pay_result='pending', trx=gateway_ref or ''))
+
     ok, amount, trx_id = _rupantorpay_finalize(invoice_number, sid, conn, gateway_ref=gateway_ref)
     conn.close()
 
     if not ok:
-        return redirect(url_for('student_dashboard', pay_result='failed'))
+        return redirect(url_for('student_dashboard', pay_result='pending', trx=gateway_ref or ''))
     return redirect(url_for('student_dashboard', pay_result='success', amount=int(amount), trx=trx_id))
 
 
@@ -1844,7 +1876,8 @@ def student_rupantorpay_webhook():
     if not invoice_number:
         return jsonify({'ok': False, 'msg': 'No invoice_number in webhook payload'}), 400
 
-    gateway_ref = data.get('invoice_id') or data.get('transaction_id') or data.get('trx_id')
+    gateway_ref = (data.get('transactionId') or data.get('transaction_id')
+                   or data.get('trx_id') or data.get('txn_id') or data.get('invoice_id'))
 
     conn = get_db()
     sess_row = queryOne(conn, "SELECT student_id FROM rupantorpay_sessions WHERE invoice_number=%s", (invoice_number,))
@@ -2067,7 +2100,8 @@ def student_securepaybd_webhook():
     if not invoice_number:
         return jsonify({'ok': False, 'msg': 'No invoice_number in webhook payload'}), 400
 
-    gateway_ref = data.get('invoice_id') or data.get('transaction_id') or data.get('trx_id')
+    gateway_ref = (data.get('transactionId') or data.get('transaction_id')
+                   or data.get('trx_id') or data.get('txn_id') or data.get('invoice_id'))
 
     conn = get_db()
     sess_row = queryOne(conn, "SELECT student_id FROM securepaybd_sessions WHERE invoice_number=%s", (invoice_number,))
