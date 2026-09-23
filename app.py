@@ -1387,6 +1387,15 @@ def student_order():
 @app.route('/student/cancel_order', methods=['POST'])
 @login_required('student')
 def cancel_order():
+    """Student self-service cancel — instant, no manager approval needed.
+
+    An UNPAID order (payment_status 'pending' or 'due') is deleted right
+    away. An already-PAID order (real money moved through the gateway) is
+    NOT silently deleted here — that would make the order vanish while the
+    money stays collected with no trace of what it was for. Those still
+    need a manager to action a refund, so they're left in place and the
+    student is told to contact the manager for a refund instead.
+    """
     d        = request.json
     sid      = session['user_id']
     today_bd = (datetime.utcnow() + timedelta(hours=6)).date()
@@ -1396,15 +1405,32 @@ def cancel_order():
     if meal_date < today_bd.isoformat():
         conn.close()
         return jsonify({'ok': False, 'msg': 'Cannot cancel a past meal order.'})
-    dup = queryOne(conn,
-        "SELECT id FROM meal_edit_requests WHERE student_id=%s AND meal_date=%s AND meal_type=%s AND status='pending'",
+
+    order = queryOne(conn,
+        "SELECT id, payment_status FROM meal_orders WHERE student_id=%s AND meal_date=%s AND meal_type=%s",
         (sid, meal_date, meal_type)
     )
-    if dup:
+    if not order:
         conn.close()
-        return jsonify({'ok': False, 'msg': 'You already have a pending cancel request for this meal.'})
+        return jsonify({'ok': False, 'msg': 'No order found for that meal.'})
+
+    if order['payment_status'] == 'paid':
+        conn.close()
+        return jsonify({
+            'ok': False,
+            'msg': "This meal is already paid for. Please contact your manager for a refund — it can't be self-cancelled."
+        })
+
+    # ── Unpaid order: cancel immediately, no manager step ─────────────────
+    execute(conn, "DELETE FROM meal_orders WHERE id=%s", (order['id'],))
+    conn.commit()
+
+    # If there was ever a leftover pending edit-request row for this exact
+    # meal (from before this route stopped creating them), clear it too so
+    # it can't resurface in the manager's queue for an order that no longer
+    # exists.
     execute(conn,
-        "INSERT INTO meal_edit_requests (student_id,meal_date,meal_type,action,reason) VALUES (%s,%s,%s,'cancel','Student requested cancellation')",
+        "DELETE FROM meal_edit_requests WHERE student_id=%s AND meal_date=%s AND meal_type=%s AND status='pending'",
         (sid, meal_date, meal_type)
     )
     conn.commit()
@@ -1432,7 +1458,7 @@ def cancel_order():
         bkash_cancelled = True
 
     conn.close()
-    return jsonify({'ok': True, 'via_request': True, 'cash_cancelled': cash_cancelled, 'bkash_cancelled': bkash_cancelled, 'msg': '📩 Cancel request sent to manager for approval.'})
+    return jsonify({'ok': True, 'via_request': False, 'cash_cancelled': cash_cancelled, 'bkash_cancelled': bkash_cancelled, 'msg': '✅ Meal cancelled.'})
 
 
 @app.route('/student/request_meal_edit', methods=['POST'])
