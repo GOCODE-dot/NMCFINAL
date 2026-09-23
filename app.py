@@ -1,6 +1,12 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, make_response
 import os, re, uuid, requests
 from datetime import datetime, timedelta, date
+
+# NMMS operates on Bangladesh local time (UTC+6). Keep dashboard, ordering,
+# payment dates and cook-sheet dates on the same calendar day.
+def bd_today():
+    return (datetime.utcnow() + timedelta(hours=6)).date()
+
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
@@ -885,7 +891,7 @@ def login_required(role):
 
 def get_current_weekly_bkash():
     try:
-        today      = date.today()
+        today      = bd_today()
         week_start = (today - timedelta(days=today.weekday())).isoformat()
         conn       = get_db()
         row = queryOne(conn,
@@ -987,7 +993,7 @@ def student_register():
 
 
 def check_and_apply_due_lock(conn, student_id):
-    seven_days_ago = (date.today() - timedelta(days=7)).isoformat()
+    seven_days_ago = (bd_today() - timedelta(days=7)).isoformat()
     overdue = queryOne(conn,
         "SELECT COUNT(*) as c FROM meal_orders WHERE student_id=%s AND payment_status IN ('pending','due') AND meal_date<%s",
         (student_id, seven_days_ago)
@@ -1503,7 +1509,7 @@ def submit_payment():
         execute(conn,
             "INSERT INTO payments (student_id,amount,bkash_txn,payment_date,status,manager_bkash,screenshot_note) "
             "VALUES (%s,%s,%s,%s,%s,%s,%s)",
-            (sid, amount, bkash_txn, date.today().isoformat(), 'pending_verification', weekly['bkash_number'], note)
+            (sid, amount, bkash_txn, bd_today().isoformat(), 'pending_verification', weekly['bkash_number'], note)
         )
         conn.commit()
         return jsonify({'ok': True, 'msg': 'Payment proof submitted! Awaiting manager verification.'})
@@ -1613,7 +1619,7 @@ def student_bkash_callback():
     execute(conn,
         "INSERT INTO payments (student_id, amount, bkash_txn, payment_date, status, manager_bkash, verified_at, verified_by) "
         "VALUES (%s,%s,%s,%s,'verified',%s,%s,'bkash_gateway')",
-        (sid, amount, trx_id, date.today().isoformat(), weekly['bkash_number'], now)
+        (sid, amount, trx_id, bd_today().isoformat(), weekly['bkash_number'], now)
     )
 
     # Mark unpaid meal orders as paid, oldest first, up to the paid amount
@@ -1795,7 +1801,7 @@ def _rupantorpay_finalize(invoice_number, sid, conn, gateway_ref=None):
     execute(conn,
         "INSERT INTO payments (student_id, amount, bkash_txn, payment_date, status, manager_bkash, verified_at, verified_by) "
         "VALUES (%s,%s,%s,%s,'verified',%s,%s,'rupantorpay_gateway')",
-        (sid, amount, trx_id, date.today().isoformat(), weekly['bkash_number'], now)
+        (sid, amount, trx_id, bd_today().isoformat(), weekly['bkash_number'], now)
     )
 
     unpaid = query(conn,
@@ -2031,7 +2037,7 @@ def _securepaybd_finalize(invoice_number, sid, conn, gateway_ref=None):
     execute(conn,
         "INSERT INTO payments (student_id, amount, bkash_txn, payment_date, status, manager_bkash, verified_at, verified_by) "
         "VALUES (%s,%s,%s,%s,'verified',%s,%s,'securepaybd_gateway')",
-        (sid, amount, trx_id, date.today().isoformat(), weekly['bkash_number'], now)
+        (sid, amount, trx_id, bd_today().isoformat(), weekly['bkash_number'], now)
     )
 
     unpaid = query(conn,
@@ -2476,13 +2482,42 @@ def manager_logout():
     session.clear()
     return redirect(url_for('index'))
 
-# ── MANAGER DASHBOARD ─────────────────────────────────────────────────────────
+# ── LIVE MANAGER DASHBOARD STATS ─────────────────────────────────────────────
+@app.route('/manager/dashboard_stats')
+@login_required('manager')
+def manager_dashboard_stats():
+    """Return live meal/payment totals using Bangladesh local date."""
+    conn = get_db()
+    today = bd_today().isoformat()
+    try:
+        pending_row = queryOne(conn, """
+            SELECT COALESCE(SUM(amount), 0) AS total
+            FROM meal_orders
+            WHERE payment_status IN ('pending','due')
+        """)
+        received_row = queryOne(conn, """
+            SELECT COALESCE(SUM(amount), 0) AS total
+            FROM payments
+            WHERE status='verified'
+        """)
+        lunch_row = queryOne(conn, "SELECT COUNT(*) AS c FROM meal_orders WHERE meal_date=%s AND meal_type='lunch'", (today,))
+        dinner_row = queryOne(conn, "SELECT COUNT(*) AS c FROM meal_orders WHERE meal_date=%s AND meal_type='dinner'", (today,))
+        return jsonify({
+            'ok': True,
+            'today': today,
+            'pending_amount': float(pending_row['total'] or 0),
+            'total_received': float(received_row['total'] or 0),
+            'today_lunch': int(lunch_row['c'] or 0),
+            'today_dinner': int(dinner_row['c'] or 0),
+        })
+    finally:
+        conn.close()
 
 @app.route('/manager/dashboard')
 @login_required('manager')
 def manager_dashboard():
     conn  = get_db()
-    today = date.today().isoformat()
+    today = bd_today().isoformat()
 
     total_students = queryOne(conn, "SELECT COUNT(*) as c FROM students")['c']
     today_lunch    = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE meal_date=%s AND meal_type='lunch'", (today,))['c']
@@ -2491,7 +2526,7 @@ def manager_dashboard():
     due_count      = queryOne(conn, "SELECT COUNT(DISTINCT student_id) as c FROM meal_orders WHERE payment_status='due'")['c']
     total_received = queryOne(conn, "SELECT COALESCE(SUM(amount),0) as t FROM payments WHERE status='verified'")['t']
 
-    week_dates = [(date.today() + timedelta(days=i)).isoformat() for i in range(7)]
+    week_dates = [(bd_today() + timedelta(days=i)).isoformat() for i in range(7)]
     weekly = []
     for d in week_dates:
         l  = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE meal_date=%s AND meal_type='lunch'",  (d,))['c']
@@ -2518,6 +2553,18 @@ def manager_dashboard():
         SELECT p.*, s.name as student_name, s.roll_number, s.batch
         FROM payments p JOIN students s ON s.id=p.student_id
         WHERE p.status='verified' ORDER BY p.verified_at DESC
+    """)
+
+    # Gateway payments are auto-verified and therefore do not appear in the
+    # pending proof list. Keep a dedicated recent list in the Gateway Payments
+    # tab so a successful gateway transaction is visibly confirmed there too.
+    gateway_verified_payments = query(conn, """
+        SELECT p.*, s.name as student_name, s.roll_number, s.batch
+        FROM payments p JOIN students s ON s.id=p.student_id
+        WHERE p.status='verified'
+          AND p.verified_by IN ('bkash_gateway','rupantorpay_gateway','securepaybd_gateway')
+        ORDER BY p.verified_at DESC
+        LIMIT 100
     """)
 
     male_count   = queryOne(conn, "SELECT COUNT(*) as c FROM students WHERE gender='male'")['c']
@@ -2607,6 +2654,7 @@ def manager_dashboard():
         mgr_roll          = mgr_roll_val,
         pending_payments  = pending_payments,
         verified_payments = verified_payments,
+        gateway_verified_payments = gateway_verified_payments,
         male_count        = male_count,
         female_count      = female_count,
         locked_students   = locked_students,
@@ -2680,7 +2728,7 @@ def mark_paid():
                 "INSERT INTO payments (student_id,amount,bkash_txn,payment_date,status,screenshot_note,"
                 "verified_at,verified_by) VALUES (%s,%s,'MANUAL-MARK',%s,'verified','Manually marked paid by manager',"
                 "to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS'),%s)",
-                (student['id'], amount, date.today().isoformat(), session['name'])
+                (student['id'], amount, bd_today().isoformat(), session['name'])
             )
         execute(conn,
             "UPDATE meal_orders SET payment_status='paid' WHERE student_id=%s AND payment_status IN ('pending','due')",
@@ -2709,7 +2757,7 @@ def collect_due():
                 "verified_at,verified_by) VALUES (%s,%s,'CASH-DUE-COLLECTED',%s,'verified',"
                 "'Due amount collected by manager in person',"
                 "to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS'),%s)",
-                (student['id'], amount, date.today().isoformat(), session['name'])
+                (student['id'], amount, bd_today().isoformat(), session['name'])
             )
         execute(conn,
             "UPDATE meal_orders SET payment_status='paid' WHERE student_id=%s AND payment_status='due'",
@@ -2758,7 +2806,7 @@ def accept_cash():
         "INSERT INTO payments (student_id,amount,bkash_txn,payment_date,status,screenshot_note,"
         "verified_at,verified_by) VALUES (%s,%s,'CASH-PAYMENT',%s,'verified',%s,"
         "to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS'),%s)",
-        (req['student_id'], req['amount'], date.today().isoformat(),
+        (req['student_id'], req['amount'], bd_today().isoformat(),
          f"Cash payment. Note: {req['note'] or 'N/A'}", session['name'])
     )
     execute(conn,
@@ -2790,7 +2838,7 @@ def decline_cash():
 @login_required('manager')
 def manager_students():
     conn  = get_db()
-    today = date.today().isoformat()
+    today = bd_today().isoformat()
     students = query(conn, """
         SELECT s.*,
                COUNT(mo.id) as total_meals,
@@ -2930,7 +2978,7 @@ def floor_students():
     gender = request.args.get('gender')
     floor  = request.args.get('floor')
     sub    = request.args.get('sub', 'all')
-    today  = str(date.today())
+    today  = str(bd_today())
     conn   = get_db()
 
     # Female hostel mapping: integer floor -> name
@@ -2995,7 +3043,7 @@ def floor_students():
 @app.route('/manager/clear_weekly', methods=['POST'])
 @login_required('manager')
 def clear_weekly():
-    week_ago = (date.today() - timedelta(days=7)).isoformat()
+    week_ago = (bd_today() - timedelta(days=7)).isoformat()
     conn = get_db()
     execute(conn, "DELETE FROM meal_orders WHERE meal_date<%s", (week_ago,))
     execute(conn, "DELETE FROM payments WHERE payment_date<%s AND status='verified'", (week_ago,))
@@ -3059,7 +3107,7 @@ def manager_change_password():
 @login_required('student')
 def meal_lock_status():
     sid       = session['user_id']
-    month_ago = (date.today() - timedelta(days=30)).isoformat()
+    month_ago = (bd_today() - timedelta(days=30)).isoformat()
     conn      = get_db()
     overdue   = queryOne(conn,
         "SELECT COUNT(*) as c FROM meal_orders WHERE student_id=%s AND payment_status IN ('pending','due') AND meal_date<%s",
@@ -3092,7 +3140,7 @@ def current_bkash():
 @app.route('/api/today_summary')
 @login_required('manager')
 def today_summary():
-    today = date.today().isoformat()
+    today = bd_today().isoformat()
     conn  = get_db()
     lunch  = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE meal_date=%s AND meal_type='lunch'",  (today,))['c']
     dinner = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE meal_date=%s AND meal_type='dinner'", (today,))['c']
@@ -3334,7 +3382,7 @@ def admin_reset():
         )
         msg = f'Full system reset done. MGR001 restored.'
     elif action == 'reset_weekly':
-        week_ago = (date.today() - timedelta(days=7)).isoformat()
+        week_ago = (bd_today() - timedelta(days=7)).isoformat()
         execute(conn, "DELETE FROM meal_orders WHERE meal_date<%s", (week_ago,))
         execute(conn, "DELETE FROM payments WHERE payment_date<%s AND status='verified'", (week_ago,))
         msg = 'Meal data older than 7 days cleared.'
@@ -3721,13 +3769,13 @@ def _get_total_bill(bill_date):
 @app.route('/admin/total_bill')
 @admin_required
 def admin_total_bill():
-    return jsonify(_get_total_bill(request.args.get('date', str(date.today()))))
+    return jsonify(_get_total_bill(request.args.get('date', str(bd_today()))))
 
 
 @app.route('/manager/total_bill')
 @login_required('manager')
 def total_bill():
-    return jsonify(_get_total_bill(request.args.get('date', str(date.today()))))
+    return jsonify(_get_total_bill(request.args.get('date', str(bd_today()))))
 
 
 @app.route('/manager/ordered_not_paid')
@@ -4053,7 +4101,7 @@ def manager_bkash_propose():
         return jsonify({'ok': False, 'msg': 'Valid bKash number required.'})
     conn       = get_db()
     my_id      = session['user_id']
-    today      = date.today()
+    today      = bd_today()
     week_start = (today - timedelta(days=today.weekday())).isoformat()
     execute(conn,
         "UPDATE bkash_proposals SET status='cancelled', resolved_at=to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS') "
@@ -4273,7 +4321,7 @@ def manager_overdue_students():
 @app.route('/manager/non_orderers')
 @login_required('manager')
 def manager_non_orderers():
-    today      = date.today()
+    today      = bd_today()
     week_start = (today - timedelta(days=today.weekday())).isoformat()
     week_end   = (today - timedelta(days=today.weekday()) + timedelta(days=6)).isoformat()
     conn       = get_db()
@@ -4332,7 +4380,7 @@ def manager_unlock_ordering():
 @app.route('/manager/auto_lock_non_orderers', methods=['POST'])
 @login_required('manager')
 def manager_auto_lock_non_orderers():
-    today      = date.today()
+    today      = bd_today()
     week_start = (today - timedelta(days=today.weekday())).isoformat()
     week_end   = (today - timedelta(days=today.weekday()) + timedelta(days=6)).isoformat()
     conn       = get_db()
@@ -4564,27 +4612,6 @@ def manager_debt_blocked_students():
     return jsonify({'ok': True, 'students': [dict(r) for r in rows]})
 
 
-# ── MANAGER DASHBOARD STATS ───────────────────────────────────────────────────
-
-@app.route('/manager/dashboard_stats')
-@login_required('manager')
-def manager_dashboard_stats():
-    """Return live pending_amount and total_received for the stat cards."""
-    conn = get_db()
-    pending_row = queryOne(conn,
-        "SELECT COALESCE(SUM(amount), 0) as total FROM meal_orders WHERE payment_status IN ('pending','due')"
-    )
-    received_row = queryOne(conn,
-        "SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE status='verified'"
-    )
-    conn.close()
-    return jsonify({
-        'ok':             True,
-        'pending_amount': float(pending_row['total'] or 0),
-        'total_received': float(received_row['total'] or 0),
-    })
-
-
 # ── ORDERING UNLOCK REQUESTS (manager-side) ───────────────────────────────────
 
 @app.route('/manager/ordering_unlock_requests')
@@ -4681,7 +4708,7 @@ def student_request_ordering_unlock():
 @app.route('/manager/cook_sheet')
 @login_required('manager')
 def manager_cook_sheet():
-    req_date = request.args.get('date', date.today().isoformat())
+    req_date = request.args.get('date', bd_today().isoformat())
     try:
         datetime.fromisoformat(req_date)
     except ValueError:
@@ -4693,8 +4720,8 @@ def manager_cook_sheet():
             "WHERE mo.meal_date=%s AND mo.meal_type=%s AND s.gender=%s",
             (req_date, meal_type, gender)
         )['c']
-    lunch_total   = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE meal_date=%s AND meal_type='lunch'",  (req_date,))['c']
-    dinner_total  = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE meal_date=%s AND meal_type='dinner'", (req_date,))['c']
+    lunch_total   = queryOne(conn, "SELECT COUNT(DISTINCT id) as c FROM meal_orders WHERE meal_date=%s AND meal_type='lunch'",  (req_date,))['c']
+    dinner_total  = queryOne(conn, "SELECT COUNT(DISTINCT id) as c FROM meal_orders WHERE meal_date=%s AND meal_type='dinner'", (req_date,))['c']
     # Resolve gender counts BEFORE closing the connection
     lunch_female  = gc('lunch',  'female')
     lunch_male    = gc('lunch',  'male')
