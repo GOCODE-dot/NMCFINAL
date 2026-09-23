@@ -2695,7 +2695,8 @@ def manager_dashboard():
     # showing" is the order being for a different date than "today" (e.g.
     # placed after the midnight cutoff, so it's filed under tomorrow).
     recent_orders = query(conn, """
-        SELECT mo.meal_date, mo.meal_type, mo.payment_status, mo.ordered_at,
+        SELECT mo.meal_date, mo.meal_type, mo.payment_status,
+               to_char(mo.ordered_at::timestamp + interval '6 hours', 'YYYY-MM-DD HH24:MI:SS') as ordered_at,
                s.name as student_name, s.roll_number
         FROM meal_orders mo JOIN students s ON s.id=mo.student_id
         ORDER BY mo.ordered_at DESC LIMIT 10
