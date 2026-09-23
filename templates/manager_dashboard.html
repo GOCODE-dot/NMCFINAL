@@ -481,12 +481,12 @@ document.addEventListener('click', function(e) {
     </div>
     <div class="stat-card">
       <div class="stat-icon blue"><i class="fas fa-sun"></i></div>
-      <div class="stat-value">{{ today_lunch }}</div>
+      <div class="stat-value" id="stat-today-lunch">{{ today_lunch }}</div>
       <div class="stat-label">Today's Lunch</div>
     </div>
     <div class="stat-card">
       <div class="stat-icon yellow"><i class="fas fa-moon"></i></div>
-      <div class="stat-value">{{ today_dinner }}</div>
+      <div class="stat-value" id="stat-today-dinner">{{ today_dinner }}</div>
       <div class="stat-label">Today's Dinner</div>
     </div>
     <div class="stat-card">
@@ -793,6 +793,31 @@ document.addEventListener('click', function(e) {
         <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Payments made through the payment gateway (bKash/Nagad/Rocket/Card) are verified automatically once they match a confirmed gateway transaction — no manual action needed. Anything listed below is a rare edge case that needs your review.</div>
       </div>
       <div style="padding:20px 24px">
+        {% if gateway_verified_payments %}
+          <div style="margin-bottom:18px;padding:14px 16px;background:#e8f5ee;border:1px solid #b7e4c7;border-radius:10px">
+            <div style="font-size:13px;font-weight:800;color:#1a6b3a;margin-bottom:10px">
+              <i class="fas fa-circle-check"></i> Automatically Verified Gateway Payments
+            </div>
+            {% for p in gateway_verified_payments %}
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 0;border-top:1px solid rgba(26,107,58,.15)">
+              <div>
+                <strong style="font-size:14px">{{ p.student_name }}</strong>
+                <span class="badge badge-green" style="margin-left:6px">{{ p.roll_number }}</span>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:4px">
+                  <span class="txn-badge">{{ p.bkash_txn }}</span>
+                  &nbsp;·&nbsp; ৳{{ "%.0f"|format(p.amount) }}
+                  &nbsp;·&nbsp; {{ p.payment_date }}
+                </div>
+              </div>
+              <div style="text-align:right">
+                <span class="badge badge-green"><i class="fas fa-check-circle"></i> Verified</span>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:3px">{{ p.verified_by }}</div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
         {% if pending_payments %}
           {% for p in pending_payments %}
           <div class="proof-card unverified" id="proof-{{ p.id }}">
@@ -3191,8 +3216,12 @@ async function refreshDashboardStats() {
     if (!data.ok) return;
     const pa = document.getElementById('stat-pending-amount');
     const tr = document.getElementById('stat-total-received');
+    const tl = document.getElementById('stat-today-lunch');
+    const td = document.getElementById('stat-today-dinner');
     if (pa) pa.textContent = '৳' + Math.round(data.pending_amount);
     if (tr) tr.textContent = '৳' + Math.round(data.total_received);
+    if (tl) tl.textContent = data.today_lunch || 0;
+    if (td) td.textContent = data.today_dinner || 0;
   } catch(_) {}
 }
 // Refresh stats after a short delay whenever a payment is verified or rejected
