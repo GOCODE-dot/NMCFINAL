@@ -1292,8 +1292,10 @@ updatePayModalAmounts();
     toast(`✅ This payment (৳${amount}) was already confirmed.`, 'success');
   } else if (result === 'cancelled') {
     toast('Payment was cancelled. You can try again anytime.', 'error');
+  } else if (result === 'pending') {
+    toast(`Payment is still being verified${trx ? ' (TxnID: ' + trx + ')' : ''}. If money was deducted, please do not pay again yet. Your Meal Manager can verify the transaction.`, 'error');
   } else if (result === 'failed') {
-    toast('We could not confirm this payment with the gateway yet. If money left your account, do not worry — it usually just needs a minute to sync, or contact your Meal Manager with your transaction ID.', 'error');
+    toast('We could not confirm this payment yet. If money was deducted, please do not pay again. Keep your transaction ID and contact your Meal Manager.', 'error');
   } else if (result === 'notfound') {
     toast('Payment session not found. If money was deducted, contact your Meal Manager.', 'error');
   } else if (result === 'error') {
