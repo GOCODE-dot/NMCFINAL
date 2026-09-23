@@ -285,17 +285,34 @@ def rupantorpay_create_payment(amount, invoice_number, fullname, email):
     except Exception:
         raise RuntimeError(f'RupantorPay returned a non-JSON response (HTTP {resp.status_code}): {resp.text[:300]}')
 
+    # DEBUG: print the raw checkout response to the server log (Railway ->
+    # Deployments -> View Logs) so the exact field names RupantorPay uses
+    # can be confirmed. Remove once everything is verified working.
+    print(f'[RupantorPay] checkout raw response: {data}')
+
     # RupantorPay's docs don't pin down the exact response key name, so we
     # check the common possibilities used by similar BD gateways.
     url = (data.get('payment_url') or data.get('paymentURL') or data.get('checkout_url')
            or data.get('url') or (data.get('data') or {}).get('payment_url'))
     if not url:
         raise RuntimeError(f'RupantorPay checkout did not return a payment URL: {data}')
-    return {'payment_url': url, 'raw': data}
+
+    # RupantorPay (like similar BD gateways, e.g. UddoktaPay) issues its OWN
+    # invoice/transaction id for this checkout, separate from the invoice
+    # number we generated. That gateway-side id — not our own invoice_number
+    # — is what verify-payment expects. Try the common key spellings.
+    d = data.get('data') or {}
+    gateway_invoice_id = (data.get('invoice_id') or data.get('transaction_id') or data.get('trx_id')
+                           or d.get('invoice_id') or d.get('transaction_id') or d.get('trx_id'))
+
+    return {'payment_url': url, 'gateway_invoice_id': gateway_invoice_id, 'raw': data}
 
 
 def rupantorpay_verify_payment(transaction_id):
-    """Confirm a payment's final status with RupantorPay's verify endpoint."""
+    """Confirm a payment's final status with RupantorPay's verify endpoint.
+    transaction_id here must be RupantorPay's OWN id for the payment (the
+    gateway_invoice_id captured at checkout time, or the id it hands back
+    on the redirect/webhook) — NOT our internal invoice_number."""
     if RUPANTORPAY_MOCK_MODE:
         return {'status': 'COMPLETED', 'transaction_id': transaction_id}
 
@@ -303,9 +320,13 @@ def rupantorpay_verify_payment(transaction_id):
                           json={'transaction_id': transaction_id},
                           headers=_rupantorpay_headers(), timeout=15)
     try:
-        return resp.json()
+        result = resp.json()
     except Exception:
-        return {'status': 'unknown', 'raw_text': resp.text[:300]}
+        result = {'status': 'unknown', 'raw_text': resp.text[:300]}
+
+    # DEBUG: same as above — check Railway logs to confirm the exact shape.
+    print(f'[RupantorPay] verify-payment raw response for id={transaction_id}: {result}')
+    return result
 
 
 def _rupantorpay_is_success(verify_result):
@@ -619,6 +640,7 @@ def init_db():
     conn.commit()  # flush all CREATE TABLE statements first
     for migration_sql in [
         "ALTER TABLE students ADD COLUMN debt_blocked INTEGER DEFAULT 0",
+        "ALTER TABLE rupantorpay_sessions ADD COLUMN gateway_invoice_id TEXT DEFAULT NULL",
     ]:
         _mc = get_db()
         try:
@@ -1552,18 +1574,23 @@ def student_rupantorpay_pay():
         return jsonify({'ok': False, 'msg': f'Could not start RupantorPay checkout: {e}'})
 
     execute(conn,
-        "INSERT INTO rupantorpay_sessions (student_id, invoice_number, amount, status) "
-        "VALUES (%s,%s,%s,'initiated')",
-        (sid, invoice_number, amount)
+        "INSERT INTO rupantorpay_sessions (student_id, invoice_number, amount, status, gateway_invoice_id) "
+        "VALUES (%s,%s,%s,'initiated',%s)",
+        (sid, invoice_number, amount, result.get('gateway_invoice_id'))
     )
     conn.commit()
     conn.close()
     return jsonify({'ok': True, 'payment_url': result['payment_url']})
 
 
-def _rupantorpay_finalize(invoice_number, sid, conn):
+def _rupantorpay_finalize(invoice_number, sid, conn, gateway_ref=None):
     """Shared logic: verify with RupantorPay, mark the session + meal orders
-    paid if successful. Returns (ok, amount, trx_id) or (False, 0, None)."""
+    paid if successful. Returns (ok, amount, trx_id) or (False, 0, None).
+
+    gateway_ref, when given (from the redirect query string or the webhook
+    payload), is RupantorPay's OWN id for this payment and takes priority
+    over whatever we stored at checkout time, since it's coming straight
+    from the gateway for this exact transaction."""
     sess_row = queryOne(conn,
         "SELECT * FROM rupantorpay_sessions WHERE invoice_number=%s AND student_id=%s",
         (invoice_number, sid)
@@ -1573,8 +1600,9 @@ def _rupantorpay_finalize(invoice_number, sid, conn):
     if sess_row['status'] == 'completed':
         return True, sess_row['amount'], sess_row['trx_id']
 
+    verify_id = gateway_ref or sess_row.get('gateway_invoice_id') or invoice_number
     try:
-        verify_result = rupantorpay_verify_payment(invoice_number)
+        verify_result = rupantorpay_verify_payment(verify_id)
     except Exception:
         return False, 0, None
 
@@ -1624,13 +1652,20 @@ def student_rupantorpay_return():
     sid  = session['user_id']
     conn = get_db()
 
+    # DEBUG: log everything RupantorPay put on the redirect URL so the exact
+    # param name it uses for its own transaction/invoice id can be confirmed
+    # from the Railway logs. Remove once everything is verified working.
+    print(f'[RupantorPay] return query params: {dict(request.args)}')
+
     if result != 'success':
         execute(conn, "UPDATE rupantorpay_sessions SET status='cancelled' WHERE invoice_number=%s", (invoice_number,))
         conn.commit()
         conn.close()
         return redirect(url_for('student_dashboard', pay_result='cancelled'))
 
-    ok, amount, trx_id = _rupantorpay_finalize(invoice_number, sid, conn)
+    gateway_ref = (request.args.get('invoice_id') or request.args.get('transaction_id')
+                   or request.args.get('trx_id') or request.args.get('txn_id'))
+    ok, amount, trx_id = _rupantorpay_finalize(invoice_number, sid, conn, gateway_ref=gateway_ref)
     conn.close()
 
     if not ok:
@@ -1645,10 +1680,16 @@ def student_rupantorpay_webhook():
     finalizes the payment too — this is what makes the gateway reliable even
     if the student closes their browser right after paying."""
     data = request.get_json(silent=True) or {}
+    # DEBUG: log the full webhook body so the exact field names RupantorPay
+    # sends can be confirmed from the Railway logs.
+    print(f'[RupantorPay] webhook payload: {data}')
+
     invoice_number = ((data.get('metadata') or {}).get('invoice_number')
                        or data.get('invoice_number') or '')
     if not invoice_number:
         return jsonify({'ok': False, 'msg': 'No invoice_number in webhook payload'}), 400
+
+    gateway_ref = data.get('invoice_id') or data.get('transaction_id') or data.get('trx_id')
 
     conn = get_db()
     sess_row = queryOne(conn, "SELECT student_id FROM rupantorpay_sessions WHERE invoice_number=%s", (invoice_number,))
@@ -1656,7 +1697,7 @@ def student_rupantorpay_webhook():
         conn.close()
         return jsonify({'ok': False, 'msg': 'Unknown invoice'}), 404
 
-    _rupantorpay_finalize(invoice_number, sess_row['student_id'], conn)
+    _rupantorpay_finalize(invoice_number, sess_row['student_id'], conn, gateway_ref=gateway_ref)
     conn.close()
     return jsonify({'ok': True})
 
