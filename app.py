@@ -17,6 +17,8 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from psycopg2 import IntegrityError as PgIntegrityError
 
+_LEGACY_GATEWAY_REPAIR_DONE = False
+
 app = Flask(__name__)
 
 # ── Trust reverse-proxy headers (Railway / Render / Heroku all set these) ─────
@@ -364,6 +366,88 @@ def rupantorpay_verify_payment(transaction_id):
 
     print(f'[RupantorPay] verify-payment response for id={transaction_id}: {result}')
     return result
+
+
+def _gateway_official_transaction_id(verify_result):
+    """Return only an explicit transaction ID returned by the gateway."""
+    if not isinstance(verify_result, dict):
+        return None
+    data = verify_result.get('data')
+    data = data if isinstance(data, dict) else {}
+    value = (verify_result.get('transaction_id') or verify_result.get('transactionId')
+             or verify_result.get('trx_id') or verify_result.get('trxId')
+             or data.get('transaction_id') or data.get('transactionId')
+             or data.get('trx_id') or data.get('trxId'))
+    value = str(value).strip() if value is not None else ''
+    return value or None
+
+
+def _repair_legacy_gateway_payment_rows(conn, limit=25):
+    """Repair old gateway rows that stored a checkout/reference ID as txn ID.
+
+    The stored value is sent to the gateway only as a verification reference.
+    We replace it in-place only when the gateway returns an explicit official
+    transaction ID. No guessed value is ever written.
+    """
+    repaired = 0
+    checked = 0
+    rows = query(conn, """
+        SELECT id, student_id, amount, bkash_txn, verified_by
+        FROM payments
+        WHERE status='verified'
+          AND verified_by IN ('rupantorpay_gateway','securepaybd_gateway')
+          AND COALESCE(TRIM(bkash_txn), '') <> ''
+        ORDER BY COALESCE(verified_at, created_at) DESC
+        LIMIT %s
+    """, (limit,))
+
+    for row in rows:
+        checked += 1
+        ref = str(row['bkash_txn']).strip()
+        try:
+            if row['verified_by'] == 'rupantorpay_gateway':
+                result = rupantorpay_verify_payment(ref)
+                success = _rupantorpay_is_success(result)
+            else:
+                result = securepaybd_verify_payment(ref)
+                success = _securepaybd_is_success(result)
+        except Exception as exc:
+            print(f"[Gateway repair] payment {row['id']} verification failed: {exc}")
+            continue
+
+        if not success:
+            continue
+
+        official = _gateway_official_transaction_id(result)
+        if not official:
+            print(f"[Gateway repair] payment {row['id']} verified but no official transaction ID was returned")
+            continue
+
+        if official == ref:
+            continue
+
+        execute(conn, "UPDATE payments SET bkash_txn=%s WHERE id=%s", (official, row['id']))
+        repaired += 1
+        print(f"[Gateway repair] payment {row['id']}: {ref!r} -> official {official!r}")
+
+        if row['verified_by'] == 'rupantorpay_gateway':
+            execute(conn, """
+                UPDATE rupantorpay_sessions
+                SET trx_id=%s, status='completed', completed_at=COALESCE(completed_at, CURRENT_TIMESTAMP)
+                WHERE student_id=%s AND amount=%s
+                  AND (gateway_invoice_id=%s OR trx_id=%s)
+            """, (official, row['student_id'], row['amount'], ref, ref))
+        else:
+            execute(conn, """
+                UPDATE securepaybd_sessions
+                SET trx_id=%s, status='completed', completed_at=COALESCE(completed_at, CURRENT_TIMESTAMP)
+                WHERE student_id=%s AND amount=%s
+                  AND (gateway_invoice_id=%s OR trx_id=%s)
+            """, (official, row['student_id'], row['amount'], ref, ref))
+
+    if repaired:
+        conn.commit()
+    return checked, repaired
 
 
 def _rupantorpay_is_success(verify_result):
@@ -1220,7 +1304,7 @@ def student_order():
 
     if not is_cutoff_override_active():
         now_bd      = datetime.utcnow() + timedelta(hours=6)  # Bangladesh time (UTC+6)
-        deadline_dt = datetime(order_date.year, order_date.month, order_date.day, 0, 0, 0)
+        deadline_dt = datetime(order_date.year, order_date.month, order_date.day, 0, 0, 0) + timedelta(days=1)
         if now_bd >= deadline_dt:
             conn.close()
             return jsonify({
@@ -1789,11 +1873,14 @@ def _rupantorpay_finalize(invoice_number, sid, conn, gateway_ref=None):
         conn.commit()
         return False, 0, None
 
-    data = verify_result.get('data') if isinstance(verify_result, dict) else {}
-    data = data if isinstance(data, dict) else {}
-    trx_id = (verify_result.get('transaction_id') or verify_result.get('transactionId')
-              or verify_result.get('trx_id') or data.get('transaction_id')
-              or data.get('transactionId') or data.get('trx_id') or verify_id)
+    # gateway_ref/gateway_invoice_id is only a verification reference.
+    # Save only the explicit official transaction ID returned by the gateway.
+    trx_id = _gateway_official_transaction_id(verify_result)
+    if not trx_id:
+        execute(conn, "UPDATE rupantorpay_sessions SET status='pending_verification' WHERE invoice_number=%s AND status <> 'completed'", (invoice_number,))
+        conn.commit()
+        print(f'[RupantorPay] Successful status but no official transaction ID returned for {invoice_number}; not marking payment verified.')
+        return False, 0, None
     now    = datetime.utcnow().isoformat(timespec='seconds')
     amount = sess_row['amount']
     weekly = get_current_weekly_bkash()
@@ -2029,7 +2116,15 @@ def _securepaybd_finalize(invoice_number, sid, conn, gateway_ref=None):
         conn.commit()
         return False, 0, None
 
-    trx_id = verify_result.get('transaction_id') or verify_result.get('trx_id') or invoice_number
+    # Never use our internal invoice number or verification reference as the
+    # customer's official transaction ID. It must come explicitly from the
+    # verified gateway response.
+    trx_id = _gateway_official_transaction_id(verify_result)
+    if not trx_id:
+        execute(conn, "UPDATE securepaybd_sessions SET status='pending_verification' WHERE invoice_number=%s AND status <> 'completed'", (invoice_number,))
+        conn.commit()
+        print(f'[SecurePayBD] Successful status but no official transaction ID returned for {invoice_number}; not marking payment verified.')
+        return False, 0, None
     now    = datetime.utcnow().isoformat(timespec='seconds')
     amount = sess_row['amount']
     weekly = get_current_weekly_bkash()
@@ -2500,8 +2595,8 @@ def manager_dashboard_stats():
             FROM payments
             WHERE status='verified'
         """)
-        lunch_row = queryOne(conn, "SELECT COUNT(*) AS c FROM meal_orders WHERE meal_date=%s AND meal_type='lunch'", (today,))
-        dinner_row = queryOne(conn, "SELECT COUNT(*) AS c FROM meal_orders WHERE meal_date=%s AND meal_type='dinner'", (today,))
+        lunch_row = queryOne(conn, "SELECT COUNT(*) AS c FROM meal_orders WHERE LEFT(meal_date::text, 10)=%s AND meal_type='lunch'", (today,))
+        dinner_row = queryOne(conn, "SELECT COUNT(*) AS c FROM meal_orders WHERE LEFT(meal_date::text, 10)=%s AND meal_type='dinner'", (today,))
         return jsonify({
             'ok': True,
             'today': today,
@@ -2520,8 +2615,8 @@ def manager_dashboard():
     today = bd_today().isoformat()
 
     total_students = queryOne(conn, "SELECT COUNT(*) as c FROM students")['c']
-    today_lunch    = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE meal_date=%s AND meal_type='lunch'", (today,))['c']
-    today_dinner   = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE meal_date=%s AND meal_type='dinner'", (today,))['c']
+    today_lunch    = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE LEFT(meal_date::text, 10)=%s AND meal_type='lunch'", (today,))['c']
+    today_dinner   = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE LEFT(meal_date::text, 10)=%s AND meal_type='dinner'", (today,))['c']
     pending_amount = queryOne(conn, "SELECT SUM(amount) as t FROM meal_orders WHERE payment_status IN ('pending','due')")['t'] or 0
     due_count      = queryOne(conn, "SELECT COUNT(DISTINCT student_id) as c FROM meal_orders WHERE payment_status='due'")['c']
     total_received = queryOne(conn, "SELECT COALESCE(SUM(amount),0) as t FROM payments WHERE status='verified'")['t']
@@ -2529,8 +2624,8 @@ def manager_dashboard():
     week_dates = [(bd_today() + timedelta(days=i)).isoformat() for i in range(7)]
     weekly = []
     for d in week_dates:
-        l  = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE meal_date=%s AND meal_type='lunch'",  (d,))['c']
-        dn = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE meal_date=%s AND meal_type='dinner'", (d,))['c']
+        l  = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE LEFT(meal_date::text, 10)=%s AND meal_type='lunch'",  (d,))['c']
+        dn = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE LEFT(meal_date::text, 10)=%s AND meal_type='dinner'", (d,))['c']
         weekly.append({'date': d, 'lunch': l, 'dinner': dn, 'total_amount': (l + dn) * 50})
 
     students_due = query(conn, """
@@ -2554,6 +2649,20 @@ def manager_dashboard():
         FROM payments p JOIN students s ON s.id=p.student_id
         WHERE p.status='verified' ORDER BY p.verified_at DESC
     """)
+
+    # Automatically repair legacy gateway payment rows once per process.
+    # Old deployments could display a gateway reference such as TBJ17L145046
+    # as the official transaction ID. The repair verifies that reference with
+    # the gateway and changes the existing row only when an explicit official
+    # transaction ID is returned.
+    global _LEGACY_GATEWAY_REPAIR_DONE
+    if not _LEGACY_GATEWAY_REPAIR_DONE:
+        try:
+            checked, repaired = _repair_legacy_gateway_payment_rows(conn, limit=25)
+            print(f'[Gateway repair] checked={checked}, repaired={repaired}')
+        except Exception as exc:
+            print(f'[Gateway repair] skipped: {exc}')
+        _LEGACY_GATEWAY_REPAIR_DONE = True
 
     # Gateway payments are auto-verified and therefore do not appear in the
     # pending proof list. Keep a dedicated recent list in the Gateway Payments
@@ -2586,8 +2695,8 @@ def manager_dashboard():
 
     floor_meals_today = query(conn, """
         SELECT s.floor,
-               SUM(CASE WHEN mo.meal_type='lunch'  AND mo.meal_date=%s THEN 1 ELSE 0 END) as lunch,
-               SUM(CASE WHEN mo.meal_type='dinner' AND mo.meal_date=%s THEN 1 ELSE 0 END) as dinner
+               SUM(CASE WHEN mo.meal_type='lunch'  AND LEFT(mo.meal_date::text, 10)=%s THEN 1 ELSE 0 END) as lunch,
+               SUM(CASE WHEN mo.meal_type='dinner' AND LEFT(mo.meal_date::text, 10)=%s THEN 1 ELSE 0 END) as dinner
         FROM students s
         LEFT JOIN meal_orders mo ON mo.student_id=s.id
         WHERE s.gender='male'
@@ -2596,18 +2705,18 @@ def manager_dashboard():
 
     female_lunch_today  = queryOne(conn,
         "SELECT COUNT(*) as c FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
-        "WHERE s.gender='female' AND mo.meal_type='lunch'  AND mo.meal_date=%s", (today,))['c']
+        "WHERE s.gender='female' AND mo.meal_type='lunch'  AND LEFT(mo.meal_date::text, 10)=%s", (today,))['c']
     female_dinner_today = queryOne(conn,
         "SELECT COUNT(*) as c FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
-        "WHERE s.gender='female' AND mo.meal_type='dinner' AND mo.meal_date=%s", (today,))['c']
+        "WHERE s.gender='female' AND mo.meal_type='dinner' AND LEFT(mo.meal_date::text, 10)=%s", (today,))['c']
 
     # Female hostel breakdown by floor number (1=Campus, 2=Sentu House, 3=Chairman House)
     HOSTEL_NAMES = {1: 'Campus', 2: 'Sentu House', 3: 'Chairman House'}
     female_hostel_breakdown = query(conn, """
         SELECT s.floor as hostel_num,
                COUNT(DISTINCT s.id) as student_count,
-               SUM(CASE WHEN mo.meal_type='lunch'  AND mo.meal_date=%s THEN 1 ELSE 0 END) as lunch_today,
-               SUM(CASE WHEN mo.meal_type='dinner' AND mo.meal_date=%s THEN 1 ELSE 0 END) as dinner_today
+               SUM(CASE WHEN mo.meal_type='lunch'  AND LEFT(mo.meal_date::text, 10)=%s THEN 1 ELSE 0 END) as lunch_today,
+               SUM(CASE WHEN mo.meal_type='dinner' AND LEFT(mo.meal_date::text, 10)=%s THEN 1 ELSE 0 END) as dinner_today
         FROM students s
         LEFT JOIN meal_orders mo ON mo.student_id=s.id
         WHERE s.gender='female'
@@ -2859,8 +2968,8 @@ def manager_students():
         SELECT s.floor, COUNT(DISTINCT s.id) as student_count,
                SUM(CASE WHEN s.gender='male'   THEN 1 ELSE 0 END) as males,
                SUM(CASE WHEN s.gender='female' THEN 1 ELSE 0 END) as females,
-               SUM(CASE WHEN mo.meal_type='lunch'  AND mo.meal_date=%s THEN 1 ELSE 0 END) as today_lunch,
-               SUM(CASE WHEN mo.meal_type='dinner' AND mo.meal_date=%s THEN 1 ELSE 0 END) as today_dinner
+               SUM(CASE WHEN mo.meal_type='lunch'  AND LEFT(mo.meal_date::text, 10)=%s THEN 1 ELSE 0 END) as today_lunch,
+               SUM(CASE WHEN mo.meal_type='dinner' AND LEFT(mo.meal_date::text, 10)=%s THEN 1 ELSE 0 END) as today_dinner
         FROM students s LEFT JOIN meal_orders mo ON mo.student_id=s.id
         WHERE s.gender='male'
         GROUP BY s.floor ORDER BY s.floor
@@ -2869,8 +2978,8 @@ def manager_students():
     # Female hostel totals (floor 1=Campus, 2=Sentu House, 3=Chairman House)
     female_hostel_totals_raw = query(conn, """
         SELECT s.floor as hostel_num, COUNT(DISTINCT s.id) as student_count,
-               SUM(CASE WHEN mo.meal_type='lunch'  AND mo.meal_date=%s THEN 1 ELSE 0 END) as today_lunch,
-               SUM(CASE WHEN mo.meal_type='dinner' AND mo.meal_date=%s THEN 1 ELSE 0 END) as today_dinner
+               SUM(CASE WHEN mo.meal_type='lunch'  AND LEFT(mo.meal_date::text, 10)=%s THEN 1 ELSE 0 END) as today_lunch,
+               SUM(CASE WHEN mo.meal_type='dinner' AND LEFT(mo.meal_date::text, 10)=%s THEN 1 ELSE 0 END) as today_dinner
         FROM students s LEFT JOIN meal_orders mo ON mo.student_id=s.id
         WHERE s.gender='female'
         GROUP BY s.floor ORDER BY s.floor
@@ -3009,21 +3118,21 @@ def floor_students():
             rows = query(conn,
                 "SELECT s.name, s.roll_number, s.batch, s.bkash_number, s.floor "
                 "FROM students s JOIN meal_orders mo ON mo.student_id=s.id "
-                "WHERE s.gender='male' AND s.floor=%s AND mo.meal_type=%s AND mo.meal_date=%s ORDER BY s.name",
+                "WHERE s.gender='male' AND s.floor=%s AND mo.meal_type=%s AND LEFT(mo.meal_date::text, 10)=%s ORDER BY s.name",
                 (floor, meal_type, today)
             )
         elif gender == 'female' and floor:
             rows = query(conn,
                 "SELECT s.name, s.roll_number, s.batch, s.bkash_number, s.floor "
                 "FROM students s JOIN meal_orders mo ON mo.student_id=s.id "
-                "WHERE s.gender='female' AND s.floor=%s AND mo.meal_type=%s AND mo.meal_date=%s ORDER BY s.name",
+                "WHERE s.gender='female' AND s.floor=%s AND mo.meal_type=%s AND LEFT(mo.meal_date::text, 10)=%s ORDER BY s.name",
                 (floor, meal_type, today)
             )
         elif gender == 'female':
             rows = query(conn,
                 "SELECT s.name, s.roll_number, s.batch, s.bkash_number, s.floor "
                 "FROM students s JOIN meal_orders mo ON mo.student_id=s.id "
-                "WHERE s.gender='female' AND mo.meal_type=%s AND mo.meal_date=%s ORDER BY s.name",
+                "WHERE s.gender='female' AND mo.meal_type=%s AND LEFT(mo.meal_date::text, 10)=%s ORDER BY s.name",
                 (meal_type, today)
             )
         else:
@@ -3142,8 +3251,8 @@ def current_bkash():
 def today_summary():
     today = bd_today().isoformat()
     conn  = get_db()
-    lunch  = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE meal_date=%s AND meal_type='lunch'",  (today,))['c']
-    dinner = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE meal_date=%s AND meal_type='dinner'", (today,))['c']
+    lunch  = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE LEFT(meal_date::text, 10)=%s AND meal_type='lunch'",  (today,))['c']
+    dinner = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE LEFT(meal_date::text, 10)=%s AND meal_type='dinner'", (today,))['c']
     conn.close()
     return jsonify({'lunch': lunch, 'dinner': dinner, 'total': (lunch + dinner) * 50})
 
@@ -3730,27 +3839,27 @@ def admin_list_managers():
 
 def _get_total_bill(bill_date):
     conn = get_db()
-    lunch_total  = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE meal_date=%s AND meal_type='lunch'",  (bill_date,))['c']
-    dinner_total = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE meal_date=%s AND meal_type='dinner'", (bill_date,))['c']
+    lunch_total  = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE LEFT(meal_date::text, 10)=%s AND meal_type='lunch'",  (bill_date,))['c']
+    dinner_total = queryOne(conn, "SELECT COUNT(*) as c FROM meal_orders WHERE LEFT(meal_date::text, 10)=%s AND meal_type='dinner'", (bill_date,))['c']
     male_lunch   = queryOne(conn,
         "SELECT COUNT(*) as c FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
-        "WHERE mo.meal_date=%s AND mo.meal_type='lunch'  AND s.gender='male'", (bill_date,))['c']
+        "WHERE LEFT(mo.meal_date::text, 10)=%s AND mo.meal_type='lunch'  AND s.gender='male'", (bill_date,))['c']
     male_dinner  = queryOne(conn,
         "SELECT COUNT(*) as c FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
-        "WHERE mo.meal_date=%s AND mo.meal_type='dinner' AND s.gender='male'", (bill_date,))['c']
+        "WHERE LEFT(mo.meal_date::text, 10)=%s AND mo.meal_type='dinner' AND s.gender='male'", (bill_date,))['c']
     female_lunch = queryOne(conn,
         "SELECT COUNT(*) as c FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
-        "WHERE mo.meal_date=%s AND mo.meal_type='lunch'  AND s.gender='female'", (bill_date,))['c']
+        "WHERE LEFT(mo.meal_date::text, 10)=%s AND mo.meal_type='lunch'  AND s.gender='female'", (bill_date,))['c']
     female_dinner = queryOne(conn,
         "SELECT COUNT(*) as c FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
-        "WHERE mo.meal_date=%s AND mo.meal_type='dinner' AND s.gender='female'", (bill_date,))['c']
+        "WHERE LEFT(mo.meal_date::text, 10)=%s AND mo.meal_type='dinner' AND s.gender='female'", (bill_date,))['c']
     floor_rows = query(conn, """
         SELECT s.floor,
                SUM(CASE WHEN mo.meal_type='lunch'  THEN 1 ELSE 0 END) as lunch,
                SUM(CASE WHEN mo.meal_type='dinner' THEN 1 ELSE 0 END) as dinner,
                COUNT(*) as total
         FROM meal_orders mo JOIN students s ON s.id=mo.student_id
-        WHERE mo.meal_date=%s AND s.gender='male'
+        WHERE LEFT(mo.meal_date::text, 10)=%s AND s.gender='male'
         GROUP BY s.floor ORDER BY s.floor
     """, (bill_date,))
     conn.close()
@@ -4327,7 +4436,7 @@ def manager_non_orderers():
     conn       = get_db()
     rows = query(conn, """
         SELECT s.id, s.name, s.roll_number, s.batch, s.gender, s.bkash_number, s.ordering_locked,
-               (SELECT COUNT(*) FROM meal_orders mo WHERE mo.student_id=s.id AND mo.meal_date>=%s AND mo.meal_date<=%s) as orders_this_week
+               (SELECT COUNT(*) FROM meal_orders mo WHERE mo.student_id=s.id AND LEFT(mo.meal_date::text, 10)>=%s AND LEFT(mo.meal_date::text, 10)<=%s) as orders_this_week
         FROM students s ORDER BY s.batch, s.roll_number
     """, (week_start, week_end))
     conn.close()
@@ -4388,7 +4497,7 @@ def manager_auto_lock_non_orderers():
         SELECT s.id FROM students s
         WHERE s.ordering_locked=0
           AND NOT EXISTS (
-              SELECT 1 FROM meal_orders mo WHERE mo.student_id=s.id AND mo.meal_date>=%s AND mo.meal_date<=%s
+              SELECT 1 FROM meal_orders mo WHERE mo.student_id=s.id AND LEFT(mo.meal_date::text, 10)>=%s AND LEFT(mo.meal_date::text, 10)<=%s
           )
     """, (week_start, week_end))
     locked_count = 0
@@ -4421,7 +4530,7 @@ def api_non_orderers_summary():
     conn      = get_db()
     rows = query(conn, """
         SELECT s.id, s.name, s.roll_number, s.batch, s.gender, s.ordering_locked,
-               (SELECT COUNT(*) FROM meal_orders mo WHERE mo.student_id=s.id AND mo.meal_date>=%s) as recent_orders
+               (SELECT COUNT(*) FROM meal_orders mo WHERE mo.student_id=s.id AND LEFT(mo.meal_date::text, 10)>=%s) as recent_orders
         FROM students s ORDER BY s.batch, s.roll_number
     """, (three_ago,))
     total        = len(rows)
@@ -4717,11 +4826,11 @@ def manager_cook_sheet():
     def gc(meal_type, gender):
         return queryOne(conn,
             "SELECT COUNT(*) as c FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
-            "WHERE mo.meal_date=%s AND mo.meal_type=%s AND s.gender=%s",
+            "WHERE LEFT(mo.meal_date::text, 10)=%s AND mo.meal_type=%s AND s.gender=%s",
             (req_date, meal_type, gender)
         )['c']
-    lunch_total   = queryOne(conn, "SELECT COUNT(DISTINCT id) as c FROM meal_orders WHERE meal_date=%s AND meal_type='lunch'",  (req_date,))['c']
-    dinner_total  = queryOne(conn, "SELECT COUNT(DISTINCT id) as c FROM meal_orders WHERE meal_date=%s AND meal_type='dinner'", (req_date,))['c']
+    lunch_total   = queryOne(conn, "SELECT COUNT(DISTINCT id) as c FROM meal_orders WHERE LEFT(meal_date::text, 10)=%s AND meal_type='lunch'",  (req_date,))['c']
+    dinner_total  = queryOne(conn, "SELECT COUNT(DISTINCT id) as c FROM meal_orders WHERE LEFT(meal_date::text, 10)=%s AND meal_type='dinner'", (req_date,))['c']
     # Resolve gender counts BEFORE closing the connection
     lunch_female  = gc('lunch',  'female')
     lunch_male    = gc('lunch',  'male')
@@ -4729,22 +4838,22 @@ def manager_cook_sheet():
     dinner_male   = gc('dinner', 'male')
     floor_lunch   = query(conn,
         "SELECT s.floor, COUNT(*) as count FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
-        "WHERE mo.meal_date=%s AND mo.meal_type='lunch'  AND s.gender='male' GROUP BY s.floor ORDER BY s.floor",
+        "WHERE LEFT(mo.meal_date::text, 10)=%s AND mo.meal_type='lunch'  AND s.gender='male' GROUP BY s.floor ORDER BY s.floor",
         (req_date,)
     )
     floor_dinner  = query(conn,
         "SELECT s.floor, COUNT(*) as count FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
-        "WHERE mo.meal_date=%s AND mo.meal_type='dinner' AND s.gender='male' GROUP BY s.floor ORDER BY s.floor",
+        "WHERE LEFT(mo.meal_date::text, 10)=%s AND mo.meal_type='dinner' AND s.gender='male' GROUP BY s.floor ORDER BY s.floor",
         (req_date,)
     )
     hostel_lunch  = query(conn,
         "SELECT s.floor, COUNT(*) as count FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
-        "WHERE mo.meal_date=%s AND mo.meal_type='lunch'  AND s.gender='female' GROUP BY s.floor ORDER BY s.floor",
+        "WHERE LEFT(mo.meal_date::text, 10)=%s AND mo.meal_type='lunch'  AND s.gender='female' GROUP BY s.floor ORDER BY s.floor",
         (req_date,)
     )
     hostel_dinner = query(conn,
         "SELECT s.floor, COUNT(*) as count FROM meal_orders mo JOIN students s ON s.id=mo.student_id "
-        "WHERE mo.meal_date=%s AND mo.meal_type='dinner' AND s.gender='female' GROUP BY s.floor ORDER BY s.floor",
+        "WHERE LEFT(mo.meal_date::text, 10)=%s AND mo.meal_type='dinner' AND s.gender='female' GROUP BY s.floor ORDER BY s.floor",
         (req_date,)
     )
     HOSTEL_NAMES = {1: 'Campus', 2: 'Sentu House', 3: 'Chairman House'}
