@@ -502,6 +502,42 @@ document.addEventListener('click', function(e) {
   </div>
   <!-- Due payments are no longer available: banner removed -->
 
+  <!-- Diagnostic: exactly what's stored for the most recent orders, and
+       what calendar date (Bangladesh time) the server is comparing "Today"
+       against — the fastest way to see whether an order is simply filed
+       under a different date than expected. -->
+  {% if recent_orders %}
+  <details class="card section-card" style="margin-bottom:18px;padding:14px 20px">
+    <summary style="cursor:pointer;font-weight:700;color:var(--text-muted);font-size:13px">
+      <i class="fas fa-bug"></i> Debug: Recent orders (server "today" = {{ server_today }})
+    </summary>
+    <div style="overflow-x:auto;margin-top:10px">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="text-align:left;color:var(--text-muted);border-bottom:1px solid var(--border)">
+            <th style="padding:6px 8px">Student</th>
+            <th style="padding:6px 8px">Meal Date</th>
+            <th style="padding:6px 8px">Type</th>
+            <th style="padding:6px 8px">Status</th>
+            <th style="padding:6px 8px">Ordered At (UTC)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in recent_orders %}
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:6px 8px">{{ o.student_name }} ({{ o.roll_number }})</td>
+            <td style="padding:6px 8px;font-weight:700">{{ o.meal_date }}</td>
+            <td style="padding:6px 8px">{{ o.meal_type }}</td>
+            <td style="padding:6px 8px">{{ o.payment_status }}</td>
+            <td style="padding:6px 8px">{{ o.ordered_at }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {% endif %}
+
   <!-- ── bKash Collection Number change/voting panel removed ──────────────────
        bKash number is now fixed via the bKash Merchant account, so managers
        can no longer change it from the dashboard. ─────────────────────────── -->
@@ -2418,7 +2454,10 @@ function printVerified() {
 
 // ── TOTAL BILL MODAL ─────────────────────────────────────────────────────────
 function openBillModal() {
-  const today = new Date().toISOString().slice(0,10);
+  // Bangladesh time (UTC+6), not raw UTC — matches "today" everywhere else
+  // on the server. Using UTC here made this default to yesterday's date
+  // during the midnight-6am BD window.
+  const today = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString().slice(0,10);
   const inp = document.getElementById('bill-date-input');
   if (inp) inp.value = today;
   document.getElementById('bill-modal').classList.add('open');
@@ -3028,11 +3067,14 @@ async function loadCookSheet() {
 
 // ── Cook sheet auto-init — runs AFTER loadCookSheet is defined ────────────────
 (function initCookDate() {
-  const today = new Date();
-  const yyyy  = today.getFullYear();
-  const mm    = String(today.getMonth() + 1).padStart(2, '0');
-  const dd    = String(today.getDate()).padStart(2, '0');
-  const todayStr = `${yyyy}-${mm}-${dd}`;
+  // Use Bangladesh Standard Time (UTC+6), not the manager's browser-local
+  // date, so this always defaults to the SAME "today" the server uses
+  // everywhere else (student ordering, the top stat cards, etc). Before this
+  // fix, a manager viewing from any timezone behind Bangladesh would have
+  // this default to yesterday's date around/after midnight BD time, making
+  // a same-day order look like it "isn't showing up" on the Cook Sheet.
+  const nowBD = new Date(Date.now() + 6 * 60 * 60 * 1000);
+  const todayStr = nowBD.toISOString().slice(0, 10);
   const inp = document.getElementById('cook-date-input');
   if (inp) inp.value = todayStr;
   // Fire immediately (script is at bottom of page, DOM is ready)
