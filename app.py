@@ -860,6 +860,8 @@ def student_dashboard():
     ordering_locked = bool(student_row and student_row['ordering_locked'])
     debt_blocked    = bool(student_row and student_row.get('debt_blocked'))
     student_bkash   = student_row['bkash_number'] if student_row else ''
+    student_batch   = student_row['batch']        if student_row else ''
+    student_roll    = student_row['roll_number']  if student_row else ''
 
     pending_payment_row = queryOne(conn,
         "SELECT bkash_txn, amount, created_at FROM payments WHERE student_id=%s AND status='pending_verification' ORDER BY created_at DESC LIMIT 1",
@@ -896,6 +898,8 @@ def student_dashboard():
         week_deadline   = week_end,
         today_str       = today.isoformat(),
         student_bkash   = student_bkash,
+        student_batch   = student_batch,
+        student_roll    = student_roll,
         has_pending_payment = has_pending_payment,
         pending_payment_txn = pending_payment_txn,
         has_pending_cash    = has_pending_cash,
@@ -4026,4 +4030,5 @@ with app.app_context():
         raise
 
 if __name__ == '__main__':
-    app.run(debug=True, port=int(os.environ.get('PORT', 5000)))
+    _debug = os.environ.get('FLASK_DEBUG', '').lower() in ('1', 'true', 'on')
+    app.run(host='0.0.0.0', debug=_debug, port=int(os.environ.get('PORT', 5000)))
