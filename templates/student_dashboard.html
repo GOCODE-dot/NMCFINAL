@@ -614,7 +614,10 @@
       {% if due > 0 %}
       <div style="display:flex;gap:5px;margin-top:8px">
         <button class="btn btn-sm" style="background:rgba(255,255,255,.25);color:#fff;border:1.5px solid rgba(255,255,255,.5);padding:4px 10px;font-size:11px;flex:1;justify-content:center" onclick="payWithBkash(this)">
-          <i class="fas fa-mobile-alt"></i> Pay with bKash
+          <i class="fas fa-mobile-alt"></i> bKash
+        </button>
+        <button class="btn btn-sm" style="background:rgba(255,255,255,.25);color:#fff;border:1.5px solid rgba(255,255,255,.5);padding:4px 10px;font-size:11px;flex:1;justify-content:center" onclick="payWithRupantorPay(this)">
+          <i class="fas fa-credit-card"></i> Other (Nagad/Rocket)
         </button>
         <button class="btn btn-sm" style="background:rgba(255,255,255,.18);color:#fff;border:1.5px solid rgba(255,255,255,.4);padding:4px 10px;font-size:11px;flex:1;justify-content:center" onclick="openCashModal()">
           <i class="fas fa-money-bill-wave"></i> Cash
@@ -805,6 +808,9 @@
         {% if due > 0 %}
         <button class="btn btn-primary btn-sm" onclick="payWithBkash(this)">
           <i class="fas fa-mobile-alt"></i> Pay with bKash
+        </button>
+        <button class="btn btn-primary btn-sm" onclick="payWithRupantorPay(this)">
+          <i class="fas fa-credit-card"></i> Nagad/Rocket/Card
         </button>
         {% endif %}
       </div>
@@ -2232,6 +2238,45 @@ async function payWithBkash(btn) {
     // sent back to /student/bkash/callback (which redirects here again)
     // once they finish paying, and the banner below shows the result.
     window.location.href = data.bkashURL;
+
+  } catch (err) {
+    toast('Network error — please try again.', 'error');
+    btn.disabled  = false;
+    btn.innerHTML = originalHTML;
+  }
+}
+
+async function payWithRupantorPay(btn) {
+  // ── Guard: block if a cash request is already pending ─────────────────────
+  try {
+    const cr = await fetch('/student/cash_request_status');
+    const cd = await cr.json();
+    if (cd.request && cd.request.status === 'pending') {
+      toast('⚠️ You already have a pending cash payment request. Cancel it first before paying.', 'error');
+      return;
+    }
+  } catch(_) { /* network hiccup — allow through, backend will catch */ }
+
+  const originalHTML = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Opening…';
+
+  try {
+    const res  = await fetch('/student/rupantorpay/pay', { method: 'POST' });
+    const data = await res.json();
+
+    if (!data.ok) {
+      toast(data.msg || 'Could not start payment.', 'error');
+      btn.disabled  = false;
+      btn.innerHTML = originalHTML;
+      return;
+    }
+
+    // Leave the dashboard and go to RupantorPay's checkout page, where the
+    // student picks bKash / Nagad / Rocket / card. They're sent back to
+    // /student/rupantorpay/return once done, which redirects here again
+    // with the result banner shown below.
+    window.location.href = data.payment_url;
 
   } catch (err) {
     toast('Network error — please try again.', 'error');
