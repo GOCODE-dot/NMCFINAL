@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, make_response
-import os, re, uuid, requests
+import os, re
 from datetime import datetime, timedelta, date
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -126,306 +126,6 @@ def execute(conn, sql, params=()):
     cur = conn.cursor()
     cur.execute(sql, params)
     return cur
-
-# ── bKash Payment Gateway (PGW) config ────────────────────────────────────────
-# Set these as real environment variables once you have a bKash Merchant/PGW
-# account. Until then BKASH_MOCK_MODE defaults ON so the whole flow (redirect
-# out, "pay", redirect back, order confirmed) can be tested with no bKash
-# account and no public HTTPS domain.
-BKASH_MOCK_MODE    = os.environ.get('BKASH_MOCK_MODE', '1') == '1'
-BKASH_BASE_URL     = os.environ.get('BKASH_BASE_URL', 'https://tokenized.sandbox.bka.sh/v1.2.0-beta')
-BKASH_APP_KEY      = os.environ.get('BKASH_APP_KEY', '')
-BKASH_APP_SECRET   = os.environ.get('BKASH_APP_SECRET', '')
-BKASH_USERNAME     = os.environ.get('BKASH_USERNAME', '')
-BKASH_PASSWORD     = os.environ.get('BKASH_PASSWORD', '')
-BKASH_CALLBACK_URL = os.environ.get('BKASH_CALLBACK_URL', 'http://localhost:5000/student/bkash/callback')
-
-# Simple in-memory token cache. Fine for a single-process/single-worker app.
-# If you run with multiple gunicorn workers, move this to a DB table or Redis
-# so workers share one token instead of each granting its own.
-_bkash_token_cache = {'token': None, 'refresh_token': None, 'expires_at': None}
-
-
-def _bkash_grant_token():
-    """Get a valid bKash access token, granting or refreshing as needed."""
-    now = datetime.utcnow()
-
-    if _bkash_token_cache['token'] and _bkash_token_cache['expires_at'] and now < _bkash_token_cache['expires_at']:
-        return _bkash_token_cache['token']
-
-    headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'username': BKASH_USERNAME,
-        'password': BKASH_PASSWORD,
-    }
-
-    if _bkash_token_cache['refresh_token']:
-        body = {
-            'app_key': BKASH_APP_KEY,
-            'app_secret': BKASH_APP_SECRET,
-            'refresh_token': _bkash_token_cache['refresh_token'],
-        }
-        url = f'{BKASH_BASE_URL}/tokenized/checkout/token/refresh'
-    else:
-        body = {'app_key': BKASH_APP_KEY, 'app_secret': BKASH_APP_SECRET}
-        url = f'{BKASH_BASE_URL}/tokenized/checkout/token/grant'
-
-    resp = requests.post(url, json=body, headers=headers, timeout=15)
-    data = resp.json()
-
-    if 'id_token' not in data:
-        raise RuntimeError(f'bKash token grant failed: {data}')
-
-    _bkash_token_cache['token']         = data['id_token']
-    _bkash_token_cache['refresh_token'] = data.get('refresh_token')
-    _bkash_token_cache['expires_at']    = now + timedelta(seconds=int(data.get('expires_in', 3300)) - 120)
-
-    return _bkash_token_cache['token']
-
-
-def _bkash_headers():
-    return {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': _bkash_grant_token(),
-        'X-APP-Key': BKASH_APP_KEY,
-    }
-
-
-def bkash_create_payment(amount, invoice_number):
-    """Create a bKash checkout session. Returns dict with 'bkashURL' and 'paymentID'."""
-    if BKASH_MOCK_MODE:
-        fake_payment_id = 'MOCK' + uuid.uuid4().hex[:16].upper()
-        return {
-            'paymentID': fake_payment_id,
-            'bkashURL': f'/student/bkash/mock_checkout?payment_id={fake_payment_id}&invoice={invoice_number}&amount={amount}',
-        }
-
-    body = {
-        'mode': '0011',
-        'payerReference': invoice_number,
-        'callbackURL': BKASH_CALLBACK_URL,
-        'amount': f'{amount:.2f}',
-        'currency': 'BDT',
-        'intent': 'sale',
-        'merchantInvoiceNumber': invoice_number,
-    }
-    resp = requests.post(f'{BKASH_BASE_URL}/tokenized/checkout/create',
-                          json=body, headers=_bkash_headers(), timeout=15)
-    data = resp.json()
-    if 'bkashURL' not in data:
-        raise RuntimeError(f'bKash create payment failed: {data}')
-    return data
-
-
-def bkash_execute_payment(payment_id):
-    """Finalize the payment after the user completes it on bKash's page."""
-    if BKASH_MOCK_MODE:
-        return {
-            'statusCode': '0000',
-            'statusMessage': 'Successful',
-            'trxID': 'MOCKTRX' + uuid.uuid4().hex[:10].upper(),
-            'paymentID': payment_id,
-        }
-
-    body = {'paymentID': payment_id}
-    resp = requests.post(f'{BKASH_BASE_URL}/tokenized/checkout/execute',
-                          json=body, headers=_bkash_headers(), timeout=15)
-    return resp.json()
-
-
-# ── RupantorPay Payment Gateway config ────────────────────────────────────────
-# RupantorPay is a Bangladeshi payment AGGREGATOR: one API key gives you a
-# single hosted checkout page where the student can choose bKash, Nagad,
-# Rocket, Upay, cards, etc. — you don't need separate bKash/Nagad merchant
-# accounts to use it. Docs: https://rupantorpay.readme.io/reference
-#
-# RUPANTORPAY_MOCK_MODE defaults ON so "Pay with RupantorPay" can be tested
-# end-to-end with no real account. Once you buy a plan at rupantorpay.com and
-# get your API key from the dashboard, set these as real environment
-# variables in Railway → Variables tab:
-#   RUPANTORPAY_MOCK_MODE=0
-#   RUPANTORPAY_API_KEY=<your real API key>
-RUPANTORPAY_MOCK_MODE = os.environ.get('RUPANTORPAY_MOCK_MODE', '0') == '1'
-RUPANTORPAY_API_KEY   = os.environ.get('RUPANTORPAY_API_KEY', '68iVDharRoxlzqjXQnFKzmrmUy1nxrRQHqav9e0chKshEIVNmx')
-RUPANTORPAY_BASE_URL  = os.environ.get('RUPANTORPAY_BASE_URL', 'https://payment.rupantorpay.com/api')
-
-
-def _rupantorpay_headers():
-    return {
-        'Content-Type': 'application/json',
-        'X-API-KEY': RUPANTORPAY_API_KEY,
-    }
-
-
-def rupantorpay_create_payment(amount, invoice_number, fullname, email):
-    """Start a RupantorPay checkout. Returns dict with 'payment_url'.
-    In mock mode, returns our own test page so you can try the full flow
-    (redirect out, choose a fake method, come back, order marked paid) with
-    no RupantorPay account at all."""
-    if RUPANTORPAY_MOCK_MODE:
-        return {
-            'payment_url': f'/student/rupantorpay/mock_checkout?invoice={invoice_number}&amount={amount}',
-        }
-
-    body = {
-        'fullname': fullname or 'NMMS Student',
-        'email': email or 'student@example.com',
-        'amount': f'{amount:.2f}',
-        'success_url': url_for('student_rupantorpay_return', invoice=invoice_number, result='success', _external=True),
-        'cancel_url':  url_for('student_rupantorpay_return', invoice=invoice_number, result='cancel',  _external=True),
-        'webhook_url': url_for('student_rupantorpay_webhook', _external=True),
-        'metadata': {'invoice_number': invoice_number},
-    }
-    resp = requests.post(f'{RUPANTORPAY_BASE_URL}/payment/checkout',
-                          json=body, headers=_rupantorpay_headers(), timeout=15)
-    try:
-        data = resp.json()
-    except Exception:
-        raise RuntimeError(f'RupantorPay returned a non-JSON response (HTTP {resp.status_code}): {resp.text[:300]}')
-
-    # DEBUG: print the raw checkout response to the server log (Railway ->
-    # Deployments -> View Logs) so the exact field names RupantorPay uses
-    # can be confirmed. Remove once everything is verified working.
-    print(f'[RupantorPay] checkout raw response: {data}')
-
-    # RupantorPay's docs don't pin down the exact response key name, so we
-    # check the common possibilities used by similar BD gateways.
-    url = (data.get('payment_url') or data.get('paymentURL') or data.get('checkout_url')
-           or data.get('url') or (data.get('data') or {}).get('payment_url'))
-    if not url:
-        raise RuntimeError(f'RupantorPay checkout did not return a payment URL: {data}')
-
-    # RupantorPay (like similar BD gateways, e.g. UddoktaPay) issues its OWN
-    # invoice/transaction id for this checkout, separate from the invoice
-    # number we generated. That gateway-side id — not our own invoice_number
-    # — is what verify-payment expects. Try the common key spellings.
-    d = data.get('data') or {}
-    gateway_invoice_id = (data.get('invoice_id') or data.get('transaction_id') or data.get('trx_id')
-                           or d.get('invoice_id') or d.get('transaction_id') or d.get('trx_id'))
-
-    return {'payment_url': url, 'gateway_invoice_id': gateway_invoice_id, 'raw': data}
-
-
-def rupantorpay_verify_payment(transaction_id):
-    """Confirm a payment's final status with RupantorPay's verify endpoint.
-    transaction_id here must be RupantorPay's OWN id for the payment (the
-    gateway_invoice_id captured at checkout time, or the id it hands back
-    on the redirect/webhook) — NOT our internal invoice_number."""
-    if RUPANTORPAY_MOCK_MODE:
-        return {'status': 'COMPLETED', 'transaction_id': transaction_id}
-
-    resp = requests.post(f'{RUPANTORPAY_BASE_URL}/payment/verify-payment',
-                          json={'transaction_id': transaction_id},
-                          headers=_rupantorpay_headers(), timeout=15)
-    try:
-        result = resp.json()
-    except Exception:
-        result = {'status': 'unknown', 'raw_text': resp.text[:300]}
-
-    # DEBUG: same as above — check Railway logs to confirm the exact shape.
-    print(f'[RupantorPay] verify-payment raw response for id={transaction_id}: {result}')
-    return result
-
-
-def _rupantorpay_is_success(verify_result):
-    """RupantorPay's exact success value isn't pinned down in their public docs,
-    so we accept any of the common spellings other BD gateways use."""
-    status = str(verify_result.get('status', '')).strip().upper()
-    return status in ('COMPLETED', 'SUCCESS', 'SUCCESSFUL', 'PAID', 'TRUE', '1')
-
-# ── SecurePay BD Payment Gateway config ───────────────────────────────────────
-# SecurePay BD (securepaybd.xyz) — a second checkout option alongside
-# RupantorPay. IMPORTANT: no public API documentation could be found for
-# this gateway (their docs, if any, are behind account login). Everything
-# below the config lines is a SAFE SCAFFOLD, not a verified integration:
-#   - SECUREPAYBD_MOCK_MODE defaults ON (unlike RupantorPay, which defaults
-#     off) specifically so nobody accidentally sends a real payment through
-#     unverified request/response field names, which is exactly what broke
-#     RupantorPay in production.
-#   - Before flipping SECUREPAYBD_MOCK_MODE=0, log into the SecurePay BD
-#     dashboard, find their API/developer docs, and update:
-#       1. the request body in securepaybd_create_payment()
-#       2. the response field names read in securepaybd_create_payment()
-#          and securepaybd_verify_payment()
-#       3. the checkout/verify endpoint paths below if they differ
-#   - Once real docs are confirmed, flip SECUREPAYBD_MOCK_MODE=0 in Railway
-#     → Variables, redeploy, do ONE real-money test, then check the
-#     '[SecurePayBD]' debug lines in the server logs to confirm the shapes.
-SECUREPAYBD_MOCK_MODE = os.environ.get('SECUREPAYBD_MOCK_MODE', '0') == '1'
-SECUREPAYBD_API_KEY   = os.environ.get('SECUREPAYBD_API_KEY', 'KQMRX3Y06ZCLOQLALLR8YBDJIRRTEUMB')
-SECUREPAYBD_BASE_URL  = os.environ.get('SECUREPAYBD_BASE_URL', 'https://www.securepaybd.xyz/api')
-
-
-def _securepaybd_headers():
-    return {
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {SECUREPAYBD_API_KEY}',
-    }
-
-
-def securepaybd_create_payment(amount, invoice_number, fullname, email):
-    """Start a SecurePay BD checkout. Returns dict with 'payment_url'.
-    Endpoint path and body fields below are UNVERIFIED best guesses — see
-    the config block above. Mock mode (default) bypasses all of this."""
-    if SECUREPAYBD_MOCK_MODE:
-        return {
-            'payment_url': f'/student/securepaybd/mock_checkout?invoice={invoice_number}&amount={amount}',
-        }
-
-    body = {
-        'full_name': fullname or 'NMMS Student',
-        'email': email or 'student@example.com',
-        'amount': f'{amount:.2f}',
-        'success_url': url_for('student_securepaybd_return', invoice=invoice_number, result='success', _external=True),
-        'cancel_url':  url_for('student_securepaybd_return', invoice=invoice_number, result='cancel',  _external=True),
-        'webhook_url': url_for('student_securepaybd_webhook', _external=True),
-        'metadata': {'invoice_number': invoice_number},
-    }
-    resp = requests.post(f'{SECUREPAYBD_BASE_URL}/payment/checkout',
-                          json=body, headers=_securepaybd_headers(), timeout=15)
-    try:
-        data = resp.json()
-    except Exception:
-        raise RuntimeError(f'SecurePay BD returned a non-JSON response (HTTP {resp.status_code}): {resp.text[:300]}')
-
-    print(f'[SecurePayBD] checkout raw response: {data}')
-
-    url = (data.get('payment_url') or data.get('paymentURL') or data.get('checkout_url')
-           or data.get('url') or (data.get('data') or {}).get('payment_url'))
-    if not url:
-        raise RuntimeError(f'SecurePay BD checkout did not return a payment URL: {data}')
-
-    d = data.get('data') or {}
-    gateway_invoice_id = (data.get('invoice_id') or data.get('transaction_id') or data.get('trx_id')
-                           or d.get('invoice_id') or d.get('transaction_id') or d.get('trx_id'))
-
-    return {'payment_url': url, 'gateway_invoice_id': gateway_invoice_id, 'raw': data}
-
-
-def securepaybd_verify_payment(transaction_id):
-    """Confirm a payment's final status with SecurePay BD's verify endpoint.
-    transaction_id must be SecurePay BD's OWN id for the payment, not our
-    internal invoice_number — see the RupantorPay bug this mirrors."""
-    if SECUREPAYBD_MOCK_MODE:
-        return {'status': 'COMPLETED', 'transaction_id': transaction_id}
-
-    resp = requests.post(f'{SECUREPAYBD_BASE_URL}/payment/verify-payment',
-                          json={'transaction_id': transaction_id},
-                          headers=_securepaybd_headers(), timeout=15)
-    try:
-        result = resp.json()
-    except Exception:
-        result = {'status': 'unknown', 'raw_text': resp.text[:300]}
-
-    print(f'[SecurePayBD] verify-payment raw response for id={transaction_id}: {result}')
-    return result
-
-
-def _securepaybd_is_success(verify_result):
-    status = str(verify_result.get('status', '')).strip().upper()
-    return status in ('COMPLETED', 'SUCCESS', 'SUCCESSFUL', 'PAID', 'TRUE', '1')
 
 # ── Schema init ───────────────────────────────────────────────────────────────
 
@@ -697,47 +397,6 @@ def init_db():
         )
     """)
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS bkash_gateway_sessions (
-            id             SERIAL PRIMARY KEY,
-            student_id     INTEGER NOT NULL,
-            payment_id     TEXT NOT NULL,
-            invoice_number TEXT NOT NULL,
-            amount         REAL NOT NULL,
-            status         TEXT DEFAULT 'initiated',
-            trx_id         TEXT DEFAULT NULL,
-            created_at     TEXT DEFAULT (to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')),
-            completed_at   TEXT DEFAULT NULL
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS rupantorpay_sessions (
-            id             SERIAL PRIMARY KEY,
-            student_id     INTEGER NOT NULL,
-            invoice_number TEXT NOT NULL,
-            amount         REAL NOT NULL,
-            status         TEXT DEFAULT 'initiated',
-            trx_id         TEXT DEFAULT NULL,
-            created_at     TEXT DEFAULT (to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')),
-            completed_at   TEXT DEFAULT NULL
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS securepaybd_sessions (
-            id                 SERIAL PRIMARY KEY,
-            student_id         INTEGER NOT NULL,
-            invoice_number     TEXT NOT NULL,
-            amount             REAL NOT NULL,
-            status             TEXT DEFAULT 'initiated',
-            trx_id             TEXT DEFAULT NULL,
-            gateway_invoice_id TEXT DEFAULT NULL,
-            created_at         TEXT DEFAULT (to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')),
-            completed_at       TEXT DEFAULT NULL
-        )
-    """)
-
     conn.commit()
 
     # ── Safe migrations (ADD COLUMN if not exists) ───────────────────────────
@@ -746,7 +405,6 @@ def init_db():
     conn.commit()  # flush all CREATE TABLE statements first
     for migration_sql in [
         "ALTER TABLE students ADD COLUMN debt_blocked INTEGER DEFAULT 0",
-        "ALTER TABLE rupantorpay_sessions ADD COLUMN gateway_invoice_id TEXT DEFAULT NULL",
     ]:
         _mc = get_db()
         try:
@@ -1081,8 +739,6 @@ def student_dashboard():
     ordering_locked = bool(student_row and student_row['ordering_locked'])
     debt_blocked    = bool(student_row and student_row.get('debt_blocked'))
     student_bkash   = student_row['bkash_number'] if student_row else ''
-    student_batch   = student_row['batch']        if student_row else ''
-    student_roll    = student_row['roll_number']  if student_row else ''
 
     pending_payment_row = queryOne(conn,
         "SELECT bkash_txn, amount, created_at FROM payments WHERE student_id=%s AND status='pending_verification' ORDER BY created_at DESC LIMIT 1",
@@ -1119,8 +775,6 @@ def student_dashboard():
         week_deadline   = week_end,
         today_str       = today.isoformat(),
         student_bkash   = student_bkash,
-        student_batch   = student_batch,
-        student_roll    = student_roll,
         has_pending_payment = has_pending_payment,
         pending_payment_txn = pending_payment_txn,
         has_pending_cash    = has_pending_cash,
@@ -1422,14 +1076,6 @@ def submit_payment():
         return jsonify({'ok': False, 'msg': 'Transaction ID is required.'})
     conn = get_db()
     try:
-        # ── DUPLICATE GUARD 0: student has a pending cancel request ──────────
-        pending_cancel = queryOne(conn,
-            "SELECT id FROM meal_edit_requests WHERE student_id=%s AND action='cancel' AND status='pending'", (sid,)
-        )
-        if pending_cancel:
-            return jsonify({'ok': False,
-                'msg': 'You have a pending meal cancellation request. Wait for the manager to approve or reject it before submitting a payment.'})
-
         # ── DUPLICATE GUARD 1: student already has a pending payment ─────────
         existing_pending = queryOne(conn,
             "SELECT id, bkash_txn FROM payments WHERE student_id=%s AND status='pending_verification'", (sid,)
@@ -1464,614 +1110,6 @@ def submit_payment():
         conn.close()
 
 
-# ── bKash Payment Gateway — automatic checkout (replaces manual TxnID entry) ──
-
-@app.route('/student/bkash/pay', methods=['POST'])
-@login_required('student')
-def student_bkash_pay():
-    """Student taps 'Pay with bKash' — compute the real due amount server-side,
-    open a bKash checkout session, and hand back the URL to redirect to."""
-    sid  = session['user_id']
-    conn = get_db()
-
-    pending_cancel = queryOne(conn,
-        "SELECT id FROM meal_edit_requests WHERE student_id=%s AND action='cancel' AND status='pending'", (sid,)
-    )
-    if pending_cancel:
-        conn.close()
-        return jsonify({'ok': False, 'msg': 'You have a pending meal cancellation request. Wait for the manager to resolve it before paying.'})
-
-    due_row = queryOne(conn,
-        "SELECT COALESCE(SUM(amount),0) as total FROM meal_orders "
-        "WHERE student_id=%s AND payment_status IN ('pending','due')", (sid,)
-    )
-    amount = float(due_row['total'] or 0)
-    if amount <= 0:
-        conn.close()
-        return jsonify({'ok': False, 'msg': 'You have no unpaid meals right now.'})
-
-    invoice_number = f'NMMS-{sid}-{int(datetime.utcnow().timestamp())}'
-
-    try:
-        result = bkash_create_payment(amount, invoice_number)
-    except Exception as e:
-        conn.close()
-        return jsonify({'ok': False, 'msg': f'Could not start bKash checkout: {e}'})
-
-    execute(conn,
-        "INSERT INTO bkash_gateway_sessions (student_id, payment_id, invoice_number, amount, status) "
-        "VALUES (%s,%s,%s,%s,'initiated')",
-        (sid, result['paymentID'], invoice_number, amount)
-    )
-    conn.commit()
-    conn.close()
-    return jsonify({'ok': True, 'bkashURL': result['bkashURL']})
-
-
-@app.route('/student/bkash/callback')
-@login_required('student')
-def student_bkash_callback():
-    """bKash sends the browser back here with ?paymentID=...&status=success|failure|cancel.
-    We execute the payment, mark meal orders as paid, and send the student back
-    to their dashboard with a clear result banner."""
-    payment_id   = request.args.get('paymentID', '')
-    bkash_status = request.args.get('status', '')
-    sid  = session['user_id']
-    conn = get_db()
-
-    sess_row = queryOne(conn,
-        "SELECT * FROM bkash_gateway_sessions WHERE payment_id=%s AND student_id=%s",
-        (payment_id, sid)
-    )
-
-    if not sess_row:
-        conn.close()
-        return redirect(url_for('student_dashboard', pay_result='notfound'))
-
-    if sess_row['status'] == 'completed':
-        conn.close()
-        return redirect(url_for('student_dashboard', pay_result='already', amount=int(sess_row['amount'])))
-
-    if bkash_status != 'success':
-        execute(conn,
-            "UPDATE bkash_gateway_sessions SET status=%s WHERE payment_id=%s",
-            ('cancelled' if bkash_status == 'cancel' else 'failed', payment_id)
-        )
-        conn.commit()
-        conn.close()
-        return redirect(url_for('student_dashboard', pay_result='cancelled'))
-
-    try:
-        exec_result = bkash_execute_payment(payment_id)
-    except Exception:
-        conn.close()
-        return redirect(url_for('student_dashboard', pay_result='error'))
-
-    if exec_result.get('statusCode') != '0000':
-        execute(conn,
-            "UPDATE bkash_gateway_sessions SET status='failed' WHERE payment_id=%s",
-            (payment_id,)
-        )
-        conn.commit()
-        conn.close()
-        return redirect(url_for('student_dashboard', pay_result='failed'))
-
-    trx_id = exec_result.get('trxID', '')
-    now    = datetime.utcnow().isoformat(timespec='seconds')
-    amount = sess_row['amount']
-    weekly = get_current_weekly_bkash()
-
-    # bKash has already confirmed this in real time, so it's recorded as
-    # verified immediately — no manual manager verification step needed.
-    execute(conn,
-        "INSERT INTO payments (student_id, amount, bkash_txn, payment_date, status, manager_bkash, verified_at, verified_by) "
-        "VALUES (%s,%s,%s,%s,'verified',%s,%s,'bkash_gateway')",
-        (sid, amount, trx_id, date.today().isoformat(), weekly['bkash_number'], now)
-    )
-
-    # Mark unpaid meal orders as paid, oldest first, up to the paid amount
-    unpaid = query(conn,
-        "SELECT id, amount FROM meal_orders WHERE student_id=%s AND payment_status IN ('pending','due') "
-        "ORDER BY meal_date ASC",
-        (sid,)
-    )
-    remaining = amount
-    for row in unpaid:
-        if remaining <= 0:
-            break
-        execute(conn, "UPDATE meal_orders SET payment_status='paid' WHERE id=%s", (row['id'],))
-        remaining -= row['amount']
-
-    execute(conn,
-        "UPDATE bkash_gateway_sessions SET status='completed', trx_id=%s, completed_at=%s WHERE payment_id=%s",
-        (trx_id, now, payment_id)
-    )
-    conn.commit()
-    conn.close()
-
-    return redirect(url_for('student_dashboard', pay_result='success', amount=int(amount), trx=trx_id))
-
-
-@app.route('/student/bkash/mock_checkout')
-@login_required('student')
-def student_bkash_mock_checkout():
-    """Simulated bKash hosted page — only reachable while BKASH_MOCK_MODE=1.
-    Lets you test the full leave-the-site-and-come-back flow with no real
-    bKash merchant account."""
-    if not BKASH_MOCK_MODE:
-        return "Mock checkout is disabled (BKASH_MOCK_MODE=0).", 404
-
-    payment_id = request.args.get('payment_id', '')
-    invoice    = request.args.get('invoice', '')
-    amount     = request.args.get('amount', '0')
-
-    return f"""
-    <html><head><title>bKash (Mock Checkout)</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-      body {{ font-family: system-ui, sans-serif; background:#e51c6d; min-height:100vh;
-              display:flex; align-items:center; justify-content:center; margin:0; }}
-      .card {{ background:#fff; border-radius:16px; padding:32px; max-width:360px; width:90%;
-                text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.3); }}
-      .logo {{ font-size:28px; font-weight:800; color:#e51c6d; margin-bottom:4px; }}
-      .tag  {{ font-size:12px; color:#999; margin-bottom:20px; }}
-      .amt  {{ font-size:32px; font-weight:800; color:#222; margin-bottom:4px; }}
-      .inv  {{ font-size:12px; color:#888; margin-bottom:24px; }}
-      button {{ width:100%; padding:14px; border-radius:10px; border:none; font-size:15px;
-                font-weight:700; margin-bottom:10px; cursor:pointer; }}
-      .pay {{ background:#e51c6d; color:#fff; }}
-      .cancel {{ background:#f1f1f1; color:#555; }}
-    </style></head>
-    <body>
-      <div class="card">
-        <div class="logo">bKash</div>
-        <div class="tag">⚠️ MOCK CHECKOUT — for local testing only, no real money moves</div>
-        <div class="amt">৳{amount}</div>
-        <div class="inv">Invoice: {invoice}</div>
-        <button class="pay" onclick="location.href='/student/bkash/callback?paymentID={payment_id}&status=success'">
-          Simulate Successful Payment
-        </button>
-        <button class="cancel" onclick="location.href='/student/bkash/callback?paymentID={payment_id}&status=cancel'">
-          Simulate Cancel
-        </button>
-      </div>
-    </body></html>
-    """
-
-
-# ── RupantorPay Payment Gateway — one checkout for bKash, Nagad, Rocket, etc ──
-
-@app.route('/student/rupantorpay/pay', methods=['POST'])
-@login_required('student')
-def student_rupantorpay_pay():
-    """Student taps 'Pay with RupantorPay' — compute the real due amount
-    server-side, open a RupantorPay checkout session, and hand back the URL
-    to redirect to. The student picks bKash, Nagad, Rocket, etc. on
-    RupantorPay's own hosted page."""
-    sid  = session['user_id']
-    conn = get_db()
-
-    pending_cancel = queryOne(conn,
-        "SELECT id FROM meal_edit_requests WHERE student_id=%s AND action='cancel' AND status='pending'", (sid,)
-    )
-    if pending_cancel:
-        conn.close()
-        return jsonify({'ok': False, 'msg': 'You have a pending meal cancellation request. Wait for the manager to resolve it before paying.'})
-
-    due_row = queryOne(conn,
-        "SELECT COALESCE(SUM(amount),0) as total FROM meal_orders "
-        "WHERE student_id=%s AND payment_status IN ('pending','due')", (sid,)
-    )
-    amount = float(due_row['total'] or 0)
-    if amount <= 0:
-        conn.close()
-        return jsonify({'ok': False, 'msg': 'You have no unpaid meals right now.'})
-
-    student_row = queryOne(conn, "SELECT name, roll_number FROM students WHERE id=%s", (sid,))
-    fullname = student_row['name'] if student_row else 'Student'
-    email    = f"{student_row['roll_number']}@nmms-student.local" if student_row else 'student@nmms.local'
-
-    invoice_number = f'NMMS-{sid}-{int(datetime.utcnow().timestamp())}'
-
-    try:
-        result = rupantorpay_create_payment(amount, invoice_number, fullname, email)
-    except Exception as e:
-        conn.close()
-        return jsonify({'ok': False, 'msg': f'Could not start RupantorPay checkout: {e}'})
-
-    execute(conn,
-        "INSERT INTO rupantorpay_sessions (student_id, invoice_number, amount, status, gateway_invoice_id) "
-        "VALUES (%s,%s,%s,'initiated',%s)",
-        (sid, invoice_number, amount, result.get('gateway_invoice_id'))
-    )
-    conn.commit()
-    conn.close()
-    return jsonify({'ok': True, 'payment_url': result['payment_url']})
-
-
-def _rupantorpay_finalize(invoice_number, sid, conn, gateway_ref=None):
-    """Shared logic: verify with RupantorPay, mark the session + meal orders
-    paid if successful. Returns (ok, amount, trx_id) or (False, 0, None).
-
-    gateway_ref, when given (from the redirect query string or the webhook
-    payload), is RupantorPay's OWN id for this payment and takes priority
-    over whatever we stored at checkout time, since it's coming straight
-    from the gateway for this exact transaction."""
-    sess_row = queryOne(conn,
-        "SELECT * FROM rupantorpay_sessions WHERE invoice_number=%s AND student_id=%s",
-        (invoice_number, sid)
-    )
-    if not sess_row:
-        return False, 0, None
-    if sess_row['status'] == 'completed':
-        return True, sess_row['amount'], sess_row['trx_id']
-
-    verify_id = gateway_ref or sess_row.get('gateway_invoice_id') or invoice_number
-    try:
-        verify_result = rupantorpay_verify_payment(verify_id)
-    except Exception:
-        return False, 0, None
-
-    if not _rupantorpay_is_success(verify_result):
-        execute(conn, "UPDATE rupantorpay_sessions SET status='failed' WHERE invoice_number=%s", (invoice_number,))
-        conn.commit()
-        return False, 0, None
-
-    trx_id = verify_result.get('transaction_id') or verify_result.get('trx_id') or invoice_number
-    now    = datetime.utcnow().isoformat(timespec='seconds')
-    amount = sess_row['amount']
-    weekly = get_current_weekly_bkash()
-
-    execute(conn,
-        "INSERT INTO payments (student_id, amount, bkash_txn, payment_date, status, manager_bkash, verified_at, verified_by) "
-        "VALUES (%s,%s,%s,%s,'verified',%s,%s,'rupantorpay_gateway')",
-        (sid, amount, trx_id, date.today().isoformat(), weekly['bkash_number'], now)
-    )
-
-    unpaid = query(conn,
-        "SELECT id, amount FROM meal_orders WHERE student_id=%s AND payment_status IN ('pending','due') "
-        "ORDER BY meal_date ASC",
-        (sid,)
-    )
-    remaining = amount
-    for row in unpaid:
-        if remaining <= 0:
-            break
-        execute(conn, "UPDATE meal_orders SET payment_status='paid' WHERE id=%s", (row['id'],))
-        remaining -= row['amount']
-
-    execute(conn,
-        "UPDATE rupantorpay_sessions SET status='completed', trx_id=%s, completed_at=%s WHERE invoice_number=%s",
-        (trx_id, now, invoice_number)
-    )
-    conn.commit()
-    return True, amount, trx_id
-
-
-@app.route('/student/rupantorpay/return')
-@login_required('student')
-def student_rupantorpay_return():
-    """RupantorPay sends the browser back here (our success_url or
-    cancel_url) once the student finishes on their hosted checkout page."""
-    invoice_number = request.args.get('invoice', '')
-    result         = request.args.get('result', '')
-    sid  = session['user_id']
-    conn = get_db()
-
-    # DEBUG: log everything RupantorPay put on the redirect URL so the exact
-    # param name it uses for its own transaction/invoice id can be confirmed
-    # from the Railway logs. Remove once everything is verified working.
-    print(f'[RupantorPay] return query params: {dict(request.args)}')
-
-    if result != 'success':
-        execute(conn, "UPDATE rupantorpay_sessions SET status='cancelled' WHERE invoice_number=%s", (invoice_number,))
-        conn.commit()
-        conn.close()
-        return redirect(url_for('student_dashboard', pay_result='cancelled'))
-
-    gateway_ref = (request.args.get('invoice_id') or request.args.get('transaction_id')
-                   or request.args.get('trx_id') or request.args.get('txn_id'))
-    ok, amount, trx_id = _rupantorpay_finalize(invoice_number, sid, conn, gateway_ref=gateway_ref)
-    conn.close()
-
-    if not ok:
-        return redirect(url_for('student_dashboard', pay_result='failed'))
-    return redirect(url_for('student_dashboard', pay_result='success', amount=int(amount), trx=trx_id))
-
-
-@app.route('/student/rupantorpay/webhook', methods=['POST'])
-def student_rupantorpay_webhook():
-    """Server-to-server notification from RupantorPay. This can arrive
-    before, after, or instead of the browser redirect, so it independently
-    finalizes the payment too — this is what makes the gateway reliable even
-    if the student closes their browser right after paying."""
-    data = request.get_json(silent=True) or {}
-    # DEBUG: log the full webhook body so the exact field names RupantorPay
-    # sends can be confirmed from the Railway logs.
-    print(f'[RupantorPay] webhook payload: {data}')
-
-    invoice_number = ((data.get('metadata') or {}).get('invoice_number')
-                       or data.get('invoice_number') or '')
-    if not invoice_number:
-        return jsonify({'ok': False, 'msg': 'No invoice_number in webhook payload'}), 400
-
-    gateway_ref = data.get('invoice_id') or data.get('transaction_id') or data.get('trx_id')
-
-    conn = get_db()
-    sess_row = queryOne(conn, "SELECT student_id FROM rupantorpay_sessions WHERE invoice_number=%s", (invoice_number,))
-    if not sess_row:
-        conn.close()
-        return jsonify({'ok': False, 'msg': 'Unknown invoice'}), 404
-
-    _rupantorpay_finalize(invoice_number, sess_row['student_id'], conn, gateway_ref=gateway_ref)
-    conn.close()
-    return jsonify({'ok': True})
-
-
-@app.route('/student/rupantorpay/mock_checkout')
-@login_required('student')
-def student_rupantorpay_mock_checkout():
-    """Simulated RupantorPay hosted page — only reachable while
-    RUPANTORPAY_MOCK_MODE=1. Lets you test the full leave-the-site-and-
-    come-back flow, with a choice of methods, before you have a real
-    RupantorPay account."""
-    if not RUPANTORPAY_MOCK_MODE:
-        return "Mock checkout is disabled (RUPANTORPAY_MOCK_MODE=0).", 404
-
-    invoice = request.args.get('invoice', '')
-    amount  = request.args.get('amount', '0')
-    success_url = url_for('student_rupantorpay_return', invoice=invoice, result='success')
-    cancel_url  = url_for('student_rupantorpay_return', invoice=invoice, result='cancel')
-
-    return f"""
-    <html><head><title>RupantorPay (Mock Checkout)</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-      body {{ font-family: system-ui, sans-serif; background:#0f172a; min-height:100vh;
-              display:flex; align-items:center; justify-content:center; margin:0; }}
-      .card {{ background:#fff; border-radius:16px; padding:32px; max-width:380px; width:90%;
-                text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.4); }}
-      .logo {{ font-size:24px; font-weight:800; color:#0f172a; margin-bottom:4px; }}
-      .tag  {{ font-size:12px; color:#999; margin-bottom:20px; }}
-      .amt  {{ font-size:32px; font-weight:800; color:#222; margin-bottom:4px; }}
-      .inv  {{ font-size:12px; color:#888; margin-bottom:20px; }}
-      .methods {{ display:flex; gap:8px; justify-content:center; margin-bottom:20px; }}
-      .methods span {{ font-size:11px; background:#f1f1f1; border-radius:6px; padding:5px 9px; }}
-      button {{ width:100%; padding:14px; border-radius:10px; border:none; font-size:15px;
-                font-weight:700; margin-bottom:10px; cursor:pointer; }}
-      .pay {{ background:#16a34a; color:#fff; }}
-      .cancel {{ background:#f1f1f1; color:#555; }}
-    </style></head>
-    <body>
-      <div class="card">
-        <div class="logo">RupantorPay</div>
-        <div class="tag">⚠️ MOCK CHECKOUT — for local testing only, no real money moves</div>
-        <div class="amt">৳{amount}</div>
-        <div class="inv">Invoice: {invoice}</div>
-        <div class="methods"><span>bKash</span><span>Nagad</span><span>Rocket</span><span>Card</span></div>
-        <button class="pay" onclick="location.href='{success_url}'">
-          Simulate Successful Payment
-        </button>
-        <button class="cancel" onclick="location.href='{cancel_url}'">
-          Simulate Cancel
-        </button>
-      </div>
-    </body></html>
-    """
-
-
-# ── SecurePay BD Payment Gateway — second checkout option ────────────────────
-
-@app.route('/student/securepaybd/pay', methods=['POST'])
-@login_required('student')
-def student_securepaybd_pay():
-    """Student taps 'Pay with SecurePay BD' — compute the real due amount
-    server-side, open a SecurePay BD checkout session, and hand back the URL
-    to redirect to."""
-    sid  = session['user_id']
-    conn = get_db()
-
-    pending_cancel = queryOne(conn,
-        "SELECT id FROM meal_edit_requests WHERE student_id=%s AND action='cancel' AND status='pending'", (sid,)
-    )
-    if pending_cancel:
-        conn.close()
-        return jsonify({'ok': False, 'msg': 'You have a pending meal cancellation request. Wait for the manager to resolve it before paying.'})
-
-    due_row = queryOne(conn,
-        "SELECT COALESCE(SUM(amount),0) as total FROM meal_orders "
-        "WHERE student_id=%s AND payment_status IN ('pending','due')", (sid,)
-    )
-    amount = float(due_row['total'] or 0)
-    if amount <= 0:
-        conn.close()
-        return jsonify({'ok': False, 'msg': 'You have no unpaid meals right now.'})
-
-    student_row = queryOne(conn, "SELECT name, roll_number FROM students WHERE id=%s", (sid,))
-    fullname = student_row['name'] if student_row else 'Student'
-    email    = f"{student_row['roll_number']}@nmms-student.local" if student_row else 'student@nmms.local'
-
-    invoice_number = f'NMMS-SPB-{sid}-{int(datetime.utcnow().timestamp())}'
-
-    try:
-        result = securepaybd_create_payment(amount, invoice_number, fullname, email)
-    except Exception as e:
-        conn.close()
-        return jsonify({'ok': False, 'msg': f'Could not start SecurePay BD checkout: {e}'})
-
-    execute(conn,
-        "INSERT INTO securepaybd_sessions (student_id, invoice_number, amount, status, gateway_invoice_id) "
-        "VALUES (%s,%s,%s,'initiated',%s)",
-        (sid, invoice_number, amount, result.get('gateway_invoice_id'))
-    )
-    conn.commit()
-    conn.close()
-    return jsonify({'ok': True, 'payment_url': result['payment_url']})
-
-
-def _securepaybd_finalize(invoice_number, sid, conn, gateway_ref=None):
-    """Shared logic: verify with SecurePay BD, mark the session + meal
-    orders paid if successful. Returns (ok, amount, trx_id) or (False, 0, None)."""
-    sess_row = queryOne(conn,
-        "SELECT * FROM securepaybd_sessions WHERE invoice_number=%s AND student_id=%s",
-        (invoice_number, sid)
-    )
-    if not sess_row:
-        return False, 0, None
-    if sess_row['status'] == 'completed':
-        return True, sess_row['amount'], sess_row['trx_id']
-
-    verify_id = gateway_ref or sess_row.get('gateway_invoice_id') or invoice_number
-    try:
-        verify_result = securepaybd_verify_payment(verify_id)
-    except Exception:
-        return False, 0, None
-
-    if not _securepaybd_is_success(verify_result):
-        execute(conn, "UPDATE securepaybd_sessions SET status='failed' WHERE invoice_number=%s", (invoice_number,))
-        conn.commit()
-        return False, 0, None
-
-    trx_id = verify_result.get('transaction_id') or verify_result.get('trx_id') or invoice_number
-    now    = datetime.utcnow().isoformat(timespec='seconds')
-    amount = sess_row['amount']
-    weekly = get_current_weekly_bkash()
-
-    execute(conn,
-        "INSERT INTO payments (student_id, amount, bkash_txn, payment_date, status, manager_bkash, verified_at, verified_by) "
-        "VALUES (%s,%s,%s,%s,'verified',%s,%s,'securepaybd_gateway')",
-        (sid, amount, trx_id, date.today().isoformat(), weekly['bkash_number'], now)
-    )
-
-    unpaid = query(conn,
-        "SELECT id, amount FROM meal_orders WHERE student_id=%s AND payment_status IN ('pending','due') "
-        "ORDER BY meal_date ASC",
-        (sid,)
-    )
-    remaining = amount
-    for row in unpaid:
-        if remaining <= 0:
-            break
-        execute(conn, "UPDATE meal_orders SET payment_status='paid' WHERE id=%s", (row['id'],))
-        remaining -= row['amount']
-
-    execute(conn,
-        "UPDATE securepaybd_sessions SET status='completed', trx_id=%s, completed_at=%s WHERE invoice_number=%s",
-        (trx_id, now, invoice_number)
-    )
-    conn.commit()
-    return True, amount, trx_id
-
-
-@app.route('/student/securepaybd/return')
-@login_required('student')
-def student_securepaybd_return():
-    """SecurePay BD sends the browser back here once the student finishes
-    on their hosted checkout page."""
-    invoice_number = request.args.get('invoice', '')
-    result         = request.args.get('result', '')
-    sid  = session['user_id']
-    conn = get_db()
-
-    # DEBUG: log everything SecurePay BD put on the redirect URL so the exact
-    # param name it uses for its own transaction/invoice id can be confirmed
-    # from the Railway logs. Do NOT remove until you've confirmed a real
-    # payment finalizes correctly — this is your only window into what the
-    # gateway is actually sending.
-    print(f'[SecurePayBD] return query params: {dict(request.args)}')
-
-    if result != 'success':
-        execute(conn, "UPDATE securepaybd_sessions SET status='cancelled' WHERE invoice_number=%s", (invoice_number,))
-        conn.commit()
-        conn.close()
-        return redirect(url_for('student_dashboard', pay_result='cancelled'))
-
-    gateway_ref = (request.args.get('invoice_id') or request.args.get('transaction_id')
-                   or request.args.get('trx_id') or request.args.get('txn_id'))
-    ok, amount, trx_id = _securepaybd_finalize(invoice_number, sid, conn, gateway_ref=gateway_ref)
-    conn.close()
-
-    if not ok:
-        return redirect(url_for('student_dashboard', pay_result='failed'))
-    return redirect(url_for('student_dashboard', pay_result='success', amount=int(amount), trx=trx_id))
-
-
-@app.route('/student/securepaybd/webhook', methods=['POST'])
-def student_securepaybd_webhook():
-    """Server-to-server notification from SecurePay BD. This can arrive
-    before, after, or instead of the browser redirect, so it independently
-    finalizes the payment too."""
-    data = request.get_json(silent=True) or {}
-    print(f'[SecurePayBD] webhook payload: {data}')
-
-    invoice_number = ((data.get('metadata') or {}).get('invoice_number')
-                       or data.get('invoice_number') or '')
-    if not invoice_number:
-        return jsonify({'ok': False, 'msg': 'No invoice_number in webhook payload'}), 400
-
-    gateway_ref = data.get('invoice_id') or data.get('transaction_id') or data.get('trx_id')
-
-    conn = get_db()
-    sess_row = queryOne(conn, "SELECT student_id FROM securepaybd_sessions WHERE invoice_number=%s", (invoice_number,))
-    if not sess_row:
-        conn.close()
-        return jsonify({'ok': False, 'msg': 'Unknown invoice'}), 404
-
-    _securepaybd_finalize(invoice_number, sess_row['student_id'], conn, gateway_ref=gateway_ref)
-    conn.close()
-    return jsonify({'ok': True})
-
-
-@app.route('/student/securepaybd/mock_checkout')
-@login_required('student')
-def student_securepaybd_mock_checkout():
-    """Simulated SecurePay BD hosted page — only reachable while
-    SECUREPAYBD_MOCK_MODE=1."""
-    if not SECUREPAYBD_MOCK_MODE:
-        return "Mock checkout is disabled (SECUREPAYBD_MOCK_MODE=0).", 404
-
-    invoice = request.args.get('invoice', '')
-    amount  = request.args.get('amount', '0')
-    success_url = url_for('student_securepaybd_return', invoice=invoice, result='success')
-    cancel_url  = url_for('student_securepaybd_return', invoice=invoice, result='cancel')
-
-    return f"""
-    <html><head><title>SecurePay BD (Mock Checkout)</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-      body {{ font-family: system-ui, sans-serif; background:#0f172a; min-height:100vh;
-              display:flex; align-items:center; justify-content:center; margin:0; }}
-      .card {{ background:#fff; border-radius:16px; padding:32px; max-width:380px; width:90%;
-                text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.4); }}
-      .logo {{ font-size:24px; font-weight:800; color:#1d4ed8; margin-bottom:4px; }}
-      .tag  {{ font-size:12px; color:#999; margin-bottom:20px; }}
-      .amt  {{ font-size:32px; font-weight:800; color:#222; margin-bottom:4px; }}
-      .inv  {{ font-size:12px; color:#888; margin-bottom:20px; }}
-      .methods {{ display:flex; gap:8px; justify-content:center; margin-bottom:20px; }}
-      .methods span {{ font-size:11px; background:#f1f1f1; border-radius:6px; padding:5px 9px; }}
-      button {{ width:100%; padding:14px; border-radius:10px; border:none; font-size:15px;
-                font-weight:700; margin-bottom:10px; cursor:pointer; }}
-      .pay {{ background:#16a34a; color:#fff; }}
-      .cancel {{ background:#f1f1f1; color:#555; }}
-    </style></head>
-    <body>
-      <div class="card">
-        <div class="logo">SecurePay BD</div>
-        <div class="tag">⚠️ MOCK CHECKOUT — for local testing only, no real money moves</div>
-        <div class="amt">৳{amount}</div>
-        <div class="inv">Invoice: {invoice}</div>
-        <div class="methods"><span>bKash</span><span>Nagad</span><span>Rocket</span></div>
-        <button class="pay" onclick="location.href='{success_url}'">
-          Simulate Successful Payment
-        </button>
-        <button class="cancel" onclick="location.href='{cancel_url}'">
-          Simulate Cancel
-        </button>
-      </div>
-    </body></html>
-    """
-
-
 @app.route('/student/request_cash_payment', methods=['POST'])
 @login_required('student')
 def request_cash_payment():
@@ -2086,13 +1124,6 @@ def request_cash_payment():
     if amount <= 0:
         conn.close()
         return jsonify({'ok': False, 'msg': 'No unpaid meals found.'})
-    # Guard: pending cancel request
-    pending_cancel = queryOne(conn,
-        "SELECT id FROM meal_edit_requests WHERE student_id=%s AND action='cancel' AND status='pending'", (sid,)
-    )
-    if pending_cancel:
-        conn.close()
-        return jsonify({'ok': False, 'msg': 'You have a pending meal cancellation request. Wait for the manager to resolve it before submitting a payment.'})
     existing = queryOne(conn, "SELECT id FROM cash_payment_requests WHERE student_id=%s AND status='pending'", (sid,))
     if existing:
         conn.close()
@@ -2238,61 +1269,6 @@ def student_phone_change_status():
     )
     conn.close()
     return jsonify({'ok': True, 'requests': [dict(r) for r in rows]})
-
-
-@app.route('/student/meal_history')
-@login_required('student')
-def student_meal_history():
-    """Return the logged-in student's meal orders + payments + cash requests
-    for the last 30 days (used by the 'Meal History' tab on the dashboard)."""
-    sid   = session['user_id']
-    conn  = get_db()
-    today = (datetime.utcnow() + timedelta(hours=6)).date()
-    since = (today - timedelta(days=30)).isoformat()
-
-    orders = query(conn,
-        "SELECT meal_date, meal_type, payment_status, amount, ordered_at "
-        "FROM meal_orders WHERE student_id=%s AND meal_date>=%s "
-        "ORDER BY meal_date DESC, meal_type",
-        (sid, since)
-    )
-
-    payments = query(conn,
-        "SELECT amount, bkash_txn, payment_date, status, created_at, verified_at "
-        "FROM payments WHERE student_id=%s AND created_at>=%s "
-        "ORDER BY created_at DESC",
-        (sid, since)
-    )
-
-    cash_requests = query(conn,
-        "SELECT amount, note, status, requested_at, reviewed_at "
-        "FROM cash_payment_requests WHERE student_id=%s AND requested_at>=%s "
-        "ORDER BY requested_at DESC",
-        (sid, since)
-    )
-
-    orders_list  = [dict(o) for o in orders]
-    total_meals  = len(orders_list)
-    total_amount = sum(o['amount'] or 0 for o in orders_list)
-    paid_amount  = sum(o['amount'] or 0 for o in orders_list if o['payment_status'] == 'paid')
-    due_amount   = sum(o['amount'] or 0 for o in orders_list if o['payment_status'] in ('pending', 'due'))
-
-    conn.close()
-    return jsonify({
-        'ok':    True,
-        'since': since,
-        'until': today.isoformat(),
-        'orders':        orders_list,
-        'payments':      [dict(p) for p in payments],
-        'cash_requests': [dict(c) for c in cash_requests],
-        'summary': {
-            'total_meals':  total_meals,
-            'total_amount': total_amount,
-            'paid_amount':  paid_amount,
-            'due_amount':   due_amount,
-        }
-    })
-
 
 # ── MANAGER AUTH ──────────────────────────────────────────────────────────────
 
@@ -2750,73 +1726,6 @@ def manager_students():
     )
 
 
-@app.route('/manager/student_profile/<int:student_id>')
-@login_required('manager')
-def manager_student_profile(student_id):
-    """Return everything about one student: profile info + FULL meal order
-    history, payment history, cash request history, and phone-change history
-    (all-time, not just 30 days). Used by the profile modal on the
-    'All Students' page — click a student row to open it."""
-    conn = get_db()
-
-    student = queryOne(conn, "SELECT * FROM students WHERE id=%s", (student_id,))
-    if not student:
-        conn.close()
-        return jsonify({'ok': False, 'msg': 'Student not found.'})
-
-    orders = query(conn,
-        "SELECT meal_date, meal_type, payment_status, amount, ordered_at "
-        "FROM meal_orders WHERE student_id=%s "
-        "ORDER BY meal_date DESC, meal_type",
-        (student_id,)
-    )
-
-    payments = query(conn,
-        "SELECT amount, bkash_txn, payment_date, status, manager_bkash, "
-        "       verified_at, verified_by, created_at "
-        "FROM payments WHERE student_id=%s ORDER BY created_at DESC",
-        (student_id,)
-    )
-
-    cash_requests = query(conn,
-        "SELECT amount, note, status, requested_at, reviewed_at, reviewed_by "
-        "FROM cash_payment_requests WHERE student_id=%s ORDER BY requested_at DESC",
-        (student_id,)
-    )
-
-    try:
-        phone_requests = query(conn,
-            "SELECT old_bkash, new_bkash, reason, status, created_at, decided_at "
-            "FROM phone_change_requests WHERE student_id=%s ORDER BY created_at DESC",
-            (student_id,)
-        )
-        phone_requests = [dict(p) for p in phone_requests]
-    except Exception:
-        phone_requests = []
-
-    orders_list  = [dict(o) for o in orders]
-    total_meals  = len(orders_list)
-    total_amount = sum(o['amount'] or 0 for o in orders_list)
-    paid_amount  = sum(o['amount'] or 0 for o in orders_list if o['payment_status'] == 'paid')
-    due_amount   = sum(o['amount'] or 0 for o in orders_list if o['payment_status'] in ('pending', 'due'))
-
-    conn.close()
-    return jsonify({
-        'ok':      True,
-        'student': dict(student),
-        'orders':        orders_list,
-        'payments':      [dict(p) for p in payments],
-        'cash_requests': [dict(c) for c in cash_requests],
-        'phone_requests': phone_requests,
-        'summary': {
-            'total_meals':  total_meals,
-            'total_amount': total_amount,
-            'paid_amount':  paid_amount,
-            'due_amount':   due_amount,
-        }
-    })
-
-
 @app.route('/manager/unlock_student', methods=['POST'])
 @login_required('manager')
 def unlock_student():
@@ -2934,6 +1843,125 @@ def manager_search_student():
     conn.close()
     return jsonify({'students': [dict(r) for r in rows]})
 
+
+@app.route('/manager/send_transfer', methods=['POST'])
+@login_required('manager')
+def manager_send_transfer():
+    d          = request.json
+    student_id = d.get('student_id')
+    conn       = get_db()
+    existing = queryOne(conn,
+        "SELECT id FROM manager_transfer_invites WHERE to_student_id=%s AND status='pending'", (student_id,)
+    )
+    if existing:
+        conn.close()
+        return jsonify({'ok': False, 'msg': 'This student already has a pending transfer invite.'})
+    student = queryOne(conn, "SELECT * FROM students WHERE id=%s", (student_id,))
+    if not student:
+        conn.close()
+        return jsonify({'ok': False, 'msg': 'Student not found.'})
+    temp_pass  = generate_temp_password()
+    batch_num  = queryOne(conn, "SELECT COUNT(*) as c FROM meal_managers")['c'] + 1
+    new_mgr_id = f"MGR{batch_num:03d}"
+    while queryOne(conn, "SELECT id FROM meal_managers WHERE manager_id=%s", (new_mgr_id,)):
+        batch_num += 1
+        new_mgr_id = f"MGR{batch_num:03d}"
+    execute(conn,
+        "INSERT INTO manager_transfer_invites (from_manager_id, to_student_id, status, temp_password, new_manager_id) VALUES (%s,%s,%s,%s,%s)",
+        (session['name'], student_id, 'pending', temp_pass, new_mgr_id)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True, 'msg': f'Transfer invite sent to {student["name"]}.'})
+
+
+@app.route('/manager/transfer_history')
+@login_required('manager')
+def manager_transfer_history():
+    conn = get_db()
+    rows = query(conn, "SELECT * FROM manager_history ORDER BY tenure_start DESC")
+    conn.close()
+    return jsonify({'history': [dict(r) for r in rows]})
+
+
+@app.route('/manager/active_managers')
+@login_required('manager')
+def active_managers():
+    conn = get_db()
+    rows = query(conn, "SELECT manager_id, name, bkash_number, created_at FROM meal_managers WHERE is_active=1")
+    conn.close()
+    return jsonify({'managers': [dict(r) for r in rows]})
+
+# ── STUDENT TRANSFER INVITES ──────────────────────────────────────────────────
+
+@app.route('/student/transfer_invites')
+@login_required('student')
+def student_transfer_invites():
+    sid  = session['user_id']
+    conn = get_db()
+    rows = query(conn,
+        "SELECT * FROM manager_transfer_invites WHERE to_student_id=%s AND status='pending' ORDER BY created_at DESC",
+        (sid,)
+    )
+    conn.close()
+    return jsonify({'invites': [dict(r) for r in rows]})
+
+
+@app.route('/student/respond_transfer', methods=['POST'])
+@login_required('student')
+def student_respond_transfer():
+    d         = request.json
+    invite_id = d.get('invite_id')
+    action    = d.get('action')
+    sid       = session['user_id']
+    conn      = get_db()
+    invite = queryOne(conn,
+        "SELECT * FROM manager_transfer_invites WHERE id=%s AND to_student_id=%s AND status='pending'",
+        (invite_id, sid)
+    )
+    if not invite:
+        conn.close()
+        return jsonify({'ok': False, 'msg': 'Invite not found or already responded.'})
+    if action == 'decline':
+        execute(conn,
+            "UPDATE manager_transfer_invites SET status='declined', responded_at=to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS') WHERE id=%s",
+            (invite_id,)
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True, 'msg': 'You declined the manager transfer.'})
+    student   = queryOne(conn, "SELECT * FROM students WHERE id=%s", (sid,))
+    temp_pass = invite['temp_password']
+    new_mgr_id = invite['new_manager_id']
+    expires   = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
+    old_mgrs  = query(conn, "SELECT * FROM meal_managers WHERE is_active=1")
+    for mgr in old_mgrs:
+        mgr_roll = None
+        if mgr['student_id']:
+            s_row = queryOne(conn, "SELECT roll_number FROM students WHERE id=%s", (mgr['student_id'],))
+            if s_row:
+                mgr_roll = s_row['roll_number']
+        execute(conn,
+            "INSERT INTO manager_history (manager_id, student_name, roll_number, batch, floor, assigned_by, tenure_start, tenure_end) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS'))",
+            (mgr['manager_id'], mgr['name'], mgr_roll, None, None, invite['from_manager_id'], mgr['created_at'])
+        )
+        execute(conn, "UPDATE meal_managers SET is_active=0 WHERE id=%s", (mgr['id'],))
+    execute(conn,
+        "INSERT INTO meal_managers (manager_id, name, password, bkash_number, is_active, student_id, temp_password_expires, must_change_password) "
+        "VALUES (%s,%s,%s,%s,1,%s,%s,1)",
+        (new_mgr_id, student['name'], hash_pass(temp_pass), student['bkash_number'], sid, expires)
+    )
+    execute(conn,
+        "UPDATE manager_transfer_invites SET status='accepted', responded_at=to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS') WHERE id=%s",
+        (invite_id,)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({
+        'ok': True, 'manager_id': new_mgr_id, 'temp_password': temp_pass,
+        'expires': expires, 'msg': f'You are now the meal manager! Login with ID: {new_mgr_id}'
+    })
 
 # ── MANAGER CHANGE PASSWORD ───────────────────────────────────────────────────
 
@@ -3586,6 +2614,105 @@ def admin_list_managers():
     return jsonify({'managers': [dict(m) for m in managers]})
 
 
+@app.route('/admin/remove_rotation_manager', methods=['POST'])
+@admin_required
+def admin_remove_rotation_manager():
+    data       = request.json or {}
+    manager_id = data.get('manager_id', '').strip().upper()
+    if not manager_id:
+        return jsonify({'ok': False, 'msg': 'No manager_id provided.'}), 400
+    if manager_id == 'MGR001':
+        return jsonify({'ok': False, 'msg': 'MGR001 cannot be removed via this action.'}), 400
+    conn = get_db()
+    mgr  = queryOne(conn, "SELECT * FROM meal_managers WHERE manager_id=%s", (manager_id,))
+    if not mgr:
+        conn.close()
+        return jsonify({'ok': False, 'msg': f'Manager {manager_id} not found.'}), 404
+    if not mgr['is_active']:
+        conn.close()
+        return jsonify({'ok': False, 'msg': f'{manager_id} is already inactive.'}), 400
+    execute(conn, "UPDATE meal_managers SET is_active=0 WHERE manager_id=%s", (manager_id,))
+    execute(conn, "INSERT INTO admin_reset_log (admin_id, action) VALUES (%s,%s)",
+            (session['admin_id'], f"remove_rotation_manager: {manager_id} deactivated"))
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True, 'msg': f'Manager {manager_id} deactivated.'})
+
+
+@app.route('/admin/transfer_manager', methods=['POST'])
+@admin_required
+def admin_transfer_manager():
+    data           = request.json
+    roll           = data.get('roll_number', '').strip()
+    new_manager_id = data.get('new_manager_id', '').strip().upper()
+    temp_password  = data.get('temp_password', '').strip()
+    if not roll or not new_manager_id or not temp_password or len(temp_password) < 6:
+        return jsonify({'ok': False, 'msg': 'Roll number, new manager ID, and temp password (min 6 chars) required.'})
+    conn    = get_db()
+    student = queryOne(conn, "SELECT id, name, bkash_number FROM students WHERE roll_number=%s", (roll,))
+    if not student:
+        conn.close()
+        return jsonify({'ok': False, 'msg': f'No student found with roll "{roll}".'})
+    if queryOne(conn, "SELECT id FROM meal_managers WHERE manager_id=%s", (new_manager_id,)):
+        conn.close()
+        return jsonify({'ok': False, 'msg': f'Manager ID "{new_manager_id}" is already taken.'})
+    active_mgrs = query(conn, "SELECT * FROM meal_managers WHERE is_active=1")
+    for mgr in active_mgrs:
+        mgr_roll = None
+        if mgr['student_id']:
+            s_row = queryOne(conn, "SELECT roll_number FROM students WHERE id=%s", (mgr['student_id'],))
+            if s_row:
+                mgr_roll = s_row['roll_number']
+        execute(conn,
+            "INSERT INTO manager_history (manager_id, student_name, roll_number, batch, floor, assigned_by, tenure_start, tenure_end) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS'))",
+            (mgr['manager_id'], mgr['name'], mgr_roll, None, None, session['admin_id'], mgr['created_at'])
+        )
+        execute(conn, "UPDATE meal_managers SET is_active=0 WHERE id=%s", (mgr['id'],))
+    expires = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
+    execute(conn,
+        "INSERT INTO meal_managers (manager_id, name, password, bkash_number, is_active, student_id, temp_password_expires, must_change_password) VALUES (%s,%s,%s,%s,1,%s,%s,1)",
+        (new_manager_id, student['name'], hash_pass(temp_password), student['bkash_number'], student['id'], expires)
+    )
+    execute(conn, "INSERT INTO admin_reset_log (admin_id, action) VALUES (%s,%s)",
+            (session['admin_id'], f"admin_transfer_manager: {student['name']} ({roll}) -> {new_manager_id}"))
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True, 'msg': f'Manager role transferred to {student["name"]} ({roll}). Login ID: {new_manager_id}.'})
+
+
+@app.route('/admin/add_manager', methods=['POST'])
+@admin_required
+def admin_add_manager():
+    data           = request.json or {}
+    roll           = (data.get('roll_number') or '').strip()
+    new_manager_id = (data.get('new_manager_id') or '').strip().upper()
+    temp_password  = (data.get('temp_password') or '').strip()
+    if not roll or not new_manager_id or not temp_password or len(temp_password) < 6:
+        return jsonify({'ok': False, 'msg': 'Roll, Manager ID, and temp password (min 6 chars) required.'})
+    conn    = get_db()
+    student = queryOne(conn, "SELECT id, name, bkash_number FROM students WHERE roll_number=%s", (roll,))
+    if not student:
+        conn.close()
+        return jsonify({'ok': False, 'msg': f'No student found with roll "{roll}".'})
+    if queryOne(conn, "SELECT id FROM meal_managers WHERE manager_id=%s", (new_manager_id,)):
+        conn.close()
+        return jsonify({'ok': False, 'msg': f'Manager ID "{new_manager_id}" is already taken.'})
+    active_count = queryOne(conn, "SELECT COUNT(*) as c FROM meal_managers WHERE is_active=1")['c']
+    if active_count >= 4:
+        conn.close()
+        return jsonify({'ok': False, 'msg': 'Maximum 4 active managers allowed.'})
+    expires = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
+    execute(conn,
+        "INSERT INTO meal_managers (manager_id, name, password, bkash_number, is_active, student_id, temp_password_expires, must_change_password) VALUES (%s,%s,%s,%s,1,%s,%s,1)",
+        (new_manager_id, student['name'], hash_pass(temp_password), student['bkash_number'], student['id'], expires)
+    )
+    execute(conn, "INSERT INTO admin_reset_log (admin_id, action) VALUES (%s,%s)",
+            (session['admin_id'], f"add_manager: {student['name']} ({roll}) -> {new_manager_id}"))
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True, 'msg': f'Manager {new_manager_id} created for {student["name"]}.'})
+
 # ── TOTAL BILL ────────────────────────────────────────────────────────────────
 
 def _get_total_bill(bill_date):
@@ -3622,7 +2749,6 @@ def _get_total_bill(bill_date):
         'male_lunch': male_lunch, 'male_dinner': male_dinner,
         'female_lunch': female_lunch, 'female_dinner': female_dinner,
         'floors': [{'floor': r['floor'], 'lunch': r['lunch'], 'dinner': r['dinner'], 'total': r['total']} for r in floor_rows],
-        'ok': True,
     }
 
 
@@ -3950,6 +3076,168 @@ def admin_set_cutoff_override():
                      'deadlines apply.')
     })
 
+# ── MANAGER ROTATION ──────────────────────────────────────────────────────────
+
+@app.route('/manager/rotation')
+@login_required('manager')
+def manager_get_rotation():
+    today      = date.today()
+    week_start = (today - timedelta(days=today.weekday())).isoformat()
+    next_week  = (today - timedelta(days=today.weekday()) + timedelta(weeks=1)).isoformat()
+    conn       = get_db()
+    def fetch_week(ws):
+        rows = query(conn, "SELECT * FROM manager_rotation WHERE week_start=%s ORDER BY slot", (ws,))
+        return [dict(r) for r in rows]
+    result = {
+        'week_start': week_start, 'next_week_start': next_week,
+        'this_week': fetch_week(week_start), 'next_week': fetch_week(next_week),
+        'today': today.isoformat(), 'weekday': today.weekday(),
+    }
+    conn.close()
+    return jsonify(result)
+
+
+@app.route('/manager/rotation/save', methods=['POST'])
+@login_required('manager')
+def manager_save_rotation():
+    data       = request.json
+    week_start = data.get('week_start')
+    slots      = data.get('slots', [])
+    if not week_start or not slots:
+        return jsonify({'ok': False, 'msg': 'week_start and slots are required.'})
+    conn     = get_db()
+    short_ws = week_start.replace('-', '')[2:]
+    execute(conn, "DELETE FROM manager_rotation WHERE week_start=%s", (week_start,))
+    for s in slots:
+        execute(conn,
+            "INSERT INTO manager_rotation (week_start, slot, student_id, student_name, roll_number, day_from, day_to, note) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+            (week_start, s.get('slot'), s.get('student_id'), s.get('student_name'),
+             s.get('roll_number'), s.get('day_from', 1), s.get('day_to', 7), s.get('note', ''))
+        )
+    execute(conn, "DELETE FROM duty_invites WHERE week_start=%s AND status='pending'", (week_start,))
+    first_duty_id = None
+    for s in slots:
+        sid          = s.get('student_id')
+        student_name = (s.get('student_name') or '').strip()
+        slot         = s.get('slot', 1)
+        if sid:
+            first_name   = student_name.split()[0] if student_name else f's{slot}'
+            name_slug    = ''.join(c for c in first_name.lower() if c.isalnum())[:12] or f's{slot}'
+            base_id      = f"DUTY-{short_ws}-{name_slug}"
+            slot_duty_id = base_id
+            suffix_n     = 2
+            while queryOne(conn, "SELECT id FROM meal_managers WHERE manager_id=%s AND is_active=1", (slot_duty_id,)):
+                slot_duty_id = f"{base_id}{suffix_n}"
+                suffix_n    += 1
+            slot_duty_pw = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
+            if first_duty_id is None:
+                first_duty_id = slot_duty_id
+            execute(conn,
+                "INSERT INTO duty_invites (week_start, student_id, slot, duty_id, duty_password, status) VALUES (%s,%s,%s,%s,%s,'pending')",
+                (week_start, sid, slot, slot_duty_id, slot_duty_pw)
+            )
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True, 'msg': 'Rotation saved.', 'duty_id': first_duty_id or f"DUTY-{short_ws}-s1"})
+
+
+@app.route('/manager/rotation/search_students')
+@login_required('manager')
+def rotation_search_students():
+    q    = request.args.get('q', '').strip()
+    conn = get_db()
+    rows = query(conn,
+        "SELECT id, name, roll_number, batch FROM students WHERE name LIKE %s OR roll_number LIKE %s LIMIT 12",
+        (f'%{q}%', f'%{q}%')
+    )
+    conn.close()
+    return jsonify({'students': [dict(r) for r in rows]})
+
+# ── STUDENT DUTY INVITES ──────────────────────────────────────────────────────
+
+@app.route('/student/duty_invites')
+@login_required('student')
+def student_duty_invites():
+    sid  = session['user_id']
+    conn = get_db()
+    rows = query(conn,
+        "SELECT * FROM duty_invites WHERE student_id=%s ORDER BY created_at DESC", (sid,)
+    )
+    conn.close()
+    return jsonify({'invites': [dict(r) for r in rows]})
+
+
+@app.route('/student/accept_duty', methods=['POST'])
+@login_required('student')
+def student_accept_duty():
+    d         = request.json
+    invite_id = d.get('invite_id')
+    sid       = session['user_id']
+    conn      = get_db()
+    invite = queryOne(conn,
+        "SELECT * FROM duty_invites WHERE id=%s AND student_id=%s AND status='pending'",
+        (invite_id, sid)
+    )
+    if not invite:
+        conn.close()
+        return jsonify({'ok': False, 'msg': 'Invite not found or already responded.'})
+    duty_id  = invite['duty_id']
+    duty_pw  = invite['duty_password']
+    week_str = invite['week_start']
+    student  = queryOne(conn, "SELECT * FROM students WHERE id=%s", (sid,))
+    bkash    = student['bkash_number'] if student else '01000000000'
+    already_exists = queryOne(conn, "SELECT id FROM meal_managers WHERE manager_id=%s", (duty_id,))
+    if already_exists:
+        execute(conn,
+            "UPDATE duty_invites SET status='accepted', accepted_at=to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS') WHERE id=%s",
+            (invite_id,)
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True, 'duty_id': duty_id, 'duty_password': duty_pw,
+                        'week_start': week_str, 'slot': invite['slot']})
+    week_accepted_count = queryOne(conn,
+        "SELECT COUNT(*) as c FROM duty_invites WHERE week_start=%s AND status='accepted'", (week_str,)
+    )['c']
+    if week_accepted_count == 0:
+        old_mgrs = query(conn, "SELECT * FROM meal_managers WHERE is_active=1")
+        for mgr in old_mgrs:
+            mgr_roll = None
+            if mgr['student_id']:
+                s_row = queryOne(conn, "SELECT roll_number FROM students WHERE id=%s", (mgr['student_id'],))
+                if s_row:
+                    mgr_roll = s_row['roll_number']
+            execute(conn,
+                "INSERT INTO manager_history (manager_id, student_name, roll_number, batch, floor, assigned_by, tenure_start, tenure_end) "
+                "VALUES (%s,%s,%s,%s,%s,'duty_rotation',%s,to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS'))",
+                (mgr['manager_id'], mgr['name'], mgr_roll, None, None, mgr['created_at'])
+            )
+            execute(conn, "UPDATE meal_managers SET is_active=0 WHERE id=%s", (mgr['id'],))
+    execute(conn,
+        "INSERT INTO meal_managers (manager_id, name, password, bkash_number, is_active, student_id, must_change_password) VALUES (%s,%s,%s,%s,1,%s,0)",
+        (duty_id, student['name'] if student else 'Duty Manager', hash_pass(duty_pw), bkash, sid)
+    )
+    execute(conn,
+        "UPDATE duty_invites SET status='accepted', accepted_at=to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS') WHERE id=%s",
+        (invite_id,)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True, 'duty_id': duty_id, 'duty_password': duty_pw,
+                    'week_start': week_str, 'slot': invite['slot']})
+
+
+@app.route('/student/duty_credentials')
+@login_required('student')
+def student_duty_credentials():
+    sid  = session['user_id']
+    conn = get_db()
+    rows = query(conn,
+        "SELECT * FROM duty_invites WHERE student_id=%s AND status='accepted' ORDER BY created_at DESC", (sid,)
+    )
+    conn.close()
+    return jsonify({'credentials': [dict(r) for r in rows]})
+
 # ── BKASH PROPOSAL ────────────────────────────────────────────────────────────
 
 @app.route('/manager/bkash_propose', methods=['POST'])
@@ -4144,6 +3432,43 @@ def emergency_reset():
         f'<p><a href="/manager/login">Go to Manager Login →</a></p>'
         f'<p style="color:red"><strong>Important:</strong> Remove EMERGENCY_KEY from env now.</p>'
     ), 200
+
+# ── ROTATION CLEAR ────────────────────────────────────────────────────────────
+
+@app.route('/manager/rotation/clear', methods=['POST'])
+@login_required('manager')
+def manager_clear_rotation():
+    data       = request.json or {}
+    week_start = data.get('week_start', '').strip()
+    if not week_start:
+        return jsonify({'ok': False, 'msg': 'week_start is required.'})
+    conn = get_db()
+    execute(conn, "DELETE FROM manager_rotation WHERE week_start=%s", (week_start,))
+    execute(conn, "DELETE FROM duty_invites WHERE week_start=%s AND status='pending'", (week_start,))
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True, 'msg': f'Rotation for week {week_start} cleared.'})
+
+
+@app.route('/admin/rotation/clear', methods=['POST'])
+@admin_required
+def admin_clear_rotation():
+    data       = request.json or {}
+    week_start = data.get('week_start', '').strip()
+    conn       = get_db()
+    if week_start:
+        execute(conn, "DELETE FROM manager_rotation WHERE week_start=%s", (week_start,))
+        execute(conn, "DELETE FROM duty_invites WHERE week_start=%s AND status='pending'", (week_start,))
+        msg = f'Rotation for week {week_start} cleared.'
+    else:
+        execute(conn, "DELETE FROM manager_rotation")
+        execute(conn, "DELETE FROM duty_invites WHERE status='pending'")
+        msg = 'All rotation schedules cleared.'
+    execute(conn, "INSERT INTO admin_reset_log (admin_id, action) VALUES (%s,%s)",
+            (session['admin_id'], f"clear_rotation: {msg}"))
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True, 'msg': msg})
 
 # ── OVERDUE / NON-ORDERERS ────────────────────────────────────────────────────
 
@@ -4684,5 +4009,4 @@ with app.app_context():
         raise
 
 if __name__ == '__main__':
-    _debug = os.environ.get('FLASK_DEBUG', '').lower() in ('1', 'true', 'on')
-    app.run(host='0.0.0.0', debug=_debug, port=int(os.environ.get('PORT', 5000)))
+    app.run(debug=True, port=int(os.environ.get('PORT', 5000)))
