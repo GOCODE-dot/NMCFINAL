@@ -2663,6 +2663,18 @@ def manager_dashboard():
     due_count      = queryOne(conn, "SELECT COUNT(DISTINCT student_id) as c FROM meal_orders WHERE payment_status='due'")['c']
     total_received = queryOne(conn, "SELECT COALESCE(SUM(amount),0) as t FROM payments WHERE status='verified'")['t']
 
+    # Diagnostic: the 10 most recently placed orders, exactly as stored,
+    # so a manager can immediately see which calendar date (BD time) an
+    # order actually landed on — the #1 cause of "I ordered but it's not
+    # showing" is the order being for a different date than "today" (e.g.
+    # placed after the midnight cutoff, so it's filed under tomorrow).
+    recent_orders = query(conn, """
+        SELECT mo.meal_date, mo.meal_type, mo.payment_status, mo.ordered_at,
+               s.name as student_name, s.roll_number
+        FROM meal_orders mo JOIN students s ON s.id=mo.student_id
+        ORDER BY mo.ordered_at DESC LIMIT 10
+    """)
+
     week_dates = [(bd_today() + timedelta(days=i)).isoformat() for i in range(7)]
     weekly = []
     for d in week_dates:
@@ -2803,6 +2815,8 @@ def manager_dashboard():
         pending_amount    = pending_amount,
         due_count         = due_count,
         total_received    = total_received,
+        recent_orders     = recent_orders,
+        server_today      = today,
         weekly            = weekly,
         students_due      = students_due,
         mgr_bkash         = mgr_bkash_val,
