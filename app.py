@@ -234,6 +234,86 @@ def bkash_execute_payment(payment_id):
                           json=body, headers=_bkash_headers(), timeout=15)
     return resp.json()
 
+
+# ── RupantorPay Payment Gateway config ────────────────────────────────────────
+# RupantorPay is a Bangladeshi payment AGGREGATOR: one API key gives you a
+# single hosted checkout page where the student can choose bKash, Nagad,
+# Rocket, Upay, cards, etc. — you don't need separate bKash/Nagad merchant
+# accounts to use it. Docs: https://rupantorpay.readme.io/reference
+#
+# RUPANTORPAY_MOCK_MODE defaults ON so "Pay with RupantorPay" can be tested
+# end-to-end with no real account. Once you buy a plan at rupantorpay.com and
+# get your API key from the dashboard, set these as real environment
+# variables in Railway → Variables tab:
+#   RUPANTORPAY_MOCK_MODE=0
+#   RUPANTORPAY_API_KEY=<your real API key>
+RUPANTORPAY_MOCK_MODE = os.environ.get('RUPANTORPAY_MOCK_MODE', '0') == '1'
+RUPANTORPAY_API_KEY   = os.environ.get('RUPANTORPAY_API_KEY', '68iVDharRoxlzqjXQnFKzmrmUy1nxrRQHqav9e0chKshEIVNmx')
+RUPANTORPAY_BASE_URL  = os.environ.get('RUPANTORPAY_BASE_URL', 'https://payment.rupantorpay.com/api')
+
+
+def _rupantorpay_headers():
+    return {
+        'Content-Type': 'application/json',
+        'X-API-KEY': RUPANTORPAY_API_KEY,
+    }
+
+
+def rupantorpay_create_payment(amount, invoice_number, fullname, email):
+    """Start a RupantorPay checkout. Returns dict with 'payment_url'.
+    In mock mode, returns our own test page so you can try the full flow
+    (redirect out, choose a fake method, come back, order marked paid) with
+    no RupantorPay account at all."""
+    if RUPANTORPAY_MOCK_MODE:
+        return {
+            'payment_url': f'/student/rupantorpay/mock_checkout?invoice={invoice_number}&amount={amount}',
+        }
+
+    body = {
+        'fullname': fullname or 'NMMS Student',
+        'email': email or 'student@example.com',
+        'amount': f'{amount:.2f}',
+        'success_url': url_for('student_rupantorpay_return', invoice=invoice_number, result='success', _external=True),
+        'cancel_url':  url_for('student_rupantorpay_return', invoice=invoice_number, result='cancel',  _external=True),
+        'webhook_url': url_for('student_rupantorpay_webhook', _external=True),
+        'metadata': {'invoice_number': invoice_number},
+    }
+    resp = requests.post(f'{RUPANTORPAY_BASE_URL}/payment/checkout',
+                          json=body, headers=_rupantorpay_headers(), timeout=15)
+    try:
+        data = resp.json()
+    except Exception:
+        raise RuntimeError(f'RupantorPay returned a non-JSON response (HTTP {resp.status_code}): {resp.text[:300]}')
+
+    # RupantorPay's docs don't pin down the exact response key name, so we
+    # check the common possibilities used by similar BD gateways.
+    url = (data.get('payment_url') or data.get('paymentURL') or data.get('checkout_url')
+           or data.get('url') or (data.get('data') or {}).get('payment_url'))
+    if not url:
+        raise RuntimeError(f'RupantorPay checkout did not return a payment URL: {data}')
+    return {'payment_url': url, 'raw': data}
+
+
+def rupantorpay_verify_payment(transaction_id):
+    """Confirm a payment's final status with RupantorPay's verify endpoint."""
+    if RUPANTORPAY_MOCK_MODE:
+        return {'status': 'COMPLETED', 'transaction_id': transaction_id}
+
+    resp = requests.post(f'{RUPANTORPAY_BASE_URL}/payment/verify-payment',
+                          json={'transaction_id': transaction_id},
+                          headers=_rupantorpay_headers(), timeout=15)
+    try:
+        return resp.json()
+    except Exception:
+        return {'status': 'unknown', 'raw_text': resp.text[:300]}
+
+
+def _rupantorpay_is_success(verify_result):
+    """RupantorPay's exact success value isn't pinned down in their public docs,
+    so we accept any of the common spellings other BD gateways use."""
+    status = str(verify_result.get('status', '')).strip().upper()
+    return status in ('COMPLETED', 'SUCCESS', 'SUCCESSFUL', 'PAID', 'TRUE', '1')
+
 # ── Schema init ───────────────────────────────────────────────────────────────
 
 def init_db():
@@ -509,6 +589,19 @@ def init_db():
             id             SERIAL PRIMARY KEY,
             student_id     INTEGER NOT NULL,
             payment_id     TEXT NOT NULL,
+            invoice_number TEXT NOT NULL,
+            amount         REAL NOT NULL,
+            status         TEXT DEFAULT 'initiated',
+            trx_id         TEXT DEFAULT NULL,
+            created_at     TEXT DEFAULT (to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')),
+            completed_at   TEXT DEFAULT NULL
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS rupantorpay_sessions (
+            id             SERIAL PRIMARY KEY,
+            student_id     INTEGER NOT NULL,
             invoice_number TEXT NOT NULL,
             amount         REAL NOT NULL,
             status         TEXT DEFAULT 'initiated',
@@ -1411,6 +1504,208 @@ def student_bkash_mock_checkout():
           Simulate Successful Payment
         </button>
         <button class="cancel" onclick="location.href='/student/bkash/callback?paymentID={payment_id}&status=cancel'">
+          Simulate Cancel
+        </button>
+      </div>
+    </body></html>
+    """
+
+
+# ── RupantorPay Payment Gateway — one checkout for bKash, Nagad, Rocket, etc ──
+
+@app.route('/student/rupantorpay/pay', methods=['POST'])
+@login_required('student')
+def student_rupantorpay_pay():
+    """Student taps 'Pay with RupantorPay' — compute the real due amount
+    server-side, open a RupantorPay checkout session, and hand back the URL
+    to redirect to. The student picks bKash, Nagad, Rocket, etc. on
+    RupantorPay's own hosted page."""
+    sid  = session['user_id']
+    conn = get_db()
+
+    pending_cancel = queryOne(conn,
+        "SELECT id FROM meal_edit_requests WHERE student_id=%s AND action='cancel' AND status='pending'", (sid,)
+    )
+    if pending_cancel:
+        conn.close()
+        return jsonify({'ok': False, 'msg': 'You have a pending meal cancellation request. Wait for the manager to resolve it before paying.'})
+
+    due_row = queryOne(conn,
+        "SELECT COALESCE(SUM(amount),0) as total FROM meal_orders "
+        "WHERE student_id=%s AND payment_status IN ('pending','due')", (sid,)
+    )
+    amount = float(due_row['total'] or 0)
+    if amount <= 0:
+        conn.close()
+        return jsonify({'ok': False, 'msg': 'You have no unpaid meals right now.'})
+
+    student_row = queryOne(conn, "SELECT name, roll_number FROM students WHERE id=%s", (sid,))
+    fullname = student_row['name'] if student_row else 'Student'
+    email    = f"{student_row['roll_number']}@nmms-student.local" if student_row else 'student@nmms.local'
+
+    invoice_number = f'NMMS-{sid}-{int(datetime.utcnow().timestamp())}'
+
+    try:
+        result = rupantorpay_create_payment(amount, invoice_number, fullname, email)
+    except Exception as e:
+        conn.close()
+        return jsonify({'ok': False, 'msg': f'Could not start RupantorPay checkout: {e}'})
+
+    execute(conn,
+        "INSERT INTO rupantorpay_sessions (student_id, invoice_number, amount, status) "
+        "VALUES (%s,%s,%s,'initiated')",
+        (sid, invoice_number, amount)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True, 'payment_url': result['payment_url']})
+
+
+def _rupantorpay_finalize(invoice_number, sid, conn):
+    """Shared logic: verify with RupantorPay, mark the session + meal orders
+    paid if successful. Returns (ok, amount, trx_id) or (False, 0, None)."""
+    sess_row = queryOne(conn,
+        "SELECT * FROM rupantorpay_sessions WHERE invoice_number=%s AND student_id=%s",
+        (invoice_number, sid)
+    )
+    if not sess_row:
+        return False, 0, None
+    if sess_row['status'] == 'completed':
+        return True, sess_row['amount'], sess_row['trx_id']
+
+    try:
+        verify_result = rupantorpay_verify_payment(invoice_number)
+    except Exception:
+        return False, 0, None
+
+    if not _rupantorpay_is_success(verify_result):
+        execute(conn, "UPDATE rupantorpay_sessions SET status='failed' WHERE invoice_number=%s", (invoice_number,))
+        conn.commit()
+        return False, 0, None
+
+    trx_id = verify_result.get('transaction_id') or verify_result.get('trx_id') or invoice_number
+    now    = datetime.utcnow().isoformat(timespec='seconds')
+    amount = sess_row['amount']
+    weekly = get_current_weekly_bkash()
+
+    execute(conn,
+        "INSERT INTO payments (student_id, amount, bkash_txn, payment_date, status, manager_bkash, verified_at, verified_by) "
+        "VALUES (%s,%s,%s,%s,'verified',%s,%s,'rupantorpay_gateway')",
+        (sid, amount, trx_id, date.today().isoformat(), weekly['bkash_number'], now)
+    )
+
+    unpaid = query(conn,
+        "SELECT id, amount FROM meal_orders WHERE student_id=%s AND payment_status IN ('pending','due') "
+        "ORDER BY meal_date ASC",
+        (sid,)
+    )
+    remaining = amount
+    for row in unpaid:
+        if remaining <= 0:
+            break
+        execute(conn, "UPDATE meal_orders SET payment_status='paid' WHERE id=%s", (row['id'],))
+        remaining -= row['amount']
+
+    execute(conn,
+        "UPDATE rupantorpay_sessions SET status='completed', trx_id=%s, completed_at=%s WHERE invoice_number=%s",
+        (trx_id, now, invoice_number)
+    )
+    conn.commit()
+    return True, amount, trx_id
+
+
+@app.route('/student/rupantorpay/return')
+@login_required('student')
+def student_rupantorpay_return():
+    """RupantorPay sends the browser back here (our success_url or
+    cancel_url) once the student finishes on their hosted checkout page."""
+    invoice_number = request.args.get('invoice', '')
+    result         = request.args.get('result', '')
+    sid  = session['user_id']
+    conn = get_db()
+
+    if result != 'success':
+        execute(conn, "UPDATE rupantorpay_sessions SET status='cancelled' WHERE invoice_number=%s", (invoice_number,))
+        conn.commit()
+        conn.close()
+        return redirect(url_for('student_dashboard', pay_result='cancelled'))
+
+    ok, amount, trx_id = _rupantorpay_finalize(invoice_number, sid, conn)
+    conn.close()
+
+    if not ok:
+        return redirect(url_for('student_dashboard', pay_result='failed'))
+    return redirect(url_for('student_dashboard', pay_result='success', amount=int(amount), trx=trx_id))
+
+
+@app.route('/student/rupantorpay/webhook', methods=['POST'])
+def student_rupantorpay_webhook():
+    """Server-to-server notification from RupantorPay. This can arrive
+    before, after, or instead of the browser redirect, so it independently
+    finalizes the payment too — this is what makes the gateway reliable even
+    if the student closes their browser right after paying."""
+    data = request.get_json(silent=True) or {}
+    invoice_number = ((data.get('metadata') or {}).get('invoice_number')
+                       or data.get('invoice_number') or '')
+    if not invoice_number:
+        return jsonify({'ok': False, 'msg': 'No invoice_number in webhook payload'}), 400
+
+    conn = get_db()
+    sess_row = queryOne(conn, "SELECT student_id FROM rupantorpay_sessions WHERE invoice_number=%s", (invoice_number,))
+    if not sess_row:
+        conn.close()
+        return jsonify({'ok': False, 'msg': 'Unknown invoice'}), 404
+
+    _rupantorpay_finalize(invoice_number, sess_row['student_id'], conn)
+    conn.close()
+    return jsonify({'ok': True})
+
+
+@app.route('/student/rupantorpay/mock_checkout')
+@login_required('student')
+def student_rupantorpay_mock_checkout():
+    """Simulated RupantorPay hosted page — only reachable while
+    RUPANTORPAY_MOCK_MODE=1. Lets you test the full leave-the-site-and-
+    come-back flow, with a choice of methods, before you have a real
+    RupantorPay account."""
+    if not RUPANTORPAY_MOCK_MODE:
+        return "Mock checkout is disabled (RUPANTORPAY_MOCK_MODE=0).", 404
+
+    invoice = request.args.get('invoice', '')
+    amount  = request.args.get('amount', '0')
+    success_url = url_for('student_rupantorpay_return', invoice=invoice, result='success')
+    cancel_url  = url_for('student_rupantorpay_return', invoice=invoice, result='cancel')
+
+    return f"""
+    <html><head><title>RupantorPay (Mock Checkout)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+      body {{ font-family: system-ui, sans-serif; background:#0f172a; min-height:100vh;
+              display:flex; align-items:center; justify-content:center; margin:0; }}
+      .card {{ background:#fff; border-radius:16px; padding:32px; max-width:380px; width:90%;
+                text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.4); }}
+      .logo {{ font-size:24px; font-weight:800; color:#0f172a; margin-bottom:4px; }}
+      .tag  {{ font-size:12px; color:#999; margin-bottom:20px; }}
+      .amt  {{ font-size:32px; font-weight:800; color:#222; margin-bottom:4px; }}
+      .inv  {{ font-size:12px; color:#888; margin-bottom:20px; }}
+      .methods {{ display:flex; gap:8px; justify-content:center; margin-bottom:20px; }}
+      .methods span {{ font-size:11px; background:#f1f1f1; border-radius:6px; padding:5px 9px; }}
+      button {{ width:100%; padding:14px; border-radius:10px; border:none; font-size:15px;
+                font-weight:700; margin-bottom:10px; cursor:pointer; }}
+      .pay {{ background:#16a34a; color:#fff; }}
+      .cancel {{ background:#f1f1f1; color:#555; }}
+    </style></head>
+    <body>
+      <div class="card">
+        <div class="logo">RupantorPay</div>
+        <div class="tag">⚠️ MOCK CHECKOUT — for local testing only, no real money moves</div>
+        <div class="amt">৳{amount}</div>
+        <div class="inv">Invoice: {invoice}</div>
+        <div class="methods"><span>bKash</span><span>Nagad</span><span>Rocket</span><span>Card</span></div>
+        <button class="pay" onclick="location.href='{success_url}'">
+          Simulate Successful Payment
+        </button>
+        <button class="cancel" onclick="location.href='{cancel_url}'">
           Simulate Cancel
         </button>
       </div>
