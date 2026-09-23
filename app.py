@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, make_response
-import os, re, uuid, requests
+import os, re, time, uuid, requests
 from datetime import datetime, timedelta, date
 
 # NMMS operates on Bangladesh local time (UTC+6). Keep dashboard, ordering,
@@ -17,7 +17,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from psycopg2 import IntegrityError as PgIntegrityError
 
-_LEGACY_GATEWAY_REPAIR_DONE = False
+_LEGACY_GATEWAY_REPAIR_LAST_RUN = 0  # epoch seconds; 0 = never run yet, so it runs on first dashboard load
 
 app = Flask(__name__)
 
@@ -380,6 +380,39 @@ def _gateway_official_transaction_id(verify_result):
              or data.get('trx_id') or data.get('trxId'))
     value = str(value).strip() if value is not None else ''
     return value or None
+
+
+def _attach_meal_breakdown(conn, payment_rows):
+    """Mutates each row in payment_rows (dicts from the `payments` table) to
+    add `meal_breakdown` (e.g. "Lunch x1, Dinner x1") and `meal_lunch` /
+    `meal_dinner` counts, based on the meal_orders this exact payment
+    settled (meal_orders.payment_id). Without this, the manager panel only
+    ever showed the paid amount (e.g. "Received ৳100") with no way to tell
+    it covered 1 lunch + 1 dinner for that student."""
+    if not payment_rows:
+        return
+    ids = [r['id'] for r in payment_rows]
+    rows = query(conn, """
+        SELECT payment_id, meal_type, COUNT(*) as c
+        FROM meal_orders
+        WHERE payment_id = ANY(%s)
+        GROUP BY payment_id, meal_type
+    """, (ids,))
+    by_payment = {}
+    for r in rows:
+        by_payment.setdefault(r['payment_id'], {})[r['meal_type']] = r['c']
+    for p in payment_rows:
+        counts = by_payment.get(p['id'], {})
+        lunch  = int(counts.get('lunch', 0))
+        dinner = int(counts.get('dinner', 0))
+        p['meal_lunch']  = lunch
+        p['meal_dinner'] = dinner
+        parts = []
+        if lunch:
+            parts.append(f'Lunch x{lunch}')
+        if dinner:
+            parts.append(f'Dinner x{dinner}')
+        p['meal_breakdown'] = ', '.join(parts) if parts else None
 
 
 def _repair_legacy_gateway_payment_rows(conn, limit=25):
@@ -884,6 +917,10 @@ def init_db():
     for migration_sql in [
         "ALTER TABLE students ADD COLUMN debt_blocked INTEGER DEFAULT 0",
         "ALTER TABLE rupantorpay_sessions ADD COLUMN gateway_invoice_id TEXT DEFAULT NULL",
+        # Links a meal order to the exact payment that settled it, so the
+        # manager panel can show which meals (lunch/dinner, dates) a given
+        # payment actually covered instead of just a bare amount.
+        "ALTER TABLE meal_orders ADD COLUMN payment_id INTEGER DEFAULT NULL",
     ]:
         _mc = get_db()
         try:
@@ -1885,11 +1922,12 @@ def _rupantorpay_finalize(invoice_number, sid, conn, gateway_ref=None):
     amount = sess_row['amount']
     weekly = get_current_weekly_bkash()
 
-    execute(conn,
+    payment_cur = execute(conn,
         "INSERT INTO payments (student_id, amount, bkash_txn, payment_date, status, manager_bkash, verified_at, verified_by) "
-        "VALUES (%s,%s,%s,%s,'verified',%s,%s,'rupantorpay_gateway')",
+        "VALUES (%s,%s,%s,%s,'verified',%s,%s,'rupantorpay_gateway') RETURNING id",
         (sid, amount, trx_id, bd_today().isoformat(), weekly['bkash_number'], now)
     )
+    payment_id = payment_cur.fetchone()['id']
 
     unpaid = query(conn,
         "SELECT id, amount FROM meal_orders WHERE student_id=%s AND payment_status IN ('pending','due') "
@@ -1900,7 +1938,10 @@ def _rupantorpay_finalize(invoice_number, sid, conn, gateway_ref=None):
     for row in unpaid:
         if remaining <= 0:
             break
-        execute(conn, "UPDATE meal_orders SET payment_status='paid' WHERE id=%s", (row['id'],))
+        # Tag this meal order with the payment that settled it (in addition
+        # to marking it paid) so the manager panel can later show exactly
+        # which meals — e.g. "Lunch 1, Dinner 1" — this payment covered.
+        execute(conn, "UPDATE meal_orders SET payment_status='paid', payment_id=%s WHERE id=%s", (payment_id, row['id']))
         remaining -= row['amount']
 
     execute(conn,
@@ -2129,11 +2170,12 @@ def _securepaybd_finalize(invoice_number, sid, conn, gateway_ref=None):
     amount = sess_row['amount']
     weekly = get_current_weekly_bkash()
 
-    execute(conn,
+    payment_cur = execute(conn,
         "INSERT INTO payments (student_id, amount, bkash_txn, payment_date, status, manager_bkash, verified_at, verified_by) "
-        "VALUES (%s,%s,%s,%s,'verified',%s,%s,'securepaybd_gateway')",
+        "VALUES (%s,%s,%s,%s,'verified',%s,%s,'securepaybd_gateway') RETURNING id",
         (sid, amount, trx_id, bd_today().isoformat(), weekly['bkash_number'], now)
     )
+    payment_id = payment_cur.fetchone()['id']
 
     unpaid = query(conn,
         "SELECT id, amount FROM meal_orders WHERE student_id=%s AND payment_status IN ('pending','due') "
@@ -2144,7 +2186,7 @@ def _securepaybd_finalize(invoice_number, sid, conn, gateway_ref=None):
     for row in unpaid:
         if remaining <= 0:
             break
-        execute(conn, "UPDATE meal_orders SET payment_status='paid' WHERE id=%s", (row['id'],))
+        execute(conn, "UPDATE meal_orders SET payment_status='paid', payment_id=%s WHERE id=%s", (payment_id, row['id']))
         remaining -= row['amount']
 
     execute(conn,
@@ -2649,20 +2691,24 @@ def manager_dashboard():
         FROM payments p JOIN students s ON s.id=p.student_id
         WHERE p.status='verified' ORDER BY p.verified_at DESC
     """)
+    _attach_meal_breakdown(conn, verified_payments)
 
-    # Automatically repair legacy gateway payment rows once per process.
-    # Old deployments could display a gateway reference such as TBJ17L145046
-    # as the official transaction ID. The repair verifies that reference with
-    # the gateway and changes the existing row only when an explicit official
-    # transaction ID is returned.
-    global _LEGACY_GATEWAY_REPAIR_DONE
-    if not _LEGACY_GATEWAY_REPAIR_DONE:
+    # Automatically repair legacy gateway payment rows. Old deployments could
+    # display a gateway reference such as TBJ17L145046 as the official
+    # transaction ID. The repair verifies that reference with the gateway and
+    # changes the existing row only when an explicit official transaction ID
+    # is returned. Retried on a cooldown (not just once per process) so a
+    # transient verify-API failure doesn't leave a wrong ID stuck forever
+    # until the next deploy/restart.
+    global _LEGACY_GATEWAY_REPAIR_LAST_RUN
+    _repair_now = (time.time() - _LEGACY_GATEWAY_REPAIR_LAST_RUN) > 600  # every 10 min at most
+    if _repair_now:
         try:
             checked, repaired = _repair_legacy_gateway_payment_rows(conn, limit=25)
             print(f'[Gateway repair] checked={checked}, repaired={repaired}')
         except Exception as exc:
             print(f'[Gateway repair] skipped: {exc}')
-        _LEGACY_GATEWAY_REPAIR_DONE = True
+        _LEGACY_GATEWAY_REPAIR_LAST_RUN = time.time()
 
     # Gateway payments are auto-verified and therefore do not appear in the
     # pending proof list. Keep a dedicated recent list in the Gateway Payments
@@ -2675,6 +2721,7 @@ def manager_dashboard():
         ORDER BY p.verified_at DESC
         LIMIT 100
     """)
+    _attach_meal_breakdown(conn, gateway_verified_payments)
 
     male_count   = queryOne(conn, "SELECT COUNT(*) as c FROM students WHERE gender='male'")['c']
     female_count = queryOne(conn, "SELECT COUNT(*) as c FROM students WHERE gender='female'")['c']
@@ -2790,8 +2837,8 @@ def verify_payment():
         student = queryOne(conn, "SELECT id FROM students WHERE roll_number=%s", (d['roll'],))
         if student:
             execute(conn,
-                "UPDATE meal_orders SET payment_status='paid' WHERE student_id=%s AND payment_status IN ('pending','due')",
-                (student['id'],)
+                "UPDATE meal_orders SET payment_status='paid', payment_id=%s WHERE student_id=%s AND payment_status IN ('pending','due')",
+                (d['payment_id'], student['id'])
             )
             remaining = queryOne(conn,
                 "SELECT COUNT(*) as c FROM meal_orders WHERE student_id=%s AND payment_status IN ('pending','due')",
@@ -2821,6 +2868,43 @@ def reject_payment():
         conn.close()
 
 
+@app.route('/manager/fix_transaction_id', methods=['POST'])
+@login_required('manager')
+def manager_fix_transaction_id():
+    """Let the manager manually correct a payment's stored transaction ID.
+
+    This exists because a handful of legacy gateway payments were recorded
+    with our own internal system-generated reference instead of RupantorPay's
+    real transaction ID. When the manager already knows the real ID (from
+    their RupantorPay merchant dashboard), this overwrites the wrong value
+    in place — no system-generated ID is ever synthesized here."""
+    d = request.json or {}
+    payment_id = d.get('payment_id')
+    real_txn   = (d.get('transaction_id') or '').strip()
+    if not payment_id or not real_txn:
+        return jsonify({'ok': False, 'msg': 'payment_id and transaction_id are required.'})
+    conn = get_db()
+    try:
+        row = queryOne(conn, "SELECT id, bkash_txn FROM payments WHERE id=%s", (payment_id,))
+        if not row:
+            return jsonify({'ok': False, 'msg': 'Payment not found.'})
+        old_txn = row['bkash_txn']
+        execute(conn, "UPDATE payments SET bkash_txn=%s WHERE id=%s", (real_txn, payment_id))
+        # Keep the matching gateway session row (if any) consistent too, so
+        # the automatic legacy-repair pass doesn't try to overwrite this
+        # manager-confirmed value again later.
+        if old_txn:
+            execute(conn, "UPDATE rupantorpay_sessions SET trx_id=%s WHERE trx_id=%s", (real_txn, old_txn))
+            execute(conn, "UPDATE securepaybd_sessions SET trx_id=%s WHERE trx_id=%s", (real_txn, old_txn))
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'ok': False, 'msg': str(e)})
+    finally:
+        conn.close()
+
+
 @app.route('/manager/mark_paid', methods=['POST'])
 @login_required('manager')
 def mark_paid():
@@ -2832,16 +2916,19 @@ def mark_paid():
             "SELECT SUM(amount) as t FROM meal_orders WHERE student_id=%s AND payment_status IN ('pending','due')",
             (student['id'],)
         )['t'] or 0
+        payment_id = None
         if amount > 0:
-            execute(conn,
+            _cur = execute(conn,
                 "INSERT INTO payments (student_id,amount,bkash_txn,payment_date,status,screenshot_note,"
                 "verified_at,verified_by) VALUES (%s,%s,'MANUAL-MARK',%s,'verified','Manually marked paid by manager',"
-                "to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS'),%s)",
+                "to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS'),%s) RETURNING id",
                 (student['id'], amount, bd_today().isoformat(), session['name'])
             )
+            payment_id = _cur.fetchone()['id']
         execute(conn,
-            "UPDATE meal_orders SET payment_status='paid' WHERE student_id=%s AND payment_status IN ('pending','due')",
-            (student['id'],)
+            "UPDATE meal_orders SET payment_status='paid', payment_id=COALESCE(%s, payment_id) "
+            "WHERE student_id=%s AND payment_status IN ('pending','due')",
+            (payment_id, student['id'])
         )
         execute(conn, "UPDATE students SET is_locked=0 WHERE id=%s", (student['id'],))
         conn.commit()
@@ -2860,17 +2947,20 @@ def collect_due():
             "SELECT SUM(amount) as t FROM meal_orders WHERE student_id=%s AND payment_status='due'",
             (student['id'],)
         )['t'] or 0
+        payment_id = None
         if amount > 0:
-            execute(conn,
+            _cur = execute(conn,
                 "INSERT INTO payments (student_id,amount,bkash_txn,payment_date,status,screenshot_note,"
                 "verified_at,verified_by) VALUES (%s,%s,'CASH-DUE-COLLECTED',%s,'verified',"
                 "'Due amount collected by manager in person',"
-                "to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS'),%s)",
+                "to_char(NOW() AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS'),%s) RETURNING id",
                 (student['id'], amount, bd_today().isoformat(), session['name'])
             )
+            payment_id = _cur.fetchone()['id']
         execute(conn,
-            "UPDATE meal_orders SET payment_status='paid' WHERE student_id=%s AND payment_status='due'",
-            (student['id'],)
+            "UPDATE meal_orders SET payment_status='paid', payment_id=COALESCE(%s, payment_id) "
+            "WHERE student_id=%s AND payment_status='due'",
+            (payment_id, student['id'])
         )
         remaining = queryOne(conn,
             "SELECT COUNT(*) as c FROM meal_orders WHERE student_id=%s AND payment_status IN ('pending','due')",
