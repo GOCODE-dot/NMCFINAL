@@ -452,11 +452,11 @@ document.addEventListener('click', function(e) {
 
 
 
-  <!-- bKash info -->
+  <!-- Payment gateway info -->
   <div class="mgr-bkash">
     <div>
-      <div style="font-size:13px;opacity:.85;margin-bottom:4px"><i class="fas fa-mobile-alt"></i> Your bKash Number (students send here)</div>
-      <div class="num">{{ mgr_bkash }}</div>
+      <div style="font-size:13px;opacity:.85;margin-bottom:4px"><i class="fas fa-credit-card"></i> Payments via Payment Gateway</div>
+      <div style="font-size:15px;font-weight:700">Auto-verified — bKash / Nagad / Rocket / Card</div>
     </div>
     <div style="text-align:right">
       <div style="font-size:13px;opacity:.85">Per meal: ৳50</div>
@@ -653,12 +653,8 @@ document.addEventListener('click', function(e) {
         <i class="fas fa-utensils"></i> Cook Sheet
       </button>
       <button class="tab" id="payments-tab-btn" onclick="showTab('payments')">
-        <i class="fas fa-mobile-alt"></i> bKash
+        <i class="fas fa-credit-card"></i> Gateway Payments
         {% if pending_payments %}<span class="notification-dot">{{ pending_payments|length }}</span>{% endif %}
-      </button>
-      <button class="tab" id="cash-tab-btn" onclick="showTab('cash')">
-        <i class="fas fa-money-bill-wave"></i> Cash
-        <span class="notification-dot" id="cash-dot" style="display:none">0</span>
       </button>
       <button class="tab" id="verified-tab-btn" onclick="showTab('verified')">
         <i class="fas fa-check-circle"></i> Verified
@@ -747,7 +743,7 @@ document.addEventListener('click', function(e) {
     const panel = document.getElementById('tab-' + name);
     if (panel) panel.classList.add('active');
     // Sync primary tab highlight
-    const primaryMap = { cook:'cook-tab-btn', payments:'payments-tab-btn', cash:'cash-tab-btn', verified:'verified-tab-btn', floors:'floors-tab-btn' };
+    const primaryMap = { cook:'cook-tab-btn', payments:'payments-tab-btn', verified:'verified-tab-btn', floors:'floors-tab-btn' };
     document.querySelectorAll('.tabs-primary .tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.om-item').forEach(i => i.classList.remove('active'));
     document.getElementById('tab-more-btn').classList.remove('open');
@@ -761,7 +757,6 @@ document.addEventListener('click', function(e) {
       document.getElementById('tab-more-btn').classList.add('open');
     }
     // Trigger lazy-loads
-    if (name === 'cash')            { if (typeof loadCashRequests === 'function') loadCashRequests(); }
     if (name === 'cook')            { setTimeout(function(){ if (typeof loadCookSheet === 'function') loadCookSheet(); }, 50); }
     if (name === 'unpaid_orders')   { if (typeof loadUnpaidOrders === 'function') loadUnpaidOrders(); }
     if (name === 'edit_requests')   { if (typeof loadEditRequests === 'function') loadEditRequests(); }
@@ -794,7 +789,8 @@ document.addEventListener('click', function(e) {
 
     <div class="card section-card" style="overflow:hidden">
       <div style="padding:20px 24px;border-bottom:1px solid var(--border)">
-        <div class="section-title" style="margin:0"><i class="fas fa-mobile-alt" style="color:var(--accent)"></i> bKash Payment Proofs</div>
+        <div class="section-title" style="margin:0"><i class="fas fa-credit-card" style="color:var(--accent)"></i> Gateway Payment Proofs</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Payments made through the payment gateway (bKash/Nagad/Rocket/Card) are verified automatically once they match a confirmed gateway transaction — no manual action needed. Anything listed below is a rare edge case that needs your review.</div>
       </div>
       <div style="padding:20px 24px">
         {% if pending_payments %}
@@ -839,21 +835,6 @@ document.addEventListener('click', function(e) {
             <div>No pending payment proofs. All clear!</div>
           </div>
         {% endif %}
-      </div>
-    </div>
-  </div>
-
-  <!-- CASH REQUESTS TAB -->
-  <div id="tab-cash" class="tab-panel">
-    <div class="card section-card" style="overflow:hidden">
-      <div style="padding:20px 24px;border-bottom:1px solid var(--border)">
-        <div class="section-title" style="margin:0"><i class="fas fa-money-bill-wave" style="color:var(--primary)"></i> Cash Payment Requests from Students</div>
-      </div>
-      <div style="padding:20px 24px" id="cash-requests-container">
-        <div style="text-align:center;color:var(--text-muted);padding:40px 0">
-          <div style="font-size:36px;margin-bottom:10px">⏳</div>
-          <div>Loading cash requests...</div>
-        </div>
       </div>
     </div>
   </div>
@@ -1162,6 +1143,7 @@ document.addEventListener('click', function(e) {
     <div class="card section-card" style="overflow:hidden">
       <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
         <div class="section-title" style="margin:0"><i class="fas fa-check-circle" style="color:var(--primary)"></i> Verified Payments</div>
+        <div style="width:100%;font-size:12px;color:var(--text-muted)">Payments verify automatically as soon as they're confirmed by the payment gateway — no manager action required.</div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <input type="text" id="verified-search" placeholder="Search name or roll..." oninput="filterVerified()"
             style="padding:8px 14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;width:200px">
@@ -1538,7 +1520,7 @@ function showTab(name) {
   // Also sync the overflow/primary tab UI via the shared core
   if (typeof window._showTabCore === 'function') {
     // Call core but skip the panel toggle (already done above) — just reuse the highlight sync
-    const primaryMap = { cook:'cook-tab-btn', payments:'payments-tab-btn', cash:'cash-tab-btn', verified:'verified-tab-btn', floors:'floors-tab-btn' };
+    const primaryMap = { cook:'cook-tab-btn', payments:'payments-tab-btn', verified:'verified-tab-btn', floors:'floors-tab-btn' };
     document.querySelectorAll('.tabs-primary .tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.om-item').forEach(i => i.classList.remove('active'));
     const moreBtn = document.getElementById('tab-more-btn');
@@ -1552,7 +1534,6 @@ function showTab(name) {
       if (moreBtn) moreBtn.classList.add('open');
     }
   }
-  if (name === 'cash') loadCashRequests();
   if (name === 'cook') setTimeout(loadCookSheet, 50);  // small delay so panel is visible first
   if (name === 'unpaid_orders') loadUnpaidOrders();
   if (name === 'edit_requests') loadEditRequests();
@@ -1561,97 +1542,6 @@ function showTab(name) {
   // Also update _showTabCore reference so selectOverflow works
   window.showTab = showTab;
 }
-
-async function loadCashRequests() {
-  const container = document.getElementById('cash-requests-container');
-  try {
-    const r = await fetch('/manager/cash_requests');
-    const d = await r.json();
-    // Filter out cancelled rows as a safety net
-    const requests = (d.requests || []).filter(req => req.status !== 'cancelled');
-    const dot = document.getElementById('cash-dot');
-    if (requests.length > 0) {
-      dot.style.display = '';
-      dot.textContent = requests.length;
-    } else {
-      dot.style.display = 'none';
-    }
-    if (requests.length === 0) {
-      container.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:40px 0"><div style="font-size:40px;margin-bottom:10px">✅</div><div>No pending cash payment requests.</div></div>`;
-      return;
-    }
-    container.innerHTML = requests.map(req => `
-      <div class="proof-card unverified" id="cashreq-${req.id}" style="border-left-color:var(--primary)">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
-          <div style="flex:1">
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
-              <strong style="font-size:15px">${req.student_name}</strong>
-              <span class="badge badge-green">${req.roll_number}</span>
-              <span style="font-size:13px;color:var(--text-muted)">${req.batch}</span>
-            </div>
-            <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px">
-              <i class="fas fa-money-bill-wave" style="color:var(--primary)"></i> ৳${req.amount}
-              <span style="font-size:12px;font-weight:500;color:var(--text-muted);margin-left:8px">Cash Payment</span>
-            </div>
-            <div style="font-size:13px;color:var(--text-muted)">
-              <i class="fas fa-calendar"></i> ${req.requested_at.slice(0,10)}
-              &nbsp;·&nbsp;<i class="fas fa-mobile-alt"></i> bKash: ${req.bkash_number}
-            </div>
-            ${req.note ? `<div style="font-size:13px;background:#f8fafc;border-radius:6px;padding:8px 12px;margin-top:8px;color:var(--text-muted)"><i class="fas fa-comment"></i> ${req.note}</div>` : ''}
-          </div>
-          <span class="badge badge-yellow"><i class="fas fa-clock"></i> Awaiting Decision</span>
-        </div>
-        <div class="proof-actions">
-          <button class="btn btn-primary btn-sm" onclick="acceptCash(${req.id}, this)">
-            <i class="fas fa-check"></i> Accept & Mark Paid
-          </button>
-          <button class="btn btn-danger btn-sm" onclick="declineCash(${req.id}, this)">
-            <i class="fas fa-times"></i> Decline
-          </button>
-        </div>
-      </div>`).join('');
-  } catch(e) {
-    container.innerHTML = `<div style="color:var(--danger);padding:20px">Failed to load requests.</div>`;
-  }
-}
-
-async function acceptCash(reqId, btn) {
-  if (!confirm('Accept this cash payment and mark the student\'s meals as paid?')) return;
-  btn.disabled = true; btn.textContent = 'Processing...';
-  const r = await fetch('/manager/accept_cash', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({request_id: reqId})});
-  const d = await r.json();
-  if (d.ok) {
-    document.getElementById('cashreq-'+reqId).style.background = '#e8f5ee';
-    document.getElementById('cashreq-'+reqId).innerHTML = `<div style="display:flex;align-items:center;gap:10px;color:var(--primary);font-weight:700"><i class="fas fa-check-circle" style="font-size:20px"></i> Cash payment accepted & meals marked as paid.</div>`;
-    toast('Cash payment accepted!');
-  } else { toast(d.msg || 'Error', 'error'); btn.disabled = false; btn.textContent = 'Accept & Mark Paid'; }
-}
-
-async function declineCash(reqId, btn) {
-  if (!confirm('Decline this cash payment request?')) return;
-  btn.disabled = true;
-  const r = await fetch('/manager/decline_cash', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({request_id: reqId})});
-  const d = await r.json();
-  if (d.ok) {
-    document.getElementById('cashreq-'+reqId).style.opacity = '.5';
-    document.getElementById('cashreq-'+reqId).innerHTML += `<div style="color:var(--danger);font-size:13px;margin-top:8px"><i class="fas fa-times-circle"></i> Declined.</div>`;
-    toast('Request declined.');
-  } else { toast('Error', 'error'); btn.disabled = false; }
-}
-
-// Load cash count on page load for notification dot
-window.addEventListener('load', async () => {
-  try {
-    const r = await fetch('/manager/cash_requests');
-    const d = await r.json();
-    const pending = (d.requests || []).filter(req => req.status !== 'cancelled');
-    if (pending.length > 0) {
-      const dot = document.getElementById('cash-dot');
-      dot.style.display = '';
-      dot.textContent = pending.length;
-    }
-  } catch(e) {}
-});
 
 function filterTable() {
   const q = document.getElementById('search').value.toLowerCase();
@@ -2579,10 +2469,7 @@ async function loadOverdueStudents() {
       ? `<span style="background:#fffbeb;color:#b45309;border:1px solid #fcd97d;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px">⚠️ ${s.days_overdue}d overdue</span>`
       : `<span style="background:#f8fafc;color:#718096;border:1px solid #e2e8f0;font-size:11px;padding:2px 8px;border-radius:20px">${s.days_overdue}d ago</span>`;
     const proofTag = s.has_pending_proof
-      ? `<span style="background:#eff6ff;color:#2563eb;border:1px solid #93c5fd;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px" title="Student submitted a bKash screenshot — check Payments tab">📎 bKash proof pending</span>`
-      : '';
-    const cashTag = s.has_pending_cash
-      ? `<span style="background:#f0fdf4;color:#16a34a;border:1px solid #86efac;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px" title="Student submitted a cash payment request — check Payments tab">💵 Cash request pending</span>`
+      ? `<span style="background:#eff6ff;color:#2563eb;border:1px solid #93c5fd;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px" title="Student submitted a payment awaiting gateway confirmation — check Payments tab">📎 Payment pending</span>`
       : '';
     return `
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;
@@ -2593,7 +2480,7 @@ async function loadOverdueStudents() {
             <span style="background:var(--primary-pale);color:var(--primary);font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px">Batch ${s.batch}</span>
             <span style="color:var(--text-muted);font-size:12px">Roll ${s.roll_number}</span>
             ${s.gender === 'male' && s.floor ? `<span style="color:var(--text-muted);font-size:12px">· Floor ${s.floor}</span>` : ''}
-            ${urgencyTag}${proofTag}${cashTag}
+            ${urgencyTag}${proofTag}
           </div>
           <div style="font-size:12px;color:var(--text-muted)">
             <strong style="color:${color}">৳${Math.round(s.total_due)}</strong> unpaid
@@ -2613,7 +2500,7 @@ async function loadOverdueStudents() {
 
   body.innerHTML = `
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">
-      Students with any unpaid meal orders (including this week's). <span style="background:#eff6ff;color:#2563eb;border:1px solid #93c5fd;padding:1px 6px;border-radius:10px;font-size:11px">📎 bKash proof pending</span> and <span style="background:#f0fdf4;color:#16a34a;border:1px solid #86efac;padding:1px 6px;border-radius:10px;font-size:11px">💵 Cash request pending</span> tags mean the student already submitted — check the Payments tab to verify them.
+      Students with any unpaid meal orders (including this week's). <span style="background:#eff6ff;color:#2563eb;border:1px solid #93c5fd;padding:1px 6px;border-radius:10px;font-size:11px">📎 Payment pending</span> means the student's payment is awaiting gateway confirmation — check the Payments tab.
     </div>
     ${rows}`;
 }
@@ -3287,7 +3174,7 @@ async function loadUnpaidOrders() {
       </div>
       <div style="padding:10px 2px;font-size:12px;color:var(--text-muted);margin-top:4px">
         <i class="fas fa-info-circle"></i>
-        These students selected meal(s) on the meal page but have not submitted a bKash or cash payment.
+        These students selected meal(s) on the meal page but have not completed payment through the gateway.
         They appear here until their payment is verified by you.
       </div>`;
 

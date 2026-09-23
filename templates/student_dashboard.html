@@ -613,14 +613,8 @@
 
       {% if due > 0 %}
       <div style="display:flex;gap:5px;margin-top:8px">
-        <button class="btn btn-sm" style="background:rgba(255,255,255,.25);color:#fff;border:1.5px solid rgba(255,255,255,.5);padding:4px 10px;font-size:11px;flex:1;justify-content:center" onclick="payWithBkash(this)">
-          <i class="fas fa-mobile-alt"></i> bKash
-        </button>
-        <button class="btn btn-sm" style="background:rgba(255,255,255,.25);color:#fff;border:1.5px solid rgba(255,255,255,.5);padding:4px 10px;font-size:11px;flex:1;justify-content:center" onclick="payWithRupantorPay(this)">
-          <i class="fas fa-credit-card"></i> Other (Nagad/Rocket)
-        </button>
-        <button class="btn btn-sm" style="background:rgba(255,255,255,.18);color:#fff;border:1.5px solid rgba(255,255,255,.4);padding:4px 10px;font-size:11px;flex:1;justify-content:center" onclick="openCashModal()">
-          <i class="fas fa-money-bill-wave"></i> Cash
+        <button class="btn btn-sm" style="background:rgba(255,255,255,.28);color:#fff;border:1.5px solid rgba(255,255,255,.55);padding:7px 10px;font-size:12px;font-weight:700;flex:1;justify-content:center;border-radius:8px" onclick="payWithRupantorPay(this)">
+          <i class="fas fa-credit-card"></i> Pay Now
         </button>
       </div>
       {% endif %}
@@ -806,11 +800,8 @@
       <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
         <div class="section-title" style="margin:0"><i class="fas fa-receipt" style="color:var(--primary)"></i> Payment Proofs Submitted</div>
         {% if due > 0 %}
-        <button class="btn btn-primary btn-sm" onclick="payWithBkash(this)">
-          <i class="fas fa-mobile-alt"></i> Pay with bKash
-        </button>
         <button class="btn btn-primary btn-sm" onclick="payWithRupantorPay(this)">
-          <i class="fas fa-credit-card"></i> Nagad/Rocket/Card
+          <i class="fas fa-credit-card"></i> Pay Now
         </button>
         {% endif %}
       </div>
@@ -860,7 +851,7 @@
             <div style="font-size:40px;margin-bottom:12px">📭</div>
             <div>No payment proofs submitted yet.</div>
             {% if due > 0 %}
-            <button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="payWithBkash(this)">Pay with bKash</button>
+            <button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="payWithRupantorPay(this)">Pay Now</button>
             {% else %}
             <div style="font-size:13px;color:var(--text-muted);margin-top:10px">
               <i class="fas fa-check-circle" style="color:var(--primary)"></i> No pending dues — order a meal first.
@@ -1940,9 +1931,8 @@ async function confirmMealAction() {
       // Hide the pending payment banner immediately
       const banner = document.getElementById('due-banner');
       if (banner) banner.style.display = 'none';
-      // Disable both payment buttons in the due box
-      document.querySelectorAll('[onclick="payWithBkash(this)"]').forEach(b => b.disabled = true);
-      document.querySelectorAll('[onclick="openCashModal()"]').forEach(b => b.disabled = true);
+      // Disable the payment button in the due box
+      document.querySelectorAll('[onclick="payWithRupantorPay(this)"]').forEach(b => b.disabled = true);
     } else {
       toast('📩 Cancel request sent to manager for approval.', 'success');
     }
