@@ -966,26 +966,6 @@
   </div>
 </div>
 
-<!-- ── Payment method picker (RupantorPay / SecurePay BD) ──────────────────── -->
-<div class="modal-overlay" id="payment-method-modal">
-  <div class="modal" style="max-width:380px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-      <h3 style="margin:0"><i class="fas fa-wallet" style="color:var(--primary)"></i> Choose Payment Method</h3>
-      <button onclick="closePaymentMethodModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted)">×</button>
-    </div>
-    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Both accept bKash, Nagad and Rocket. Pick whichever works best for you.</p>
-
-    <button class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:10px;padding:13px"
-            onclick="choosePaymentMethod('rupantorpay')">
-      <i class="fas fa-credit-card"></i> RupantorPay
-    </button>
-    <button class="btn" style="width:100%;justify-content:center;padding:13px;background:#1d4ed8;color:#fff;border:none"
-            onclick="choosePaymentMethod('securepaybd')">
-      <i class="fas fa-shield-alt"></i> SecurePay BD
-    </button>
-  </div>
-</div>
-
 <script>
 // ── bKash Change Logic ────────────────────────────────────────────────────────
 
@@ -1313,7 +1293,7 @@ updatePayModalAmounts();
   } else if (result === 'cancelled') {
     toast('Payment was cancelled. You can try again anytime.', 'error');
   } else if (result === 'failed') {
-    toast('bKash could not confirm the payment. Please try again.', 'error');
+    toast('We could not confirm this payment with the gateway yet. If money left your account, do not worry — it usually just needs a minute to sync, or contact your Meal Manager with your transaction ID.', 'error');
   } else if (result === 'notfound') {
     toast('Payment session not found. If money was deducted, contact your Meal Manager.', 'error');
   } else if (result === 'error') {
@@ -2296,54 +2276,20 @@ async function payWithRupantorPay(btn) {
 }
 
 async function payWithSecurePayBD(btn) {
-  try {
-    const cr = await fetch('/student/cash_request_status');
-    const cd = await cr.json();
-    if (cd.request && cd.request.status === 'pending') {
-      toast('⚠️ You already have a pending cash payment request. Cancel it first before paying.', 'error');
-      return;
-    }
-  } catch(_) { /* network hiccup — allow through, backend will catch */ }
-
-  const originalHTML = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Opening…';
-
-  try {
-    const res  = await fetch('/student/securepaybd/pay', { method: 'POST' });
-    const data = await res.json();
-
-    if (!data.ok) {
-      toast(data.msg || 'Could not start payment.', 'error');
-      btn.disabled  = false;
-      btn.innerHTML = originalHTML;
-      return;
-    }
-
-    window.location.href = data.payment_url;
-
-  } catch (err) {
-    toast('Network error — please try again.', 'error');
-    btn.disabled  = false;
-    btn.innerHTML = originalHTML;
-  }
+  // SecurePay BD is disabled — no verified public API integration exists for
+  // it yet (their checkout endpoint returns 404). RupantorPay is the only
+  // active gateway for now. This function is kept as a no-op stub in case
+  // it's wired back up later once SecurePay BD's real API docs are in hand.
+  toast('SecurePay BD is currently unavailable. Please use RupantorPay.', 'error');
 }
 
-// ── "Pay Now" now opens a method picker instead of going straight to one
-// gateway, since there are two options (RupantorPay, SecurePay BD). ─────────
+// ── "Pay Now" goes straight to RupantorPay. (SecurePay BD's checkout API
+// couldn't be verified — see payWithSecurePayBD above — so the two-option
+// picker modal was removed and this now just calls payWithRupantorPay
+// directly, using the same function name so every existing "Pay Now"
+// button's onclick="openPaymentMethodModal()" keeps working unchanged.) ────
 function openPaymentMethodModal() {
-  document.getElementById('payment-method-modal').style.display = 'flex';
-}
-function closePaymentMethodModal() {
-  document.getElementById('payment-method-modal').style.display = 'none';
-}
-function choosePaymentMethod(method) {
-  closePaymentMethodModal();
-  // Build a throwaway button object so the existing pay functions (which
-  // expect a `btn` to show a spinner on) still work from this modal.
-  const fakeBtn = { disabled: false, innerHTML: '' };
-  if (method === 'rupantorpay') payWithRupantorPay(fakeBtn);
-  else if (method === 'securepaybd') payWithSecurePayBD(fakeBtn);
+  payWithRupantorPay({ disabled: false, innerHTML: '' });
 }
 
 function copyStudentBkash() {
