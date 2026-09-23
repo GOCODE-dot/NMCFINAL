@@ -334,8 +334,13 @@ def rupantorpay_verify_payment(transaction_id):
     if RUPANTORPAY_MOCK_MODE:
         return {'status': 'COMPLETED', 'transaction_id': transaction_id}
 
+    # NOTE: RupantorPay's exact parameter name for this isn't publicly
+    # documented, but the comments elsewhere in this file note it behaves
+    # like UddoktaPay-style BD gateways, whose real (documented) API expects
+    # 'invoice_id' here — not 'transaction_id'. Sending both covers either
+    # naming without risking anything if one of them is simply ignored.
     resp = requests.post(f'{RUPANTORPAY_BASE_URL}/payment/verify-payment',
-                          json={'transaction_id': transaction_id},
+                          json={'invoice_id': transaction_id, 'transaction_id': transaction_id},
                           headers=_rupantorpay_headers(), timeout=15)
     try:
         result = resp.json()
@@ -348,10 +353,26 @@ def rupantorpay_verify_payment(transaction_id):
 
 
 def _rupantorpay_is_success(verify_result):
-    """RupantorPay's exact success value isn't pinned down in their public docs,
-    so we accept any of the common spellings other BD gateways use."""
-    status = str(verify_result.get('status', '')).strip().upper()
-    return status in ('COMPLETED', 'SUCCESS', 'SUCCESSFUL', 'PAID', 'TRUE', '1')
+    """RupantorPay's exact success shape isn't pinned down in their public
+    docs, so this checks every plausible spelling/location other BD
+    gateways use, rather than a single 'status' key at the top level."""
+    if not isinstance(verify_result, dict):
+        return False
+
+    candidates = [verify_result, verify_result.get('data') or {}]
+
+    for c in candidates:
+        if not isinstance(c, dict):
+            continue
+        for key in ('status', 'payment_status', 'transaction_status'):
+            val = str(c.get(key, '')).strip().upper()
+            if val in ('COMPLETED', 'COMPLETE', 'SUCCESS', 'SUCCESSFUL', 'PAID', 'VALID', 'DONE'):
+                return True
+        for key in ('success', 'paid', 'is_paid', 'ok', 'verified'):
+            val = c.get(key)
+            if val is True or str(val).strip().lower() in ('true', '1', 'yes'):
+                return True
+    return False
 
 # ── SecurePay BD Payment Gateway config ───────────────────────────────────────
 # SecurePay BD (securepaybd.xyz) — a second checkout option alongside
