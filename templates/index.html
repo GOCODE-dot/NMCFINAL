@@ -26,19 +26,60 @@
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
+  /* ── Full-bleed background ─────────────────────────────────────────
+     Desktop / landscape  -> hero-bg-desktop.jpg
+     Mobile / portrait    -> hero-bg-mobile.jpg
+     The image sits on a fixed layer that always equals the viewport and
+     uses cover, so it fills the screen edge-to-edge with no gaps. ───── */
+  :root {
+    --hero-img: url("{{ url_for('static', filename='images/hero-bg-desktop.jpg') }}");
+    --hero-img-pos: 80% top;
+    --h-scrim-center: rgba(240,247,242,0.78);
+    --h-scrim-mid: rgba(240,247,242,0.66);
+    --h-scrim-edge: rgba(240,247,242,0.06);
+  }
+  [data-theme="dark"] {
+    --h-scrim-center: rgba(8,20,12,0.80);
+    --h-scrim-mid: rgba(8,20,12,0.68);
+    --h-scrim-edge: rgba(8,20,12,0.30);
+  }
+  @media (max-width: 768px), (orientation: portrait) {
+    :root {
+      --hero-img: url("{{ url_for('static', filename='images/hero-bg-mobile.jpg') }}");
+      --hero-img-pos: center center;
+    }
+  }
+
   .hero-wrap {
     min-height: 100vh;
-    min-height: -webkit-fill-available;
+    min-height: 100dvh;
     background-color: var(--h-bg3, #fff);
-    background-image: linear-gradient(160deg, var(--h-overlay1) 0%, var(--h-overlay2) 50%, var(--h-overlay3) 100%),
-                       url("{{ url_for('static', filename='images/hero-bg.jpg') }}");
-    background-size: cover, contain;
-    background-position: center, center;
-    background-repeat: no-repeat, no-repeat;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     text-align: center; padding: 60px 20px 40px; position: relative; overflow: hidden;
-    transition: background 0.4s ease;
     font-family: 'Plus Jakarta Sans', sans-serif;
+    isolation: isolate;
+  }
+  /* image layer */
+  .hero-wrap::before {
+    content: ''; position: fixed; inset: 0; z-index: -2;
+    background-image: var(--hero-img);
+    background-size: cover;
+    background-position: var(--hero-img-pos);
+    background-repeat: no-repeat;
+  }
+  /* readability scrim: strong behind the content, light at the edges so the artwork shows */
+  .hero-wrap::after {
+    content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background: radial-gradient(ellipse 46% 85% at 50% 52%, var(--h-scrim-center) 0%, var(--h-scrim-mid) 55%, var(--h-scrim-edge) 100%);
+  }
+  @media (max-width: 768px), (orientation: portrait) {
+    .hero-wrap { justify-content: flex-start; padding-top: max(150px, 21vh); }
+    .hero-wrap::after {
+      background: linear-gradient(180deg,
+        rgba(255,255,255,0) 0%, var(--h-scrim-center) 30%, var(--h-scrim-center) 72%, var(--h-scrim-edge) 100%);
+    }
+    /* the NMC logo is already in the mobile artwork */
+    .hero-wrap .hero-logo { display: none; }
   }
 
   .orb { position: absolute; border-radius: 50%; pointer-events: none; }
@@ -92,6 +133,7 @@
     position: relative; z-index: 1;
     animation: fadeUp 0.7s 0.15s ease both;
   }
+  [data-theme="dark"] .hero-title-sub { color: #5fd08a; }
   .hero-sub {
     color: var(--h-muted); font-size: clamp(14px,3.5vw,16px);
     max-width: 380px; margin: 0 auto 40px; line-height: 1.7; font-weight: 400;
