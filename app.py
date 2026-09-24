@@ -1387,15 +1387,6 @@ def student_order():
 @app.route('/student/cancel_order', methods=['POST'])
 @login_required('student')
 def cancel_order():
-    """Student self-service cancel — instant, no manager approval needed.
-
-    An UNPAID order (payment_status 'pending' or 'due') is deleted right
-    away. An already-PAID order (real money moved through the gateway) is
-    NOT silently deleted here — that would make the order vanish while the
-    money stays collected with no trace of what it was for. Those still
-    need a manager to action a refund, so they're left in place and the
-    student is told to contact the manager for a refund instead.
-    """
     d        = request.json
     sid      = session['user_id']
     today_bd = (datetime.utcnow() + timedelta(hours=6)).date()
@@ -1405,32 +1396,15 @@ def cancel_order():
     if meal_date < today_bd.isoformat():
         conn.close()
         return jsonify({'ok': False, 'msg': 'Cannot cancel a past meal order.'})
-
-    order = queryOne(conn,
-        "SELECT id, payment_status FROM meal_orders WHERE student_id=%s AND meal_date=%s AND meal_type=%s",
+    dup = queryOne(conn,
+        "SELECT id FROM meal_edit_requests WHERE student_id=%s AND meal_date=%s AND meal_type=%s AND status='pending'",
         (sid, meal_date, meal_type)
     )
-    if not order:
+    if dup:
         conn.close()
-        return jsonify({'ok': False, 'msg': 'No order found for that meal.'})
-
-    if order['payment_status'] == 'paid':
-        conn.close()
-        return jsonify({
-            'ok': False,
-            'msg': "This meal is already paid for. Please contact your manager for a refund — it can't be self-cancelled."
-        })
-
-    # ── Unpaid order: cancel immediately, no manager step ─────────────────
-    execute(conn, "DELETE FROM meal_orders WHERE id=%s", (order['id'],))
-    conn.commit()
-
-    # If there was ever a leftover pending edit-request row for this exact
-    # meal (from before this route stopped creating them), clear it too so
-    # it can't resurface in the manager's queue for an order that no longer
-    # exists.
+        return jsonify({'ok': False, 'msg': 'You already have a pending cancel request for this meal.'})
     execute(conn,
-        "DELETE FROM meal_edit_requests WHERE student_id=%s AND meal_date=%s AND meal_type=%s AND status='pending'",
+        "INSERT INTO meal_edit_requests (student_id,meal_date,meal_type,action,reason) VALUES (%s,%s,%s,'cancel','Student requested cancellation')",
         (sid, meal_date, meal_type)
     )
     conn.commit()
@@ -1458,7 +1432,7 @@ def cancel_order():
         bkash_cancelled = True
 
     conn.close()
-    return jsonify({'ok': True, 'via_request': False, 'cash_cancelled': cash_cancelled, 'bkash_cancelled': bkash_cancelled, 'msg': '✅ Meal cancelled.'})
+    return jsonify({'ok': True, 'via_request': True, 'cash_cancelled': cash_cancelled, 'bkash_cancelled': bkash_cancelled, 'msg': '📩 Cancel request sent to manager for approval.'})
 
 
 @app.route('/student/request_meal_edit', methods=['POST'])
@@ -2695,8 +2669,7 @@ def manager_dashboard():
     # showing" is the order being for a different date than "today" (e.g.
     # placed after the midnight cutoff, so it's filed under tomorrow).
     recent_orders = query(conn, """
-        SELECT mo.meal_date, mo.meal_type, mo.payment_status,
-               to_char(mo.ordered_at::timestamp + interval '6 hours', 'YYYY-MM-DD HH24:MI:SS') as ordered_at,
+        SELECT mo.meal_date, mo.meal_type, mo.payment_status, mo.ordered_at,
                s.name as student_name, s.roll_number
         FROM meal_orders mo JOIN students s ON s.id=mo.student_id
         ORDER BY mo.ordered_at DESC LIMIT 10
